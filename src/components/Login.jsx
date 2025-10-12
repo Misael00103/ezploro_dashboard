@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -6,10 +7,14 @@ import { Label } from './ui/label';
 import { Alert, AlertDescription } from './ui/alert';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
 import { login } from '../services/authService';
+import { debugAuthState } from '../services/authUtils';
+import ForgotPassword from './ForgotPassword';
+import { toast, Toaster } from 'react-hot-toast';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://api-v3-backend-ezploro.apps.ezploro.com/api';
 
 const Login = ({ onLogin }) => {
+  const navigate = useNavigate();
   const [credentials, setCredentials] = useState({
     email: '',
     password: ''
@@ -17,6 +22,7 @@ const Login = ({ onLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const handleInputChange = (e) => {
     setCredentials({
@@ -61,7 +67,20 @@ const Login = ({ onLogin }) => {
       // Store user data and token
       localStorage.setItem('token', data.data.token);
       localStorage.setItem('user', JSON.stringify(data.data.user));
+      
+      // Store user ID with multiple fallbacks
+      const userId = data.data.user.user_id || data.data.user._id || data.data.user.id;
+      if (userId) {
+        localStorage.setItem('userId', userId);
+      } else {
+        console.warn('No user ID found in login response');
+      }
+      
+      // Debug authentication state after login
+      debugAuthState();
+      
       onLogin(data.data.user);
+      navigate('/dashboard');
     } catch (err) {
       setError(err.message || 'Error al iniciar sesión. Verifica tus credenciales.');
       console.error('Login error:', err);
@@ -70,16 +89,22 @@ const Login = ({ onLogin }) => {
     }
   };
 
-  const fillDemoCredentials = () => {
-    setCredentials({
-      email: 'admin@scapeevents.com',
-      password: 'admin123'
-    });
-  };
+
+
+  if (showForgotPassword) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-900 via-black to-purple-800">
+        <div className="absolute inset-0 bg-black/20"></div>
+        <Toaster position="top-right" />
+        <ForgotPassword onBack={() => setShowForgotPassword(false)} />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-900 via-black to-purple-800">
       <div className="absolute inset-0 bg-black/20"></div>
+      <Toaster position="top-right" />
       
       <Card className="w-full max-w-md mx-4 relative z-10 bg-black/80 border-purple-500/30 backdrop-blur-sm">
         <CardHeader className="text-center space-y-4">
@@ -107,7 +132,7 @@ const Login = ({ onLogin }) => {
                 value={credentials.email}
                 onChange={handleInputChange}
                 className="bg-black/50 border-purple-500/30 text-white placeholder:text-purple-300 focus:border-purple-400"
-                placeholder="admin@scapeevents.com"
+                placeholder="Ingresa tu email"
               />
             </div>
 
@@ -151,22 +176,16 @@ const Login = ({ onLogin }) => {
               {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
             </Button>
           </form>
+          
+          <Button
+            variant="ghost"
+            onClick={() => setShowForgotPassword(true)}
+            className="w-full text-purple-300 hover:bg-purple-900/50"
+          >
+            ¿Olvidaste tu contraseña?
+          </Button>
 
-          <div className="text-center">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={fillDemoCredentials}
-              className="text-purple-300 hover:text-purple-200 hover:bg-purple-900/30"
-            >
-              Usar credenciales de demo
-            </Button>
-          </div>
 
-          <div className="text-xs text-purple-300 text-center space-y-1">
-            <p><strong>Demo:</strong> admin@scapeevents.com</p>
-            <p><strong>Password:</strong> admin123</p>
-          </div>
         </CardContent>
       </Card>
     </div>

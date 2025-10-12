@@ -30,7 +30,14 @@ export const login = async (email, password) => {
     // Almacenar token y datos del usuario
     localStorage.setItem('token', data.data.token);
     localStorage.setItem('user', JSON.stringify(data.data.user));
-    localStorage.setItem('userId', data.data.user._id || data.data.user.id);
+    
+    // Store user ID with multiple fallbacks
+    const userId = data.data.user.user_id || data.data.user._id || data.data.user.id;
+    if (userId) {
+      localStorage.setItem('userId', userId);
+    } else {
+      console.warn('No user ID found in login response');
+    }
     
     return data.data;
   } catch (error) {

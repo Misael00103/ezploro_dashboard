@@ -28,6 +28,16 @@ import {
   mockUserRankings, 
   mockRedemptionHistory 
 } from '../mock';
+import {
+  getRankingUsuariosMasSuscritos,
+  getRankingUsuariosMasPuntos,
+  getRankingUsuariosMasLikesDados,
+  getRankingUsuariosMasComentarios,
+  getRankingUsuariosMasEventosCreados,
+  getRankingEventosMasSuscritos,
+  getRankingEventosMasLikes
+} from '../services/rankingService';
+import { toast } from 'react-hot-toast';
 
 const GamificationManager = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -36,6 +46,17 @@ const GamificationManager = () => {
   const [userRankings, setUserRankings] = useState(mockUserRankings);
   const [gamificationActions, setGamificationActions] = useState(mockGamificationActions);
   const [redemptionHistory, setRedemptionHistory] = useState(mockRedemptionHistory);
+  const [realRankings, setRealRankings] = useState({
+    usuariosMasSuscritos: [],
+    usuariosMasPuntos: [],
+    usuariosMasLikesDados: [],
+    usuariosMasComentarios: [],
+    usuariosMasEventosCreados: [],
+    eventosMasSuscritos: [],
+    eventosMasLikes: []
+  });
+  const [rankingTab, setRankingTab] = useState('puntos');
+  const [isLoadingRankings, setIsLoadingRankings] = useState(false);
 
   const handleToggleRule = (ruleId) => {
     setPointsRules(prev => prev.map(rule => 
@@ -67,6 +88,54 @@ const GamificationManager = () => {
       case 'badges': return 'bg-yellow-600/20 text-yellow-300 border-yellow-600/30';
       case 'merchandise': return 'bg-pink-600/20 text-pink-300 border-pink-600/30';
       default: return 'bg-gray-600/20 text-gray-300 border-gray-600/30';
+    }
+  };
+
+  const loadRealRankings = async () => {
+    try {
+      setIsLoadingRankings(true);
+      const [puntos, suscritos, likes, comentarios, eventos, eventosSuscritos, eventosLikes] = await Promise.allSettled([
+        getRankingUsuariosMasPuntos(10),
+        getRankingUsuariosMasSuscritos(10),
+        getRankingUsuariosMasLikesDados(10),
+        getRankingUsuariosMasComentarios(10),
+        getRankingUsuariosMasEventosCreados(10),
+        getRankingEventosMasSuscritos(10),
+        getRankingEventosMasLikes(10)
+      ]);
+
+      setRealRankings({
+        usuariosMasPuntos: puntos.status === 'fulfilled' ? puntos.value : [],
+        usuariosMasSuscritos: suscritos.status === 'fulfilled' ? suscritos.value : [],
+        usuariosMasLikesDados: likes.status === 'fulfilled' ? likes.value : [],
+        usuariosMasComentarios: comentarios.status === 'fulfilled' ? comentarios.value : [],
+        usuariosMasEventosCreados: eventos.status === 'fulfilled' ? eventos.value : [],
+        eventosMasSuscritos: eventosSuscritos.status === 'fulfilled' ? eventosSuscritos.value : [],
+        eventosMasLikes: eventosLikes.status === 'fulfilled' ? eventosLikes.value : []
+      });
+    } catch (error) {
+      console.error('Error loading rankings:', error);
+      toast.error('Error al cargar los rankings');
+    } finally {
+      setIsLoadingRankings(false);
+    }
+  };
+
+  const getRankIcon = (position) => {
+    switch (position) {
+      case 1: return <Crown className="h-4 w-4 text-yellow-400" />;
+      case 2: return <Medal className="h-4 w-4 text-gray-400" />;
+      case 3: return <Award className="h-4 w-4 text-amber-600" />;
+      default: return <span className="text-purple-400">{position}</span>;
+    }
+  };
+
+  const getRankColor = (position) => {
+    switch (position) {
+      case 1: return 'bg-yellow-900/50 text-yellow-200 border-yellow-600/30';
+      case 2: return 'bg-gray-900/50 text-gray-200 border-gray-600/30';
+      case 3: return 'bg-amber-900/50 text-amber-200 border-amber-600/30';
+      default: return 'bg-purple-900/50 text-purple-200 border-purple-600/30';
     }
   };
 
@@ -362,70 +431,208 @@ const GamificationManager = () => {
 
         {/* Rankings Tab */}
         <TabsContent value="rankings" className="space-y-6">
-          <div>
-            <h2 className="text-2xl font-bold text-white">Rankings de Usuarios</h2>
-            <p className="text-purple-300">Clasificación por puntos y actividad</p>
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold text-white">Rankings y Estadísticas</h2>
+              <p className="text-purple-300">Descubre los usuarios y eventos más destacados</p>
+            </div>
+            <Button 
+              onClick={loadRealRankings} 
+              disabled={isLoadingRankings}
+              className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+            >
+              {isLoadingRankings ? 'Cargando...' : 'Actualizar Rankings'}
+            </Button>
           </div>
 
-          <Card className="bg-black/40 border-purple-500/30">
-            <CardContent className="p-6">
-              <div className="space-y-4">
-                {userRankings.map((user) => (
-                  <div key={user.user_id} className="flex items-center space-x-4 p-4 rounded-lg bg-purple-900/10 border border-purple-500/20">
-                    <div className="flex items-center space-x-3">
-                      <Badge className={`${getLevelBadgeColor(user.level)} w-10 h-10 rounded-full flex items-center justify-center p-0`}>
-                        {user.rank === 1 ? <Crown className="h-5 w-5" /> : user.rank}
-                      </Badge>
-                      <Avatar className="h-12 w-12">
-                        <AvatarImage src={user.user.avatar} alt={user.user.name} />
-                        <AvatarFallback className="bg-purple-600 text-white">
-                          {user.user.name.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="text-lg font-semibold text-white">{user.user.name}</h3>
-                          <p className="text-purple-300 text-sm">{user.user.email}</p>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-2xl font-bold text-white">{user.total_points.toLocaleString()}</div>
-                          <p className="text-purple-300 text-sm">puntos</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-4 gap-4 mt-4">
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-purple-200">{user.events_created}</div>
-                          <p className="text-xs text-purple-400">Eventos Creados</p>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-purple-200">{user.events_attended}</div>
-                          <p className="text-xs text-purple-400">Eventos Asistidos</p>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-purple-200">{user.likes_given}</div>
-                          <p className="text-xs text-purple-400">Likes Dados</p>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-purple-200">{user.comments_made}</div>
-                          <p className="text-xs text-purple-400">Comentarios</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-1 mt-3">
-                        {user.badges.map((badge, index) => (
-                          <Badge key={index} className="bg-yellow-900/30 text-yellow-200 border-yellow-600/30 text-xs">
-                            <Medal className="h-3 w-3 mr-1" />
-                            {badge}
+          <Tabs value={rankingTab} onValueChange={setRankingTab} className="space-y-6">
+            <TabsList className="grid w-full grid-cols-3 bg-black/30 border border-purple-500/30">
+              <TabsTrigger value="puntos" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300">
+                <Star className="h-4 w-4 mr-2" />
+                Puntos
+              </TabsTrigger>
+              <TabsTrigger value="usuarios" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300">
+                <Users className="h-4 w-4 mr-2" />
+                Usuarios
+              </TabsTrigger>
+              <TabsTrigger value="eventos" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300">
+                <Trophy className="h-4 w-4 mr-2" />
+                Eventos
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="puntos" className="space-y-6">
+              <Card className="bg-black/40 border-purple-500/30">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <Star className="h-5 w-5 text-purple-400" />
+                    Usuarios con Más Puntos
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {realRankings.usuariosMasPuntos.map((user, index) => (
+                      <div key={user.user_id} className="flex items-center justify-between p-3 rounded-lg bg-black/30">
+                        <div className="flex items-center gap-3">
+                          <Badge className={getRankColor(index + 1)}>
+                            {getRankIcon(index + 1)}
+                            #{index + 1}
                           </Badge>
-                        ))}
+                          <Avatar className="w-10 h-10">
+                            <AvatarImage 
+                              src={user.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.display_name || user.username)}&background=7c3aed&color=fff&size=40`} 
+                              alt={user.display_name || user.username}
+                            />
+                            <AvatarFallback className="bg-purple-600 text-white">
+                              {(user.display_name || user.username || 'U').charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium text-white">{user.display_name || user.username}</p>
+                            <p className="text-sm text-purple-300">@{user.username}</p>
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="bg-purple-900/50 text-purple-200">
+                          {user.count} puntos
+                        </Badge>
                       </div>
-                    </div>
+                    ))}
+                    {realRankings.usuariosMasPuntos.length === 0 && (
+                      <div className="text-center py-8 text-purple-300">
+                        No hay datos disponibles. Haz clic en "Actualizar Rankings" para cargar.
+                      </div>
+                    )}
                   </div>
-                ))}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="usuarios" className="space-y-6">
+              <div className="grid gap-6 md:grid-cols-2">
+                <Card className="bg-black/40 border-purple-500/30">
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <Users className="h-5 w-5 text-purple-400" />
+                      Más Seguidos
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {realRankings.usuariosMasSuscritos.slice(0, 5).map((user, index) => (
+                        <div key={user.user_id} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge className={getRankColor(index + 1)} variant="outline">
+                              {getRankIcon(index + 1)}
+                            </Badge>
+                            <span className="text-white text-sm">{user.display_name || user.username}</span>
+                          </div>
+                          <span className="text-purple-300 text-sm">{user.count} seguidores</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-black/40 border-purple-500/30">
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <Trophy className="h-5 w-5 text-purple-400" />
+                      Más Activos
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {realRankings.usuariosMasLikesDados.slice(0, 5).map((user, index) => (
+                        <div key={user.user_id} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge className={getRankColor(index + 1)} variant="outline">
+                              {getRankIcon(index + 1)}
+                            </Badge>
+                            <span className="text-white text-sm">{user.display_name || user.username}</span>
+                          </div>
+                          <span className="text-purple-300 text-sm">{user.count} likes</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
-            </CardContent>
-          </Card>
+            </TabsContent>
+
+            <TabsContent value="eventos" className="space-y-6">
+              <div className="grid gap-6 md:grid-cols-2">
+                <Card className="bg-black/40 border-purple-500/30">
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <Users className="h-5 w-5 text-purple-400" />
+                      Eventos Más Populares
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {realRankings.eventosMasSuscritos.map((event, index) => (
+                        <div key={event.event_id} className="flex items-center justify-between p-3 rounded-lg bg-black/30">
+                          <div className="flex items-center gap-3">
+                            <Badge className={getRankColor(index + 1)}>
+                              {getRankIcon(index + 1)}
+                              #{index + 1}
+                            </Badge>
+                            <div>
+                              <p className="font-medium text-white">{event.title}</p>
+                              {event.organizer && (
+                                <p className="text-sm text-purple-300">
+                                  Por: {event.organizer.display_name || event.organizer.username}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <Badge variant="secondary" className="bg-purple-900/50 text-purple-200">
+                            {event.count} suscriptores
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-black/40 border-purple-500/30">
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <Trophy className="h-5 w-5 text-purple-400" />
+                      Eventos Más Queridos
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {realRankings.eventosMasLikes.map((event, index) => (
+                        <div key={event.event_id} className="flex items-center justify-between p-3 rounded-lg bg-black/30">
+                          <div className="flex items-center gap-3">
+                            <Badge className={getRankColor(index + 1)}>
+                              {getRankIcon(index + 1)}
+                              #{index + 1}
+                            </Badge>
+                            <div>
+                              <p className="font-medium text-white">{event.title}</p>
+                              {event.organizer && (
+                                <p className="text-sm text-purple-300">
+                                  Por: {event.organizer.display_name || event.organizer.username}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <Badge variant="secondary" className="bg-purple-900/50 text-purple-200">
+                            {event.count} likes
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+
+          </Tabs>
         </TabsContent>
 
         {/* Activity Tab */}

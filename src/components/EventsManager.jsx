@@ -18,7 +18,9 @@ import {
   Calendar,
   MapPin,
   Search,
-  Filter
+  Filter,
+  Upload,
+  X
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 
@@ -35,11 +37,30 @@ const EventsManager = ({ events, updateEvents }) => {
     date_time: '',
     location: '',
     category: '',
-    status: 'upcoming'
+    subcategory: '',
+    status: 'upcoming',
+    cover_image: null
   });
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedCoordinates, setSelectedCoordinates] = useState(null);
   const { toast } = useToast();
 
-  const categories = ['Tecnología', 'Negocios', 'Educación', 'Entretenimiento', 'Deportes', 'Cultura'];
+  const categories = [
+    'Tecnología', 'Negocios', 'Educación', 'Entretenimiento', 'Deportes', 'Cultura',
+    'Música', 'Arte', 'Gastronomía', 'Salud', 'Fitness', 'Viajes', 'Moda', 'Fotografía',
+    'Literatura', 'Cine', 'Teatro', 'Danza', 'Conferencias', 'Talleres', 'Networking',
+    'Startups', 'Marketing', 'Finanzas', 'Inmobiliario', 'Automotriz', 'Gaming'
+  ];
+  
+  const subcategories = {
+    'Tecnología': ['Desarrollo Web', 'Inteligencia Artificial', 'Blockchain', 'Ciberseguridad', 'IoT'],
+    'Negocios': ['Emprendimiento', 'Inversiones', 'E-commerce', 'Liderazgo', 'Ventas'],
+    'Educación': ['Cursos Online', 'Talleres', 'Seminarios', 'Certificaciones', 'Idiomas'],
+    'Entretenimiento': ['Conciertos', 'Festivales', 'Shows', 'Comedia', 'Karaoke'],
+    'Deportes': ['Fútbol', 'Basketball', 'Tenis', 'Running', 'Ciclismo', 'Natación'],
+    'Cultura': ['Museos', 'Exposiciones', 'Historia', 'Tradiciones', 'Patrimonio']
+  };
 
   const filteredEvents = events.filter(event => {
     const matchesSearch = event.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -71,8 +92,67 @@ const EventsManager = ({ events, updateEvents }) => {
       date_time: '',
       location: '',
       category: '',
-      status: 'upcoming'
+      subcategory: '',
+      status: 'upcoming',
+      cover_image: null
     });
+    setLocationSuggestions([]);
+    setShowSuggestions(false);
+    setSelectedCoordinates(null);
+  };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setFormData({ ...formData, cover_image: file });
+    }
+  };
+
+  const searchPlaces = async (query) => {
+    if (!query || query.length < 3) {
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    // Use Google Places API through a proxy or backend
+    try {
+      // Dominican Republic locations
+      const mockSuggestions = [
+        { description: `${query}, Santo Domingo, República Dominicana`, place_id: `${query}_1` },
+        { description: `${query}, Santiago, República Dominicana`, place_id: `${query}_2` },
+        { description: `${query}, Punta Cana, República Dominicana`, place_id: `${query}_3` },
+        { description: `${query}, La Romana, República Dominicana`, place_id: `${query}_4` },
+        { description: `${query}, Puerto Plata, República Dominicana`, place_id: `${query}_5` }
+      ];
+      setLocationSuggestions(mockSuggestions);
+      setShowSuggestions(true);
+    } catch (error) {
+      console.error('Error searching places:', error);
+    }
+  };
+
+  const handleLocationSelect = async (place) => {
+    setFormData({ ...formData, location: place.description });
+    setShowSuggestions(false);
+    
+    // Set coordinates for Dominican Republic cities
+    const cityCoordinates = {
+      'Santo Domingo': { lat: 18.4861, lng: -69.9312 },
+      'Santiago': { lat: 19.4517, lng: -70.6970 },
+      'Punta Cana': { lat: 18.5601, lng: -68.3725 },
+      'La Romana': { lat: 18.4273, lng: -68.9728 },
+      'Puerto Plata': { lat: 19.7930, lng: -70.6862 }
+    };
+    
+    const city = Object.keys(cityCoordinates).find(c => place.description.includes(c));
+    setSelectedCoordinates(city ? cityCoordinates[city] : { lat: 18.4861, lng: -69.9312 });
+  };
+
+  const handleLocationInputChange = (e) => {
+    const value = e.target.value;
+    setFormData({ ...formData, location: value });
+    searchPlaces(value);
   };
 
   const handleCreate = async (e) => {
@@ -90,6 +170,8 @@ const EventsManager = ({ events, updateEvents }) => {
     const newEvent = {
       id: Math.max(...events.map(e => e.id)) + 1,
       ...formData,
+      coordinates: selectedCoordinates,
+      cover_image: formData.cover_image ? URL.createObjectURL(formData.cover_image) : null,
       attendees_count: 0,
       subscribers_count: 0,
       likes_count: 0,
@@ -242,20 +324,72 @@ const EventsManager = ({ events, updateEvents }) => {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="cover_image" className="text-purple-200">Imagen de Portada</Label>
+                <div className="flex items-center space-x-2">
+                  <Input
+                    id="cover_image"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="bg-black/50 border-purple-500/30 text-white file:bg-purple-600 file:text-white file:border-0 file:rounded"
+                  />
+                  <Upload className="h-4 w-4 text-purple-400" />
+                </div>
+                {formData.cover_image && (
+                  <p className="text-sm text-purple-300">Archivo: {formData.cover_image.name}</p>
+                )}
+              </div>
+
+              <div className="space-y-2 relative">
                 <Label htmlFor="location" className="text-purple-200">Ubicación *</Label>
                 <Input
                   id="location"
                   name="location"
                   value={formData.location}
-                  onChange={handleInputChange}
+                  onChange={handleLocationInputChange}
                   className="bg-black/50 border-purple-500/30 text-white"
+                  placeholder="Buscar ubicación..."
                   required
                 />
+                {showSuggestions && locationSuggestions.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-black border border-purple-500/30 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    {locationSuggestions.map((suggestion) => (
+                      <div
+                        key={suggestion.place_id}
+                        className="px-3 py-2 hover:bg-purple-900/50 cursor-pointer text-white text-sm border-b border-purple-500/20 last:border-b-0"
+                        onClick={() => handleLocationSelect(suggestion)}
+                      >
+                        <div className="flex items-center space-x-2">
+                          <MapPin className="h-3 w-3 text-purple-400" />
+                          <span>{suggestion.description}</span>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="px-3 py-2 border-t border-purple-500/30">
+                      <button
+                        type="button"
+                        onClick={() => setShowSuggestions(false)}
+                        className="text-xs text-purple-400 hover:text-purple-300 flex items-center space-x-1"
+                      >
+                        <X className="h-3 w-3" />
+                        <span>Cerrar</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {selectedCoordinates && (
+                  <p className="text-xs text-purple-400">
+                    Coordenadas: {selectedCoordinates.lat.toFixed(4)}, {selectedCoordinates.lng.toFixed(4)}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="category" className="text-purple-200">Categoría *</Label>
-                <Select value={formData.category} onValueChange={(value) => handleSelectChange('category', value)}>
+                <Select value={formData.category} onValueChange={(value) => {
+                  handleSelectChange('category', value);
+                  setFormData(prev => ({ ...prev, subcategory: '' }));
+                }}>
                   <SelectTrigger className="bg-black/50 border-purple-500/30 text-white">
                     <SelectValue placeholder="Selecciona una categoría" />
                   </SelectTrigger>
@@ -268,6 +402,24 @@ const EventsManager = ({ events, updateEvents }) => {
                   </SelectContent>
                 </Select>
               </div>
+
+              {formData.category && subcategories[formData.category] && (
+                <div className="space-y-2">
+                  <Label htmlFor="subcategory" className="text-purple-200">Subcategoría</Label>
+                  <Select value={formData.subcategory} onValueChange={(value) => handleSelectChange('subcategory', value)}>
+                    <SelectTrigger className="bg-black/50 border-purple-500/30 text-white">
+                      <SelectValue placeholder="Selecciona una subcategoría" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-black border-purple-500/30">
+                      {subcategories[formData.category].map(subcategory => (
+                        <SelectItem key={subcategory} value={subcategory} className="text-white hover:bg-purple-900/50">
+                          {subcategory}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="flex justify-end space-x-2">
                 <Button
@@ -349,10 +501,36 @@ const EventsManager = ({ events, updateEvents }) => {
             <CardHeader>
               <div className="flex justify-between items-start">
                 <div className="space-y-2">
-                  <CardTitle className="text-white">{event.title}</CardTitle>
-                  <CardDescription className="text-purple-300">
-                    {event.description}
-                  </CardDescription>
+                  <div className="flex items-start space-x-3">
+                    {event.cover_image && (
+                      <img 
+                        src={event.cover_image} 
+                        alt={event.title}
+                        className="w-16 h-16 rounded-lg object-cover"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <CardTitle className="text-white">{event.title}</CardTitle>
+                      <CardDescription className="text-purple-300">
+                        {event.description}
+                      </CardDescription>
+                      {event.organizer && (
+                        <div className="flex items-center space-x-2 mt-1">
+                          <img 
+                            src={event.organizer.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(event.organizer.display_name || event.organizer.username || 'User')}&background=7c3aed&color=fff&size=24`} 
+                            alt={event.organizer.display_name || event.organizer.username}
+                            className="w-6 h-6 rounded-full object-cover"
+                            onError={(e) => {
+                              e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(event.organizer.display_name || event.organizer.username || 'User')}&background=7c3aed&color=fff&size=24`;
+                            }}
+                          />
+                          <p className="text-xs text-purple-400">
+                            Por: {event.organizer.display_name || event.organizer.username}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   <div className="flex items-center space-x-4 text-sm text-purple-200">
                     <div className="flex items-center space-x-1">
                       <Calendar className="h-4 w-4" />
@@ -360,7 +538,7 @@ const EventsManager = ({ events, updateEvents }) => {
                     </div>
                     <div className="flex items-center space-x-1">
                       <MapPin className="h-4 w-4" />
-                      <span>{event.location}</span>
+                      <span>{typeof event.location === 'string' ? event.location : 'Ubicación no disponible'}</span>
                     </div>
                   </div>
                 </div>

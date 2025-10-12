@@ -15,24 +15,50 @@ const getAuthToken = () => {
 
 // Helper function to get userId from localStorage or token
 const getUserId = () => {
+  // First try localStorage
   const userId = localStorage.getItem('userId');
-  if (userId) return userId;
+  if (userId && userId !== 'undefined' && userId !== 'null') {
+    return userId;
+  }
+
+  // Try to get from user object in localStorage
+  const userStr = localStorage.getItem('user');
+  if (userStr) {
+    try {
+      const user = JSON.parse(userStr);
+      const id = user.user_id || user.id || user._id;
+      if (id) {
+        localStorage.setItem('userId', id);
+        return id;
+      }
+    } catch (error) {
+      console.error('Error parsing user from localStorage:', error);
+    }
+  }
 
   // Fallback: Extract user_id from token
   const token = getAuthToken();
   if (token) {
     try {
       const decoded = jwtDecode(token);
-      return decoded.user_id || '';
+      const id = decoded.user_id || decoded.id || decoded.sub;
+      if (id) {
+        localStorage.setItem('userId', id);
+        return id;
+      }
     } catch (error) {
       console.error('Error decoding JWT:', error);
     }
   }
-  return '';
+  
+  return null;
 };
 
+// Export getUserId for use in other services
+export const getCurrentUserId = getUserId;
+
 // Helper function to make authenticated fetch requests
-const fetchWithAuth = async (url, options = {}) => {
+export const fetchWithAuth = async (url, options = {}) => {
   const token = getAuthToken();
   if (!token) {
     throw new Error('No hay sesión activa');
@@ -50,6 +76,8 @@ const fetchWithAuth = async (url, options = {}) => {
     if (response.status === 401) {
       throw new Error('No autorizado: Por favor, inicia sesión nuevamente.');
     }
+    // Don't throw "ID de usuario inválido" for 400 errors from server
+    // Let the server response be handled by the calling function
     throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
   }
   return response.json();
@@ -62,8 +90,12 @@ export const getUserProfile = async () => {
       method: 'GET',
     });
     console.log('getUserProfile response:', data);
-    if (data.data && data.data.user_id) {
-      localStorage.setItem('userId', data.data.user_id);
+    if (data.data) {
+      const userId = data.data.user_id || data.data.id || data.data._id;
+      if (userId) {
+        localStorage.setItem('userId', userId);
+        localStorage.setItem('user', JSON.stringify(data.data));
+      }
     }
     return data.data;
   } catch (error) {
@@ -77,7 +109,7 @@ export const updateUserProfile = async (userData) => {
   try {
     const userId = getUserId();
     if (!userId) {
-      throw new Error('No se encontró el ID de usuario. Por favor, inicia sesión.');
+      throw new Error('ID de usuario inválido. Por favor, inicia sesión nuevamente.');
     }
     const url = API_URL_USERS_UPDATE.replace(':userId', userId);
     const data = await fetchWithAuth(url, {
@@ -88,7 +120,12 @@ export const updateUserProfile = async (userData) => {
     // Update localStorage with new user data
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     localStorage.setItem('user', JSON.stringify({ ...currentUser, ...data.data }));
-    localStorage.setItem('userId', data.data.user_id);
+    
+    // Update user ID with fallbacks
+    const newUserId = data.data.user_id || data.data.id || data.data._id;
+    if (newUserId) {
+      localStorage.setItem('userId', newUserId);
+    }
 
     return data.data;
   } catch (error) {
@@ -132,11 +169,49 @@ export const uploadProfilePicture = async (file) => {
 // Cambia la contraseña del usuario
 export const changePassword = async (currentPassword, newPassword) => {
   try {
-    const data = await fetchWithAuth(API_URL_PASSWORD_CHANGE, {
-      method: 'POST',
-      body: JSON.stringify({ currentPassword, newPassword }),
-    });
-    return data;
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay sesión activa');
+    }
+
+    // Try multiple field name combinations that the backend might expect
+    const payloadOptions = [
+      { currentPassword, newPassword },
+      { current_password: currentPassword, new_password: newPassword },
+      { oldPassword: currentPassword, newPassword },
+      { old_password: currentPassword, new_password: newPassword }
+    ];
+
+    for (let i = 0; i < payloadOptions.length; i++) {
+      const payload = payloadOptions[i];
+      console.log(`Attempt ${i + 1}: Sending password change with fields:`, Object.keys(payload));
+      console.log(`Payload values check:`, {
+        field1: Object.values(payload)[0] ? '[HIDDEN]' : 'EMPTY',
+        field2: Object.values(payload)[1] ? '[HIDDEN]' : 'EMPTY'
+      });
+
+      const response = await fetch(API_URL_PASSWORD_CHANGE, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        console.log(`Success with payload format ${i + 1}:`, Object.keys(payload));
+        return response.json();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.log(`Attempt ${i + 1} failed:`, errorData);
+        
+        // If this is the last attempt, throw the error
+        if (i === payloadOptions.length - 1) {
+          throw new Error(errorData.error || errorData.message || `Error HTTP! status: ${response.status}`);
+        }
+      }
+    }
   } catch (error) {
     console.error('Error en changePassword:', error);
     throw error;
@@ -148,7 +223,7 @@ export const updateSecuritySettings = async (securitySettings) => {
   try {
     const userId = getUserId();
     if (!userId) {
-      throw new Error('No se encontró el ID de usuario. Por favor, inicia sesión.');
+      throw new Error('ID de usuario inválido. Por favor, inicia sesión nuevamente.');
     }
     const url = `${API_URL_USERS_UPDATE.replace(':userId', userId)}/security`;
     const data = await fetchWithAuth(url, {
@@ -181,7 +256,7 @@ export const updateDashboardPreferences = async (preferences) => {
   try {
     const userId = getUserId();
     if (!userId) {
-      throw new Error('No se encontró el ID de usuario. Por favor, inicia sesión.');
+      throw new Error('ID de usuario inválido. Por favor, inicia sesión nuevamente.');
     }
     const url = `${API_URL_USERS_UPDATE.replace(':userId', userId)}/preferences`;
     const data = await fetchWithAuth(url, {

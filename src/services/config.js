@@ -9,7 +9,7 @@ export const BASE_URL = REACT_APP_API_URL;
 const normalizeUrl = (url) => {
   if (!url) return url
   // Fix common URL malformation issues
-  return url.replace(/([^:]\/)\/+/g, "$1").replace(/^https:\//g, "https://")
+  return url.replace(/([^:]\/)\/+/g, "$1")
 }
 
 // Base URL for serving images
@@ -169,9 +169,9 @@ export const API_URL_LIKES_BY_USER = `${API_URL_LIKES}/:userId`
 export const API_URL_LIKES_EVENTS_BY_USER = `${API_URL_LIKES}/:userId/events`
 
 // ==================== PASSWORD RESET ====================
-export const API_URL_PASSWORD_RESET_REQUEST = `${BASE_URL}/forgot-password`
-export const API_URL_PASSWORD_RESET_CONFIRM = `${BASE_URL}/confirm-pin`
-export const API_URL_PASSWORD_RESET_COMPLETE = `${BASE_URL}/reset-password`
+export const API_URL_PASSWORD_RESET_REQUEST = `${BASE_URL}/auth/forgot-password`
+export const API_URL_PASSWORD_RESET_CONFIRM = `${BASE_URL}/auth/confirm-pin`
+export const API_URL_PASSWORD_RESET_COMPLETE = `${BASE_URL}/auth/reset-password`
 export const API_URL_PASSWORD_CHANGE = `${BASE_URL}/auth/change-password`
 
 // ==================== RANKINGS ====================
@@ -236,10 +236,6 @@ export const API_URL_NOTIFICATIONS_STATS = `${API_URL_NOTIFICATIONS}/stats`
 
 // ==================== POSTS ====================
 export const API_URL_POSTS = `${BASE_URL}/posts`
-export const API_URL_POSTS_CREATE = `${API_URL_POSTS}/posts` // POST /api/posts/posts
-export const API_URL_POSTS_UPDATE = `${API_URL_POSTS}/posts/:postId` // PUT /api/posts/posts/:postId
-export const API_URL_POSTS_DELETE = `${API_URL_POSTS}/posts/:postId` // DELETE /api/posts/posts/:postId
-export const API_URL_POSTS_BY_USER = `${API_URL_POSTS}/posts/user/:userId` // GET /api/posts/posts/user/:userId
 
 // ==================== POST COMMENTS ====================
 export const API_URL_POST_COMMENTS = `${API_URL_POSTS}/posts/comments` // Base para comentarios de posts
@@ -271,3 +267,8 @@ export const API_URL_OFFERS_TOGGLE_STATUS = `${API_URL_OFFERS}/:id/toggle-status
 
 // Configuración adicional
 export const GOOGLE_MAPS_API_KEY = "AIzaSyAr4IpigO3ZN4_Qcv8ME59x5-KjjDVY0Wc"
+
+// ==================== MISSING API URLS ====================
+export const API_URL_CONTACTS = `${BASE_URL}/contact`
+export const API_URL_SOCIAL_MEDIA = `${BASE_URL}/social-media`
+export const API_URL_LANDING_PAGE = `${BASE_URL}/landing-page`

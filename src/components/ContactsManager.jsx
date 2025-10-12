@@ -18,30 +18,38 @@ import {
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 
-const ContactsManager = ({ contacts, updateContacts }) => {
+const ContactsManager = ({ contacts = [], updateContacts }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedContact, setSelectedContact] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const { toast } = useToast();
+  
+  console.log('ContactsManager received contacts:', contacts);
+  
+  // Ensure contacts is always an array
+  const safeContacts = Array.isArray(contacts) ? contacts : [];
 
-  const filteredContacts = contacts.filter(contact => {
-    const matchesSearch = contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         contact.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         contact.message.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || contact.status === filterStatus;
+  const filteredContacts = safeContacts.filter(contact => {
+    if (!contact) return false;
+    
+    const name = contact.name || '';
+    const email = contact.email || '';
+    const message = contact.message || '';
+    const status = contact.status || 'pending';
+    
+    const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         message.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === 'all' || status === filterStatus;
     
     return matchesSearch && matchesStatus;
   });
 
   const handleStatusChange = (contactId, newStatus) => {
-    const updatedContacts = contacts.map(contact =>
-      contact.id === contactId
-        ? { ...contact, status: newStatus }
-        : contact
-    );
-    
-    updateContacts(updatedContacts);
+    if (updateContacts) {
+      updateContacts(contactId, newStatus);
+    }
     
     toast({
       title: "Estado actualizado",
@@ -72,11 +80,12 @@ const ContactsManager = ({ contacts, updateContacts }) => {
   const getStatusColor = (status) => {
     switch (status) {
       case 'read':
+        return 'bg-blue-900/50 text-blue-200 border-blue-600/30';
+      case 'resolved':
         return 'bg-green-900/50 text-green-200 border-green-600/30';
-      case 'unread':
-        return 'bg-red-900/50 text-red-200 border-red-600/30';
+      case 'pending':
       default:
-        return 'bg-purple-900/50 text-purple-200 border-purple-600/30';
+        return 'bg-yellow-900/50 text-yellow-200 border-yellow-600/30';
     }
   };
 
@@ -90,8 +99,8 @@ const ContactsManager = ({ contacts, updateContacts }) => {
     });
   };
 
-  const unreadCount = contacts.filter(contact => contact.status === 'unread').length;
-  const newsletterCount = contacts.filter(contact => contact.newsletter).length;
+  const unreadCount = safeContacts.filter(contact => contact && (contact.status === 'unread' || contact.status === 'pending')).length;
+  const newsletterCount = safeContacts.filter(contact => contact && contact.newsletter).length;
 
   return (
     <div className="space-y-6">
@@ -148,8 +157,9 @@ const ContactsManager = ({ contacts, updateContacts }) => {
                 </SelectTrigger>
                 <SelectContent className="bg-black border-purple-500/30">
                   <SelectItem value="all" className="text-white hover:bg-purple-900/50">Todos</SelectItem>
-                  <SelectItem value="unread" className="text-white hover:bg-purple-900/50">Sin leer</SelectItem>
+                  <SelectItem value="pending" className="text-white hover:bg-purple-900/50">Pendientes</SelectItem>
                   <SelectItem value="read" className="text-white hover:bg-purple-900/50">Leídos</SelectItem>
+                  <SelectItem value="resolved" className="text-white hover:bg-purple-900/50">Resueltos</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -160,7 +170,7 @@ const ContactsManager = ({ contacts, updateContacts }) => {
       {/* Contacts List */}
       <div className="space-y-4">
         {filteredContacts.map(contact => (
-          <Card key={contact.id} className={`bg-black/40 border-purple-500/30 transition-all hover:bg-black/60 ${contact.status === 'unread' ? 'border-red-500/50' : ''}`}>
+          <Card key={contact.contact_id || contact.id} className={`bg-black/40 border-purple-500/30 transition-all hover:bg-black/60 ${(contact.status === 'unread' || contact.status === 'pending') ? 'border-red-500/50' : ''}`}>
             <CardContent className="pt-6">
               <div className="flex justify-between items-start">
                 <div className="space-y-3 flex-1">
@@ -170,15 +180,20 @@ const ContactsManager = ({ contacts, updateContacts }) => {
                       <span className="font-semibold text-white">{contact.name}</span>
                     </div>
                     <Badge className={getStatusColor(contact.status)}>
-                      {contact.status === 'read' ? (
+                      {contact.status === 'resolved' ? (
                         <>
                           <CheckCircle className="h-3 w-3 mr-1" />
+                          Resuelto
+                        </>
+                      ) : contact.status === 'read' ? (
+                        <>
+                          <Eye className="h-3 w-3 mr-1" />
                           Leído
                         </>
                       ) : (
                         <>
                           <Clock className="h-3 w-3 mr-1" />
-                          Sin leer
+                          Pendiente
                         </>
                       )}
                     </Badge>

@@ -47,7 +47,7 @@ const UserManagementManager = () => {
     display_name: '',
     profile_picture: '',
     banner_image: '',
-    online_status: true, // Default to online
+    online_status: false, // Default to offline
   });
 
   const [passwordForm, setPasswordForm] = useState({
@@ -55,6 +55,8 @@ const UserManagementManager = () => {
     newPassword: '',
     confirmPassword: '',
   });
+  
+
 
   const [notificationSettings, setNotificationSettings] = useState({
     emailNotifications: true,
@@ -87,10 +89,26 @@ const UserManagementManager = () => {
     const loadUserProfile = async () => {
       try {
         setIsLoading(true);
+        // Try to get user from localStorage first
+        const cachedUser = localStorage.getItem('user');
+        if (cachedUser) {
+          try {
+            const parsedUser = JSON.parse(cachedUser);
+            setUser(parsedUser);
+          } catch (error) {
+            console.error('Error parsing cached user:', error);
+          }
+        }
+        
         const userData = await getUserProfile();
-        setUser(userData);
-        localStorage.setItem('userId', userData.user_id);
-        localStorage.setItem('user', JSON.stringify(userData));
+        // Preserve online_status from cache if it exists
+        const finalUserData = cachedUser ? {
+          ...userData,
+          online_status: JSON.parse(cachedUser).online_status ?? userData.online_status
+        } : userData;
+        setUser(finalUserData);
+        localStorage.setItem('userId', finalUserData.user_id);
+        localStorage.setItem('user', JSON.stringify(finalUserData));
         setProfileForm(prev => ({
           ...prev,
           name: userData.name || '',
@@ -103,8 +121,7 @@ const UserManagementManager = () => {
           display_name: userData.display_name || '',
           profile_picture: userData.profile_picture || '',
           banner_image: userData.banner_image || '',
-          // Only update online_status if it's explicitly set in userData, otherwise keep current value (true by default)
-          online_status: userData.online_status !== undefined ? userData.online_status : true,
+          online_status: finalUserData.online_status || false,
         }));
         if (userData.profile_picture) {
           setImagePreview(userData.profile_picture);
@@ -157,7 +174,7 @@ const UserManagementManager = () => {
     try {
       const updatedProfile = { 
         ...profileForm,
-        online_status: profileForm.online_status || false // Ensure online_status is always included
+        online_status: profileForm.online_status
       };
 
       // Upload new profile picture if selected
@@ -169,20 +186,24 @@ const UserManagementManager = () => {
       const updatedUser = await updateUserProfile(updatedProfile);
       setUser(prev => ({
         ...prev,
-        ...updatedUser,
-        online_status: updatedUser.online_status || false
+        ...updatedUser
       }));
       
       // Update localStorage with the latest user data
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
       const updatedUserData = {
         ...currentUser,
-        ...updatedUser,
-        online_status: updatedUser.online_status || false
+        ...updatedUser
       };
       
       localStorage.setItem('user', JSON.stringify(updatedUserData));
       localStorage.setItem('userId', updatedUser.user_id || currentUser.user_id);
+      
+      // Trigger storage event for Dashboard to update
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'user',
+        newValue: JSON.stringify(updatedUserData)
+      }));
       
       toast.success('Perfil actualizado exitosamente');
     } catch (error) {
@@ -236,6 +257,8 @@ const UserManagementManager = () => {
       setIsSaving(false);
     }
   };
+
+
 
   const handleNotificationSettingsChange = (setting) => {
     setNotificationSettings((prev) => ({
@@ -349,22 +372,26 @@ const UserManagementManager = () => {
       // Update user state with the new status
       setUser(prev => ({
         ...prev,
-        ...updatedUser,
-        online_status: newStatus
+        ...updatedUser
       }));
       
       // Update localStorage with the new status
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
       const updatedUserData = {
         ...currentUser,
-        ...updatedUser,
-        online_status: newStatus
+        ...updatedUser
       };
       
       localStorage.setItem('user', JSON.stringify(updatedUserData));
       
+      // Trigger storage event for Dashboard to update
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'user',
+        newValue: JSON.stringify(updatedUserData)
+      }));
+      
       // Show success message
-      toast.success(`Ahora estás ${newStatus ? 'en línea' : 'desconectado'}`);
+      toast.success(`Estado actualizado: ${newStatus ? 'En línea' : 'Desconectado'}`);
       
     } catch (error) {
       console.error('Error updating online status:', error);
@@ -373,7 +400,7 @@ const UserManagementManager = () => {
       // Revert the change in the UI if there's an error
       setProfileForm(prev => ({
         ...prev,
-        online_status: !prev.online_status
+        online_status: !newStatus
       }));
     } finally {
       setIsSaving(false);
@@ -399,7 +426,13 @@ const UserManagementManager = () => {
               <div className="flex flex-col items-center text-center">
                 <div className="relative mb-4">
                   <Avatar className="h-24 w-24">
-                    <AvatarImage src={user?.profile_picture || ''} alt={user?.name || 'User'} />
+                    <AvatarImage 
+                      src={user?.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.display_name || user?.name || 'User')}&background=7c3aed&color=fff&size=96`} 
+                      alt={user?.name || 'User'}
+                      onError={(e) => {
+                        e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.display_name || user?.name || 'User')}&background=7c3aed&color=fff&size=96`;
+                      }}
+                    />
                     <AvatarFallback>{(user?.name || 'U').charAt(0).toUpperCase()}</AvatarFallback>
                   </Avatar>
                   <label
@@ -418,8 +451,8 @@ const UserManagementManager = () => {
                 </div>
                 <h3 className="text-lg font-medium">{user?.display_name || user?.name || 'Usuario'}</h3>
                 <p className="text-sm text-muted-foreground">{user?.role || 'Usuario'}</p>
-                <Badge variant={user?.online_status ? 'default' : 'secondary'} className="mt-2">
-                  {user?.online_status ? 'En línea' : 'Desconectado'}
+                <Badge variant={profileForm?.online_status ? 'default' : 'secondary'} className="mt-2">
+                  {profileForm?.online_status ? 'En línea' : 'Desconectado'}
                 </Badge>
               </div>
 
@@ -551,7 +584,9 @@ const UserManagementManager = () => {
                           onCheckedChange={handleOnlineStatusChange}
                           disabled={isSaving}
                         />
-                        <span>{profileForm.online_status ? 'En línea' : 'Desconectado'}</span>
+                        <span className={profileForm.online_status ? 'text-green-400' : 'text-gray-400'}>
+                          {profileForm.online_status ? 'En línea' : 'Desconectado'}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -582,6 +617,8 @@ const UserManagementManager = () => {
                   </div>
                 </CardContent>
               </Card>
+
+
             </TabsContent>
 
             {/* Security Tab */}

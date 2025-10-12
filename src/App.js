@@ -58,6 +58,20 @@ function App() {
               )
             } 
           />
+          <Route 
+            path="/login" 
+            element={<Login onLogin={handleLogin} />} 
+          />
+          <Route 
+            path="/dashboard" 
+            element={
+              user ? (
+                <Dashboard user={user} onLogout={handleLogout} />
+              ) : (
+                <Login onLogin={handleLogin} />
+              )
+            } 
+          />
         </Routes>
       </BrowserRouter>
       <Toaster />
