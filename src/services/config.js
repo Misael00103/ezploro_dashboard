@@ -1,11 +1,10 @@
 // config.js - VERSIÓN ACTUALIZADA Y COMPLETA
-import { REACT_APP_API_URL } from "@env"
 
 // Configuración de la API
 // Base URL for the entire API (modificado para conectar al backend en la nube, con /api prefix)
-//export const BASE_URL = REACT_APP_API_URL || "https://api-backend-ezploro.apps.ezploro.com/api"
-// export const BASE_URL = REACT_APP_API_URL || "https://api-v2-backend-ezploro.apps.ezploro.com/api"
-export const BASE_URL = REACT_APP_API_URL || "https://api-v3-backend-ezploro.apps.ezploro.com/api"
+const REACT_APP_API_URL = "https://api-v3-backend-ezploro.apps.ezploro.com/api";
+export const BASE_URL = REACT_APP_API_URL;
+
 // Function to ensure proper URL format
 const normalizeUrl = (url) => {
   if (!url) return url
@@ -38,6 +37,8 @@ export const API_URL_AUTH_GOOGLE_SIGNIN = `${API_URL_AUTH}/google-signin`
 
 // ==================== USUARIOS ====================
 export const API_URL_USERS = `${BASE_URL}/users`
+export const API_URL_USER_PREFERENCES = `${BASE_URL}/user/preferences`
+export const API_URL_USER_SECURITY_SETTINGS = `${BASE_URL}/user/security-settings`
 export const API_URL_USERS_LIST = `${API_URL_USERS}`
 export const API_URL_USERS_BY_ID = `${API_URL_USERS}/:userId`
 export const API_URL_USERS_UPDATE = `${API_URL_USERS}/update/:userId`

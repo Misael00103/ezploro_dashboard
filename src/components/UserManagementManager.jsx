@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -9,34 +10,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Switch } from './ui/switch';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { User, Settings, Shield, Bell, Camera, Key, Save, Eye, EyeOff } from 'lucide-react';
+import { toast, Toaster } from 'react-hot-toast';
+import { Loader2 } from 'lucide-react';
 import {
-  User,
-  Settings,
-  Shield,
-  Bell,
-  Camera,
-  Key,
-  Mail,
-  Phone,
-  Save,
-  Upload,
-  Eye,
-  EyeOff,
-  Check,
-  AlertTriangle,
-  Palette,
-  Globe,
-  Clock
-} from 'lucide-react';
-import { toast } from 'react-hot-toast';
-import { 
-  getUserProfile, 
-  updateUserProfile, 
-  changePassword, 
-  uploadProfilePicture 
+  getUserProfile,
+  updateUserProfile,
+  changePassword,
+  uploadProfilePicture,
+  updateSecuritySettings,
+  updateNotificationSettings,
+  updateDashboardPreferences,
 } from '../services/userService';
 
 const UserManagementManager = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('profile');
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,7 +34,7 @@ const UserManagementManager = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [profileImage, setProfileImage] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
-  
+
   // Form states
   const [profileForm, setProfileForm] = useState({
     name: '',
@@ -54,13 +42,18 @@ const UserManagementManager = () => {
     phone: '',
     bio: '',
     location: '',
-    website: ''
+    website: '',
+    username: '',
+    display_name: '',
+    profile_picture: '',
+    banner_image: '',
+    online_status: true, // Default to online
   });
 
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
-    confirmPassword: ''
+    confirmPassword: '',
   });
 
   const [notificationSettings, setNotificationSettings] = useState({
@@ -69,22 +62,24 @@ const UserManagementManager = () => {
     eventReminders: true,
     marketingEmails: false,
     securityAlerts: true,
-    weeklyReports: true
+    weeklyReports: true,
+    notifications_enabled: true,
   });
 
   const [securitySettings, setSecuritySettings] = useState({
     twoFactorAuth: false,
     loginAlerts: true,
     sessionTimeout: '30',
-    passwordExpiry: '90'
+    passwordExpiry: '90',
   });
 
   const [dashboardPreferences, setDashboardPreferences] = useState({
     theme: 'dark',
     language: 'es',
     timezone: 'Europe/Madrid',
-    dateFormat: 'dd/mm/yyyy',
-    defaultView: 'overview'
+    dateFormat: 'dd/MM/yyyy',
+    defaultView: 'overview',
+    dark_mode: false,
   });
 
   // Load user profile on component mount
@@ -94,27 +89,58 @@ const UserManagementManager = () => {
         setIsLoading(true);
         const userData = await getUserProfile();
         setUser(userData);
-        setProfileForm({
+        localStorage.setItem('userId', userData.user_id);
+        localStorage.setItem('user', JSON.stringify(userData));
+        setProfileForm(prev => ({
+          ...prev,
           name: userData.name || '',
           email: userData.email || '',
           phone: userData.phone || '',
           bio: userData.bio || '',
           location: userData.location || '',
-          website: userData.website || ''
-        });
-        if (userData.avatar) {
-          setImagePreview(userData.avatar);
+          website: userData.website || '',
+          username: userData.username || '',
+          display_name: userData.display_name || '',
+          profile_picture: userData.profile_picture || '',
+          banner_image: userData.banner_image || '',
+          // Only update online_status if it's explicitly set in userData, otherwise keep current value (true by default)
+          online_status: userData.online_status !== undefined ? userData.online_status : true,
+        }));
+        if (userData.profile_picture) {
+          setImagePreview(userData.profile_picture);
         }
+        setNotificationSettings({
+          emailNotifications: userData.notifications_enabled ?? true,
+          pushNotifications: userData.notifications_enabled ?? true,
+          eventReminders: userData.notifications_enabled ?? true,
+          marketingEmails: false,
+          securityAlerts: true,
+          weeklyReports: true,
+          notifications_enabled: userData.notifications_enabled ?? true,
+        });
+        setDashboardPreferences({
+          theme: userData.dark_mode ? 'dark' : 'light',
+          language: 'es',
+          timezone: 'Europe/Madrid',
+          dateFormat: 'dd/MM/yyyy',
+          defaultView: 'overview',
+          dark_mode: userData.dark_mode ?? false,
+        });
       } catch (error) {
         console.error('Error loading user profile:', error);
-        toast.error('Error al cargar el perfil del usuario');
+        if (error.message.includes('No autorizado') || error.message.includes('No hay sesión activa')) {
+          toast.error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+          navigate('/login');
+        } else {
+          toast.error(error.message || 'Error al cargar el perfil del usuario');
+        }
       } finally {
         setIsLoading(false);
       }
     };
 
     loadUserProfile();
-  }, []);
+  }, [navigate]);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -125,28 +151,52 @@ const UserManagementManager = () => {
   };
 
   const handleProfileUpdate = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+
     try {
-      setIsSaving(true);
-      
+      const updatedProfile = { 
+        ...profileForm,
+        online_status: profileForm.online_status || false // Ensure online_status is always included
+      };
+
       // Upload new profile picture if selected
       if (profileImage) {
         const imageUrl = await uploadProfilePicture(profileImage);
-        await updateUserProfile({ ...profileForm, avatar: imageUrl });
-      } else {
-        await updateUserProfile(profileForm);
+        updatedProfile.profile_picture = imageUrl;
       }
-      
-      // Update local state
+
+      const updatedUser = await updateUserProfile(updatedProfile);
       setUser(prev => ({
         ...prev,
-        ...profileForm,
-        avatar: imagePreview || prev.avatar
+        ...updatedUser,
+        online_status: updatedUser.online_status || false
       }));
+      
+      // Update localStorage with the latest user data
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const updatedUserData = {
+        ...currentUser,
+        ...updatedUser,
+        online_status: updatedUser.online_status || false
+      };
+      
+      localStorage.setItem('user', JSON.stringify(updatedUserData));
+      localStorage.setItem('userId', updatedUser.user_id || currentUser.user_id);
       
       toast.success('Perfil actualizado exitosamente');
     } catch (error) {
       console.error('Error updating profile:', error);
-      toast.error(error.message || 'Error al actualizar el perfil');
+      if (
+        error.message.includes('No autorizado') ||
+        error.message.includes('No hay sesión activa') ||
+        error.message.includes('No se encontró el ID de usuario')
+      ) {
+        toast.error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+        navigate('/login');
+      } else {
+        toast.error(error.message || 'Error al actualizar el perfil');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -166,133 +216,195 @@ const UserManagementManager = () => {
       setIsSaving(true);
       await changePassword(passwordForm.currentPassword, passwordForm.newPassword);
       toast.success('Contraseña actualizada exitosamente');
-      // Clear password form
       setPasswordForm({
         currentPassword: '',
         newPassword: '',
-        confirmPassword: ''
+        confirmPassword: '',
       });
     } catch (error) {
       console.error('Error changing password:', error);
-      toast.error(error.message || 'Error al cambiar la contraseña');
+      if (
+        error.message.includes('No autorizado') ||
+        error.message.includes('No hay sesión activa')
+      ) {
+        toast.error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+        navigate('/login');
+      } else {
+        toast.error(error.message || 'Error al cambiar la contraseña');
+      }
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleNotificationSettingsChange = (setting) => {
-    setNotificationSettings(prev => ({
+    setNotificationSettings((prev) => ({
       ...prev,
-      [setting]: !prev[setting]
+      [setting]: !prev[setting],
+      notifications_enabled:
+        setting === 'emailNotifications' || setting === 'pushNotifications'
+          ? !prev[setting]
+          : prev.notifications_enabled,
     }));
   };
 
   const handleSecuritySettingsChange = (setting, value) => {
-    setSecuritySettings(prev => ({
+    setSecuritySettings((prev) => ({
       ...prev,
-      [setting]: value
+      [setting]: value,
     }));
   };
 
   const handleDashboardPreferenceChange = (setting, value) => {
-    setDashboardPreferences(prev => ({
+    setDashboardPreferences((prev) => ({
       ...prev,
-      [setting]: value
+      [setting]: value,
+      dark_mode: setting === 'theme' ? value === 'dark' : prev.dark_mode,
     }));
+  };
+
+  const handleSecuritySettingsSave = async () => {
+    try {
+      setIsSaving(true);
+      await updateSecuritySettings(securitySettings);
+      toast.success('Configuración de seguridad guardada');
+    } catch (error) {
+      console.error('Error saving security settings:', error);
+      if (
+        error.message.includes('No autorizado') ||
+        error.message.includes('No hay sesión activa') ||
+        error.message.includes('No se encontró el ID de usuario')
+      ) {
+        toast.error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+        navigate('/login');
+      } else {
+        toast.error(error.message || 'Error al guardar la configuración de seguridad');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleNotificationSettingsSave = async () => {
+    try {
+      setIsSaving(true);
+      await updateNotificationSettings(notificationSettings);
+      toast.success('Configuración de notificaciones guardada');
+    } catch (error) {
+      console.error('Error saving notification settings:', error);
+      if (
+        error.message.includes('No autorizado') ||
+        error.message.includes('No hay sesión activa')
+      ) {
+        toast.error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+        navigate('/login');
+      } else {
+        toast.error(error.message || 'Error al guardar la configuración de notificaciones');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDashboardPreferencesSave = async () => {
+    try {
+      setIsSaving(true);
+      await updateDashboardPreferences(dashboardPreferences);
+      toast.success('Preferencias del panel guardadas');
+    } catch (error) {
+      console.error('Error saving dashboard preferences:', error);
+      if (
+        error.message.includes('No autorizado') ||
+        error.message.includes('No hay sesión activa') ||
+        error.message.includes('No se encontró el ID de usuario')
+      ) {
+        toast.error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+        navigate('/login');
+      } else {
+        toast.error(error.message || 'Error al guardar las preferencias del panel');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handler for toggling online_status
+  const handleOnlineStatusChange = async (checked) => {
+    try {
+      setIsSaving(true);
+      const newStatus = checked;
+      
+      // Update local state immediately for better UX
+      setProfileForm(prev => ({
+        ...prev,
+        online_status: newStatus
+      }));
+      
+      // Update the backend with the new status
+      const updatedUser = await updateUserProfile({
+        ...profileForm,
+        online_status: newStatus
+      });
+      
+      // Update user state with the new status
+      setUser(prev => ({
+        ...prev,
+        ...updatedUser,
+        online_status: newStatus
+      }));
+      
+      // Update localStorage with the new status
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const updatedUserData = {
+        ...currentUser,
+        ...updatedUser,
+        online_status: newStatus
+      };
+      
+      localStorage.setItem('user', JSON.stringify(updatedUserData));
+      
+      // Show success message
+      toast.success(`Ahora estás ${newStatus ? 'en línea' : 'desconectado'}`);
+      
+    } catch (error) {
+      console.error('Error updating online status:', error);
+      toast.error('Error al actualizar el estado en línea');
+      
+      // Revert the change in the UI if there's an error
+      setProfileForm(prev => ({
+        ...prev,
+        online_status: !prev.online_status
+      }));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
-        <span className="ml-2">Cargando perfil...</span>
       </div>
     );
   }
-    setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-  };
-
-  const handleAvatarUpload = () => {
-    // Mock file upload
-    const newAvatar = 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face';
-    setUser(prev => ({ ...prev, avatar: newAvatar }));
-    alert('Foto de perfil actualizada');
-  };
-
-  const handleNotificationToggle = (setting) => {
-    setNotificationSettings(prev => ({
-      ...prev,
-      [setting]: !prev[setting]
-    }));
-  };
-
-  const handleSecurityToggle = (setting) => {
-    setSecuritySettings(prev => ({
-      ...prev,
-      [setting]: !prev[setting]
-    }));
-  };
-
-  const handlePreferenceChange = (setting, value) => {
-    setDashboardPreferences(prev => ({
-      ...prev,
-      [setting]: value
-    }));
-  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Gestión de Usuario</h1>
-          <p className="text-purple-300 mt-2">Administra tu perfil y configuraciones</p>
-        </div>
-      </div>
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 bg-black/30 border border-purple-500/30">
-          <TabsTrigger 
-            value="profile" 
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
-          >
-            <User className="h-4 w-4 mr-2" />
-            Perfil
-          </TabsTrigger>
-          <TabsTrigger 
-            value="security" 
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
-          >
-            <Shield className="h-4 w-4 mr-2" />
-            Seguridad
-          </TabsTrigger>
-          <TabsTrigger 
-            value="notifications" 
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
-          >
-            <Bell className="h-4 w-4 mr-2" />
-            Notificaciones
-          </TabsTrigger>
-          <TabsTrigger 
-            value="preferences" 
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            Preferencias
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Profile Tab */}
-        <TabsContent value="profile" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-3">
-            {/* Profile Picture Card */}
-            <Card className="bg-black/40 border-purple-500/30">
+    <div className="container mx-auto py-8 px-4">
+      <Toaster position="top-right" />
+      <div className="flex flex-col md:flex-row gap-8">
+        {/* Left Sidebar */}
+        <div className="w-full md:w-1/4">
+          <Card className="sticky top-4">
+            <CardContent className="p-6">
+              <div className="flex flex-col items-center text-center">
+                <div className="relative mb-4">
                   <Avatar className="h-24 w-24">
-                    <AvatarImage src={imagePreview || user?.avatar} alt={user?.name} />
+                    <AvatarImage src={user?.profile_picture || ''} alt={user?.name || 'User'} />
                     <AvatarFallback>{(user?.name || 'U').charAt(0).toUpperCase()}</AvatarFallback>
                   </Avatar>
-                  <label 
-                    className="absolute bottom-0 right-0 bg-primary text-white p-2 rounded-full hover:bg-primary/90 transition-colors cursor-pointer"
+                  <label
                     htmlFor="profile-picture"
+                    className="absolute bottom-0 right-0 bg-primary text-white p-2 rounded-full hover:bg-primary/90 transition-colors cursor-pointer"
                   >
                     <Camera className="h-4 w-4" />
                     <input
@@ -304,320 +416,644 @@ const UserManagementManager = () => {
                     />
                   </label>
                 </div>
-                <h3 className="text-lg font-medium">{user?.name || 'Usuario'}</h3>
-                <p className="text-sm text-muted-foreground">{user?.role || 'Administrador'}</p>
-                <Badge variant={user?.isActive ? 'default' : 'secondary'} className="mt-2">
-                  {user?.isActive ? 'Activo' : 'Inactivo'}
+                <h3 className="text-lg font-medium">{user?.display_name || user?.name || 'Usuario'}</h3>
+                <p className="text-sm text-muted-foreground">{user?.role || 'Usuario'}</p>
+                <Badge variant={user?.online_status ? 'default' : 'secondary'} className="mt-2">
+                  {user?.online_status ? 'En línea' : 'Desconectado'}
                 </Badge>
-                    checked={securitySettings.twoFactorAuth}
-                    onCheckedChange={() => handleSecurityToggle('twoFactorAuth')}
-                  />
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-purple-900/10 border border-purple-500/20">
-                  <div>
-                    <h4 className="text-white font-medium">Alertas de Inicio de Sesión</h4>
-                    <p className="text-purple-300 text-sm">Notifica sobre nuevos inicios</p>
-                  </div>
-                  <Switch
-                    checked={securitySettings.loginAlerts}
-                    onCheckedChange={() => handleSecurityToggle('loginAlerts')}
-                  />
-                </div>
-                <div>
-                  <Label className="text-purple-200">Tiempo de Sesión (minutos)</Label>
-                  <Select value={securitySettings.sessionTimeout} onValueChange={(value) => setSecuritySettings(prev => ({ ...prev, sessionTimeout: value }))}>
-                    <SelectTrigger className="bg-black/30 border-purple-500/30 text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="15">15 minutos</SelectItem>
-                      <SelectItem value="30">30 minutos</SelectItem>
-                      <SelectItem value="60">1 hora</SelectItem>
-                      <SelectItem value="120">2 horas</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-purple-200">Expiración de Contraseña (días)</Label>
-                  <Select value={securitySettings.passwordExpiry} onValueChange={(value) => setSecuritySettings(prev => ({ ...prev, passwordExpiry: value }))}>
-                    <SelectTrigger className="bg-black/30 border-purple-500/30 text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="30">30 días</SelectItem>
-                      <SelectItem value="60">60 días</SelectItem>
-                      <SelectItem value="90">90 días</SelectItem>
-                      <SelectItem value="180">180 días</SelectItem>
-                      <SelectItem value="never">Nunca</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Notifications Tab */}
-        <TabsContent value="notifications" className="space-y-6">
-          <Card className="bg-black/40 border-purple-500/30">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center">
-                <Bell className="h-5 w-5 mr-2" />
-                Configuración de Notificaciones
-              </CardTitle>
-              <CardDescription className="text-purple-300">
-                Personaliza cómo y cuándo recibir notificaciones
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="flex items-center justify-between p-4 rounded-lg bg-purple-900/10 border border-purple-500/20">
-                  <div className="flex items-center space-x-3">
-                    <Mail className="h-5 w-5 text-purple-400" />
-                    <div>
-                      <h4 className="text-white font-medium">Notificaciones por Email</h4>
-                      <p className="text-purple-300 text-sm">Recibir alertas en tu email</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={notificationSettings.emailNotifications}
-                    onCheckedChange={() => handleNotificationToggle('emailNotifications')}
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between p-4 rounded-lg bg-purple-900/10 border border-purple-500/20">
-                  <div className="flex items-center space-x-3">
-                    <Bell className="h-5 w-5 text-purple-400" />
-                    <div>
-                      <h4 className="text-white font-medium">Notificaciones Push</h4>
-                      <p className="text-purple-300 text-sm">Alertas del navegador</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={notificationSettings.pushNotifications}
-                    onCheckedChange={() => handleNotificationToggle('pushNotifications')}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg bg-purple-900/10 border border-purple-500/20">
-                  <div className="flex items-center space-x-3">
-                    <Clock className="h-5 w-5 text-purple-400" />
-                    <div>
-                      <h4 className="text-white font-medium">Recordatorios de Eventos</h4>
-                      <p className="text-purple-300 text-sm">Alertas antes de eventos</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={notificationSettings.eventReminders}
-                    onCheckedChange={() => handleNotificationToggle('eventReminders')}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg bg-purple-900/10 border border-purple-500/20">
-                  <div className="flex items-center space-x-3">
-                    <Mail className="h-5 w-5 text-purple-400" />
-                    <div>
-                      <h4 className="text-white font-medium">Emails de Marketing</h4>
-                      <p className="text-purple-300 text-sm">Promociones y novedades</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={notificationSettings.marketingEmails}
-                    onCheckedChange={() => handleNotificationToggle('marketingEmails')}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg bg-purple-900/10 border border-purple-500/20">
-                  <div className="flex items-center space-x-3">
-                    <Shield className="h-5 w-5 text-purple-400" />
-                    <div>
-                      <h4 className="text-white font-medium">Alertas de Seguridad</h4>
-                      <p className="text-purple-300 text-sm">Avisos de seguridad importantes</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={notificationSettings.securityAlerts}
-                    onCheckedChange={() => handleNotificationToggle('securityAlerts')}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg bg-purple-900/10 border border-purple-500/20">
-                  <div className="flex items-center space-x-3">
-                    <AlertTriangle className="h-5 w-5 text-purple-400" />
-                    <div>
-                      <h4 className="text-white font-medium">Reportes Semanales</h4>
-                      <p className="text-purple-300 text-sm">Resumen semanal de actividad</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={notificationSettings.weeklyReports}
-                    onCheckedChange={() => handleNotificationToggle('weeklyReports')}
-                  />
-                </div>
               </div>
+
+              <Tabs
+                value={activeTab}
+                onValueChange={setActiveTab}
+                className="mt-6"
+                orientation="vertical"
+              >
+                <TabsList className="flex flex-col items-start space-y-2 h-auto p-0 bg-transparent">
+                  <TabsTrigger
+                    value="profile"
+                    className="w-full justify-start data-[state=active]:bg-muted"
+                  >
+                    <User className="mr-2 h-4 w-4" />
+                    Perfil
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="security"
+                    className="w-full justify-start data-[state=active]:bg-muted"
+                  >
+                    <Shield className="mr-2 h-4 w-4" />
+                    Seguridad
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="notifications"
+                    className="w-full justify-start data-[state=active]:bg-muted"
+                  >
+                    <Bell className="mr-2 h-4 w-4" />
+                    Notificaciones
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="preferences"
+                    className="w-full justify-start data-[state=active]:bg-muted"
+                  >
+                    <Settings className="mr-2 h-4 w-4" />
+                    Preferencias
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
 
-        {/* Preferences Tab */}
-        <TabsContent value="preferences" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="bg-black/40 border-purple-500/30">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center">
-                  <Palette className="h-5 w-5 mr-2" />
-                  Apariencia
-                </CardTitle>
-                <CardDescription className="text-purple-300">
-                  Personaliza la interfaz del dashboard
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label className="text-purple-200">Tema</Label>
-                  <Select value={dashboardPreferences.theme} onValueChange={(value) => handlePreferenceChange('theme', value)}>
-                    <SelectTrigger className="bg-black/30 border-purple-500/30 text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dark">Oscuro</SelectItem>
-                      <SelectItem value="light">Claro</SelectItem>
-                      <SelectItem value="auto">Automático</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-purple-200">Vista por Defecto</Label>
-                  <Select value={dashboardPreferences.defaultView} onValueChange={(value) => handlePreferenceChange('defaultView', value)}>
-                    <SelectTrigger className="bg-black/30 border-purple-500/30 text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="overview">Resumen</SelectItem>
-                      <SelectItem value="events">Eventos</SelectItem>
-                      <SelectItem value="contacts">Contactos</SelectItem>
-                      <SelectItem value="gamification">Gamificación</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-black/40 border-purple-500/30">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center">
-                  <Globe className="h-5 w-5 mr-2" />
-                  Localización
-                </CardTitle>
-                <CardDescription className="text-purple-300">
-                  Configuración regional y de idioma
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label className="text-purple-200">Idioma</Label>
-                  <Select value={dashboardPreferences.language} onValueChange={(value) => handlePreferenceChange('language', value)}>
-                    <SelectTrigger className="bg-black/30 border-purple-500/30 text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="es">Español</SelectItem>
-                      <SelectItem value="en">English</SelectItem>
-                      <SelectItem value="fr">Français</SelectItem>
-                      <SelectItem value="pt">Português</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-purple-200">Zona Horaria</Label>
-                  <Select value={dashboardPreferences.timezone} onValueChange={(value) => handlePreferenceChange('timezone', value)}>
-                    <SelectTrigger className="bg-black/30 border-purple-500/30 text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Europe/Madrid">Madrid (GMT+1)</SelectItem>
-                      <SelectItem value="America/New_York">Nueva York (GMT-5)</SelectItem>
-                      <SelectItem value="America/Los_Angeles">Los Angeles (GMT-8)</SelectItem>
-                      <SelectItem value="Europe/London">Londres (GMT+0)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-purple-200">Formato de Fecha</Label>
-                  <Select value={dashboardPreferences.dateFormat} onValueChange={(value) => handlePreferenceChange('dateFormat', value)}>
-                    <SelectTrigger className="bg-black/30 border-purple-500/30 text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dd/mm/yyyy">DD/MM/YYYY</SelectItem>
-                      <SelectItem value="mm/dd/yyyy">MM/DD/YYYY</SelectItem>
-                      <SelectItem value="yyyy-mm-dd">YYYY-MM-DD</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card className="bg-black/40 border-purple-500/30">
-            <CardHeader>
-              <CardTitle className="text-white">Resumen de Configuraciones</CardTitle>
-              <CardDescription className="text-purple-300">
-                Vista general de tus preferencias actuales
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="p-3 rounded-lg bg-purple-900/10 border border-purple-500/20">
-                  <h4 className="text-white font-medium mb-2">Seguridad</h4>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-purple-300">2FA:</span>
-                      <Badge className={securitySettings.twoFactorAuth ? 'bg-green-900/50 text-green-200' : 'bg-red-900/50 text-red-200'}>
-                        {securitySettings.twoFactorAuth ? 'Activado' : 'Desactivado'}
-                      </Badge>
+        {/* Main Content */}
+        <div className="flex-1">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            {/* Profile Tab */}
+            <TabsContent value="profile" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Información del Perfil</CardTitle>
+                  <CardDescription>
+                    Actualiza la información de tu perfil y configura tu dirección de correo electrónico.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Nombre</Label>
+                      <Input
+                        id="name"
+                        value={profileForm.name}
+                        onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                        disabled={isSaving}
+                      />
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-purple-300">Sesión:</span>
-                      <span className="text-purple-200">{securitySettings.sessionTimeout} min</span>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastname">Apellido</Label>
+                      <Input
+                        id="lastname"
+                        value={profileForm.lastname}
+                        onChange={(e) => setProfileForm({ ...profileForm, lastname: e.target.value })}
+                        disabled={isSaving}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Nombre de usuario</Label>
+                      <Input
+                        id="username"
+                        value={profileForm.username}
+                        onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })}
+                        disabled={isSaving}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="display_name">Nombre para mostrar</Label>
+                      <Input
+                        id="display_name"
+                        value={profileForm.display_name}
+                        onChange={(e) => setProfileForm({ ...profileForm, display_name: e.target.value })}
+                        disabled={isSaving}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Correo electrónico</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={profileForm.email}
+                        onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                        disabled={isSaving}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="location">Ubicación</Label>
+                      <Input
+                        id="location"
+                        value={profileForm.location}
+                        onChange={(e) => setProfileForm({ ...profileForm, location: e.target.value })}
+                        disabled={isSaving}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="website">Sitio web</Label>
+                      <Input
+                        id="website"
+                        value={profileForm.website}
+                        onChange={(e) => setProfileForm({ ...profileForm, website: e.target.value })}
+                        disabled={isSaving}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="online-status">Estado en línea</Label>
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="online-status"
+                          checked={!!profileForm.online_status}
+                          onCheckedChange={handleOnlineStatusChange}
+                          disabled={isSaving}
+                        />
+                        <span>{profileForm.online_status ? 'En línea' : 'Desconectado'}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="p-3 rounded-lg bg-purple-900/10 border border-purple-500/20">
-                  <h4 className="text-white font-medium mb-2">Notificaciones</h4>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-purple-300">Email:</span>
-                      <Badge className={notificationSettings.emailNotifications ? 'bg-green-900/50 text-green-200' : 'bg-red-900/50 text-red-200'}>
-                        {notificationSettings.emailNotifications ? 'Activado' : 'Desactivado'}
-                      </Badge>
+                  <div className="space-y-2">
+                    <Label htmlFor="bio">Biografía</Label>
+                    <Textarea
+                      id="bio"
+                      rows={4}
+                      value={profileForm.bio}
+                      onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
+                      disabled={isSaving}
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button onClick={handleProfileUpdate} disabled={isSaving}>
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Guardando...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="mr-2 h-4 w-4" />
+                          Guardar cambios
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Security Tab */}
+            <TabsContent value="security" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Cambiar contraseña</CardTitle>
+                  <CardDescription>
+                    Actualiza tu contraseña. Asegúrate de que sea segura y no la compartas con nadie.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="currentPassword">Contraseña actual</Label>
+                      <div className="relative">
+                        <Input
+                          id="currentPassword"
+                          type={showPassword ? 'text' : 'password'}
+                          value={passwordForm.currentPassword}
+                          onChange={(e) =>
+                            setPasswordForm({ ...passwordForm, currentPassword: e.target.value })
+                          }
+                          disabled={isSaving}
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2 top-2.5 text-muted-foreground"
+                          onClick={() => setShowPassword(!showPassword)}
+                          disabled={isSaving}
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-purple-300">Push:</span>
-                      <Badge className={notificationSettings.pushNotifications ? 'bg-green-900/50 text-green-200' : 'bg-red-900/50 text-red-200'}>
-                        {notificationSettings.pushNotifications ? 'Activado' : 'Desactivado'}
-                      </Badge>
+                    <div className="space-y-2">
+                      <Label htmlFor="newPassword">Nueva contraseña</Label>
+                      <div className="relative">
+                        <Input
+                          id="newPassword"
+                          type={showNewPassword ? 'text' : 'password'}
+                          value={passwordForm.newPassword}
+                          onChange={(e) =>
+                            setPasswordForm({ ...passwordForm, newPassword: e.target.value })
+                          }
+                          disabled={isSaving}
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2 top-2.5 text-muted-foreground"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          disabled={isSaving}
+                        >
+                          {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmPassword">Confirmar nueva contraseña</Label>
+                      <div className="relative">
+                        <Input
+                          id="confirmPassword"
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          value={passwordForm.confirmPassword}
+                          onChange={(e) =>
+                            setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })
+                          }
+                          disabled={isSaving}
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2 top-2.5 text-muted-foreground"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          disabled={isSaving}
+                        >
+                          {showConfirmPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button onClick={handlePasswordChange} disabled={isSaving}>
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Actualizando...
+                          </>
+                        ) : (
+                          <>
+                            <Key className="mr-2 h-4 w-4" />
+                            Cambiar contraseña
+                          </>
+                        )}
+                      </Button>
                     </div>
                   </div>
-                </div>
-                <div className="p-3 rounded-lg bg-purple-900/10 border border-purple-500/20">
-                  <h4 className="text-white font-medium mb-2">Preferencias</h4>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-purple-300">Idioma:</span>
-                      <span className="text-purple-200">Español</span>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Seguridad de la cuenta</CardTitle>
+                  <CardDescription>Configura las opciones de seguridad para tu cuenta.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="two-factor">Autenticación de dos factores</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Añade una capa extra de seguridad a tu cuenta.
+                      </p>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-purple-300">Tema:</span>
-                      <span className="text-purple-200">Oscuro</span>
+                    <Switch
+                      id="two-factor"
+                      checked={securitySettings.twoFactorAuth}
+                      onCheckedChange={(checked) =>
+                        handleSecuritySettingsChange('twoFactorAuth', checked)
+                      }
+                      disabled={isSaving}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="login-alerts">Alertas de inicio de sesión</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Recibe notificaciones cuando se detecte un inicio de sesión sospechoso.
+                      </p>
+                    </div>
+                    <Switch
+                      id="login-alerts"
+                      checked={securitySettings.loginAlerts}
+                      onCheckedChange={(checked) => handleSecuritySettingsChange('loginAlerts', checked)}
+                      disabled={isSaving}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-4 border-t">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="session-timeout">Tiempo de espera de sesión</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Tiempo de inactividad antes de cerrar la sesión automáticamente.
+                      </p>
+                    </div>
+                    <Select
+                      value={securitySettings.sessionTimeout}
+                      onValueChange={(value) => handleSecuritySettingsChange('sessionTimeout', value)}
+                      disabled={isSaving}
+                    >
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Seleccionar tiempo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="15">15 minutos</SelectItem>
+                        <SelectItem value="30">30 minutos</SelectItem>
+                        <SelectItem value="60">1 hora</SelectItem>
+                        <SelectItem value="120">2 horas</SelectItem>
+                        <SelectItem value="240">4 horas</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex justify-end pt-4">
+                    <Button onClick={handleSecuritySettingsSave} disabled={isSaving}>
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Guardando...
+                        </>
+                      ) : (
+                        'Guardar configuración de seguridad'
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Notifications Tab */}
+            <TabsContent value="notifications" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Configuración de notificaciones</CardTitle>
+                  <CardDescription>Personaliza cómo y cuándo recibes notificaciones.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <h3 className="font-medium">Correo electrónico</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="email-notifications">Notificaciones por correo</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Recibe notificaciones importantes por correo electrónico.
+                          </p>
+                        </div>
+                        <Switch
+                          id="email-notifications"
+                          checked={notificationSettings.emailNotifications}
+                          onCheckedChange={() => handleNotificationSettingsChange('emailNotifications')}
+                          disabled={isSaving}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="event-reminders">Recordatorios de eventos</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Recibe recordatorios antes de que comiencen los eventos.
+                          </p>
+                        </div>
+                        <Switch
+                          id="event-reminders"
+                          checked={notificationSettings.eventReminders}
+                          onCheckedChange={() => handleNotificationSettingsChange('eventReminders')}
+                          disabled={isSaving}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="marketing-emails">Correos de marketing</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Recibe ofertas especiales y actualizaciones de productos.
+                          </p>
+                        </div>
+                        <Switch
+                          id="marketing-emails"
+                          checked={notificationSettings.marketingEmails}
+                          onCheckedChange={() => handleNotificationSettingsChange('marketingEmails')}
+                          disabled={isSaving}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+
+                  <div className="space-y-4 pt-4 border-t">
+                    <h3 className="font-medium">Notificaciones push</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="push-notifications">Notificaciones push</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Recibe notificaciones en tiempo real en tu dispositivo.
+                          </p>
+                        </div>
+                        <Switch
+                          id="push-notifications"
+                          checked={notificationSettings.pushNotifications}
+                          onCheckedChange={() => handleNotificationSettingsChange('pushNotifications')}
+                          disabled={isSaving}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="security-alerts">Alertas de seguridad</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Recibe alertas sobre actividad sospechosa en tu cuenta.
+                          </p>
+                        </div>
+                        <Switch
+                          id="security-alerts"
+                          checked={notificationSettings.securityAlerts}
+                          onCheckedChange={() => handleNotificationSettingsChange('securityAlerts')}
+                          disabled={isSaving}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="weekly-reports">Informes semanales</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Recibe un resumen semanal de tu actividad.
+                          </p>
+                        </div>
+                        <Switch
+                          id="weekly-reports"
+                          checked={notificationSettings.weeklyReports}
+                          onCheckedChange={() => handleNotificationSettingsChange('weeklyReports')}
+                          disabled={isSaving}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-4 border-t">
+                    <Button onClick={handleNotificationSettingsSave} disabled={isSaving}>
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Guardando...
+                        </>
+                      ) : (
+                        'Guardar configuración de notificaciones'
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Preferences Tab */}
+            <TabsContent value="preferences" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Preferencias del panel</CardTitle>
+                  <CardDescription>
+                    Personaliza la apariencia y el comportamiento del panel.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <h3 className="font-medium">Apariencia</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="theme">Tema</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Personaliza la apariencia del panel.
+                          </p>
+                        </div>
+                        <Select
+                          value={dashboardPreferences.theme}
+                          onValueChange={(value) => handleDashboardPreferenceChange('theme', value)}
+                          disabled={isSaving}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Seleccionar tema" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="light">Claro</SelectItem>
+                            <SelectItem value="dark">Oscuro</SelectItem>
+                            <SelectItem value="system">Sistema</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="language">Idioma</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Selecciona tu idioma preferido.
+                          </p>
+                        </div>
+                        <Select
+                          value={dashboardPreferences.language}
+                          onValueChange={(value) => handleDashboardPreferenceChange('language', value)}
+                          disabled={isSaving}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Seleccionar idioma" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="es">Español</SelectItem>
+                            <SelectItem value="en">English</SelectItem>
+                            <SelectItem value="fr">Français</SelectItem>
+                            <SelectItem value="de">Deutsch</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 pt-4 border-t">
+                    <h3 className="font-medium">Zona horaria</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="timezone">Zona horaria</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Configura tu zona horaria local.
+                          </p>
+                        </div>
+                        <Select
+                          value={dashboardPreferences.timezone}
+                          onValueChange={(value) => handleDashboardPreferenceChange('timezone', value)}
+                          disabled={isSaving}
+                        >
+                          <SelectTrigger className="w-[280px]">
+                            <SelectValue placeholder="Seleccionar zona horaria" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-[300px]">
+                            <SelectItem value="America/Mexico_City">(GMT-6) Ciudad de México</SelectItem>
+                            <SelectItem value="America/Bogota">(GMT-5) Bogotá, Lima</SelectItem>
+                            <SelectItem value="America/New_York">(GMT-4) Caracas, La Paz</SelectItem>
+                            <SelectItem value="America/Argentina/Buenos_Aires">
+                              (GMT-3) Buenos Aires, Santiago
+                            </SelectItem>
+                            <SelectItem value="America/Sao_Paulo">(GMT-3) Brasilia</SelectItem>
+                            <SelectItem value="Europe/Madrid">(GMT+1) Madrid, Barcelona</SelectItem>
+                            <SelectItem value="UTC">UTC</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="date-format">Formato de fecha</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Cómo se muestran las fechas en el panel.
+                          </p>
+                        </div>
+                        <Select
+                          value={dashboardPreferences.dateFormat}
+                          onValueChange={(value) => handleDashboardPreferenceChange('dateFormat', value)}
+                          disabled={isSaving}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Seleccionar formato" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="dd/MM/yyyy">DD/MM/AAAA</SelectItem>
+                            <SelectItem value="MM/dd/yyyy">MM/DD/AAAA</SelectItem>
+                            <SelectItem value="yyyy-MM-dd">AAAA-MM-DD</SelectItem>
+                            <SelectItem value="dd MMM, yyyy">DD MMM, AAAA</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 pt-4 border-t">
+                    <h3 className="font-medium">Vista predeterminada</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="default-view">Vista inicial</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Qué página verás al iniciar sesión.
+                          </p>
+                        </div>
+                        <Select
+                          value={dashboardPreferences.defaultView}
+                          onValueChange={(value) => handleDashboardPreferenceChange('defaultView', value)}
+                          disabled={isSaving}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Seleccionar vista" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="overview">Resumen</SelectItem>
+                            <SelectItem value="events">Eventos</SelectItem>
+                            <SelectItem value="analytics">Análisis</SelectItem>
+                            <SelectItem value="reports">Informes</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-4 border-t">
+                    <Button onClick={handleDashboardPreferencesSave} disabled={isSaving}>
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Guardando...
+                        </>
+                      ) : (
+                        'Guardar preferencias'
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
     </div>
   );
 };

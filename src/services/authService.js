@@ -30,6 +30,7 @@ export const login = async (email, password) => {
     // Almacenar token y datos del usuario
     localStorage.setItem('token', data.data.token);
     localStorage.setItem('user', JSON.stringify(data.data.user));
+    localStorage.setItem('userId', data.data.user._id || data.data.user.id);
     
     return data.data;
   } catch (error) {
@@ -44,6 +45,7 @@ export const login = async (email, password) => {
 export const logout = () => {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
+  localStorage.removeItem('userId');
   // Redirigir a la página de inicio de sesión
   window.location.href = '/login';
 };
