@@ -43,7 +43,6 @@ const ForgotPassword = ({ onBack }) => {
     }
   };
 
-  
   const handleConfirmPin = async (e) => {
     e.preventDefault();
     console.log('handleConfirmPin triggered, pin:', pin); // Debug
