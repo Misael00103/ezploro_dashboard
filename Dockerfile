@@ -7,16 +7,14 @@ RUN npm install --legacy-peer-deps
 COPY . .
 RUN npm run build
 
-# Etapa 2: ejecutar el servidor Node.js
-FROM node:20-alpine
+# Etapa 2: servir el frontend con Nginx
+FROM nginx:stable-alpine
 
-WORKDIR /app
-COPY --from=builder /app/package*.json ./
-RUN npm install --omit=dev --legacy-peer-deps
-COPY --from=builder /app/build ./build
-COPY --from=builder /app/server ./server
-COPY --from=builder /app/*.js ./
-COPY --from=builder /app/.env ./
+# Copiar los archivos construidos desde la primera etapa
+COPY --from=builder /app/build /usr/share/nginx/html
 
-EXPOSE 3000
-CMD ["node", "server/index.js"]
+# Exponer el puerto HTTP
+EXPOSE 80
+
+# Arrancar Nginx
+CMD ["nginx", "-g", "daemon off;"]
