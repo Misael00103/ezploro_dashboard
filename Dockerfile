@@ -17,4 +17,4 @@ COPY --from=builder /app/build /usr/share/nginx/html
 EXPOSE 80
 
 # Arrancar Nginx
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["nginx", "-g", "daemon off;"]
