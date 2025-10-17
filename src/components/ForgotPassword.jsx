@@ -17,58 +17,87 @@ const ForgotPassword = ({ onBack }) => {
 
   const handleSendCode = async (e) => {
     e.preventDefault();
+    console.log('handleSendCode triggered, email:', email); // Debug: Confirm function is called
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim() || !emailRegex.test(email)) {
+      console.log('Invalid email:', email); // Debug: Log invalid email
+      toast.error('Por favor ingresa un correo electrónico válido');
+      return;
+    }
+
     setIsLoading(true);
-    
+    console.log('isLoading set to true'); // Debug: Track loading state
+
     try {
-      await forgotPassword(email);
+      const result = await forgotPassword(email);
+      console.log('forgotPassword result:', result); // Debug: Log API response
       toast.success('Código enviado a tu correo');
       setStep(2);
     } catch (error) {
-      toast.error(error.message);
+      console.error('Error in forgotPassword:', error); // Debug: Log full error
+      toast.error(error.message || 'Error al enviar el código');
     } finally {
       setIsLoading(false);
+      console.log('isLoading set to false'); // Debug: Confirm loading reset
     }
   };
 
   const handleConfirmPin = async (e) => {
     e.preventDefault();
+    console.log('handleConfirmPin triggered, pin:', pin); // Debug
     setIsLoading(true);
-    
+    console.log('isLoading set to true');
+
     try {
       await confirmPin(email, pin);
       toast.success('Código confirmado');
       setStep(3);
     } catch (error) {
-      toast.error(error.message);
+      console.error('Error in confirmPin:', error);
+      toast.error(error.message || 'Error al confirmar el código');
     } finally {
       setIsLoading(false);
+      console.log('isLoading set to false');
     }
   };
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
-    
+    console.log('handleResetPassword triggered'); // Debug
+
     if (newPassword !== confirmPassword) {
+      console.log('Passwords do not match'); // Debug
       toast.error('Las contraseñas no coinciden');
       return;
     }
-    
+
     setIsLoading(true);
-    
+    console.log('isLoading set to true');
+
     try {
       await resetPassword(email, newPassword, confirmPassword);
       toast.success('Contraseña restablecida exitosamente');
       onBack();
     } catch (error) {
-      toast.error(error.message);
+      console.error('Error in resetPassword:', error);
+      toast.error(error.message || 'Error al restablecer la contraseña');
     } finally {
       setIsLoading(false);
+      console.log('isLoading set to false');
     }
   };
 
   return (
     <Card className="w-full max-w-md mx-auto bg-black/40 border-purple-500/30">
-      <CardHeader className="text-center">
+      <CardHeader className="text-center space-y-4">
+        <div className="mx-auto w-24 h-24 rounded-full flex items-center justify-center">
+          <img 
+            src={require('../img/logoezploro.png')} 
+            alt="Ezploro Logo" 
+            className="w-24 h-24 object-contain"
+          />
+        </div>
         <CardTitle className="text-white">
           {step === 1 && 'Recuperar Contraseña'}
           {step === 2 && 'Confirmar Código'}
@@ -100,13 +129,14 @@ const ForgotPassword = ({ onBack }) => {
               </div>
             </div>
             
-            <Button
+            <button
               type="submit"
-              className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+              className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white py-2 px-4 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               disabled={isLoading}
+              onClick={() => console.log('Button clicked')} // Debug: Confirm button click
             >
               {isLoading ? 'Enviando...' : 'Enviar Código'}
-            </Button>
+            </button>
           </form>
         )}
 

@@ -108,11 +108,15 @@ const Login = ({ onLogin }) => {
       
       <Card className="w-full max-w-md mx-4 relative z-10 bg-black/80 border-purple-500/30 backdrop-blur-sm">
         <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-16 h-16 bg-gradient-to-r from-purple-500 to-purple-700 rounded-full flex items-center justify-center">
-            <LogIn className="h-8 w-8 text-white" />
+          <div className="mx-auto w-32 h-32 rounded-full flex items-center justify-center">
+            <img 
+              src={require('../img/logoezploro.png')} 
+              alt="Ezploro Logo" 
+              className="w-32 h-32 object-contain"
+            />
           </div>
           <CardTitle className="text-2xl font-bold text-white">
-            Scape Events Dashboard
+            Ezploro Dashboard
           </CardTitle>
           <CardDescription className="text-purple-200">
             Ingresa tus credenciales para acceder al panel de administración
