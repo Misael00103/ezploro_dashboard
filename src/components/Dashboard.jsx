@@ -49,7 +49,6 @@ import { getStats } from '../services/statsService';
 import { getUserProfile } from '../services/userService';
 import { debugAuthState, validateAuth, clearAuthData } from '../services/authUtils';
 
-
 const Dashboard = ({ onLogout }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
