@@ -4,7 +4,7 @@ import { Input } from './ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { MessageCircle, Send, Trash2 } from 'lucide-react';
 import { getPostComments, createComment, updateComment, deleteComment } from '../services/postService';
-import { getCurrentUserId } from '../services/userService';
+import { getCurrentUserId } from '../services/authService';
 import { useToast } from '../hooks/use-toast';
 
 const PostComments = ({ postId, isOpen, onClose, onCommentAdded }) => {

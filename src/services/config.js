@@ -1,9 +1,54 @@
-// config.js - VERSIÓN ACTUALIZADA Y COMPLETA
+// config.js - VERSIÓN ACTUALIZADA Y COMPLETA PARA DASHBOARD
 
 // Configuración de la API
 // Base URL for the entire API (modificado para conectar al backend en la nube, con /api prefix)
-const REACT_APP_API_URL = "https://api-v3-backend-ezploro.apps.ezploro.com/api";
+const REACT_APP_API_URL = process.env.REACT_APP_API_URL || "https://api-v3-backend-ezploro.apps.ezploro.com/api";
 export const BASE_URL = REACT_APP_API_URL;
+
+// Configuración del Dashboard
+export const DASHBOARD_CONFIG = {
+  // Configuración de autenticación
+  AUTH: {
+    TOKEN_KEY: 'token',
+    USER_KEY: 'user',
+    USER_ID_KEY: 'userId',
+    REFRESH_TOKEN_KEY: 'refreshToken',
+    SESSION_TIMEOUT: 24 * 60 * 60 * 1000, // 24 horas en milisegundos
+    AUTO_LOGOUT_WARNING: 5 * 60 * 1000, // 5 minutos antes del logout
+  },
+  
+  // Configuración de la UI del Dashboard
+  UI: {
+    SIDEBAR_COLLAPSED_KEY: 'sidebarCollapsed',
+    THEME_KEY: 'theme',
+    LANGUAGE_KEY: 'language',
+    ITEMS_PER_PAGE: 10,
+    MAX_FILE_SIZE: 5 * 1024 * 1024, // 5MB
+    ALLOWED_IMAGE_TYPES: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+  },
+  
+  // Configuración de notificaciones
+  NOTIFICATIONS: {
+    POSITION: 'top-right',
+    DURATION: 5000,
+    MAX_NOTIFICATIONS: 5,
+  },
+  
+  // Configuración de roles y permisos
+  ROLES: {
+    ADMIN: 'admin',
+    USER: 'user',
+    MODERATOR: 'moderator',
+  },
+  
+  // Configuración de endpoints específicos del dashboard
+  ENDPOINTS: {
+    DASHBOARD_STATS: '/admin/dashboard/stats',
+    USER_ANALYTICS: '/admin/users/analytics',
+    POST_ANALYTICS: '/admin/posts/analytics',
+    SYSTEM_HEALTH: '/admin/system/health',
+  }
+};
 
 // Function to ensure proper URL format
 const normalizeUrl = (url) => {
@@ -236,18 +281,23 @@ export const API_URL_NOTIFICATIONS_STATS = `${API_URL_NOTIFICATIONS}/stats`
 
 // ==================== POSTS ====================
 export const API_URL_POSTS = `${BASE_URL}/posts`
+export const API_URL_POSTS_CREATE = `${API_URL_POSTS}` // POST /api/posts
+export const API_URL_POSTS_UPDATE = `${API_URL_POSTS}/:postId` // PUT /api/posts/:postId
+export const API_URL_POSTS_DELETE = `${API_URL_POSTS}/:postId` // DELETE /api/posts/:postId
+export const API_URL_POSTS_BY_USER = `${API_URL_POSTS}/user/:userId` // GET /api/posts/user/:userId
+export const API_URL_POSTS_ALL = `${API_URL_POSTS}/all-posts` // GET /api/posts/all-posts (admin only)
 
 // ==================== POST COMMENTS ====================
-export const API_URL_POST_COMMENTS = `${API_URL_POSTS}/posts/comments` // Base para comentarios de posts
-export const API_URL_POST_COMMENTS_CREATE = `${API_URL_POST_COMMENTS}` // POST /api/posts/posts/comments
-export const API_URL_POST_COMMENTS_BY_POST = `${API_URL_POST_COMMENTS}/:postId` // GET /api/posts/posts/comments/:postId
-export const API_URL_POST_COMMENTS_UPDATE = `${API_URL_POST_COMMENTS}/:commentId` // PUT /api/posts/posts/comments/:commentId
-export const API_URL_POST_COMMENTS_DELETE = `${API_URL_POST_COMMENTS}/:commentId` // DELETE /api/posts/posts/comments/:commentId
+export const API_URL_POST_COMMENTS = `${API_URL_POSTS}/comments` // Base para comentarios de posts
+export const API_URL_POST_COMMENTS_CREATE = `${API_URL_POST_COMMENTS}` // POST /api/posts/comments
+export const API_URL_POST_COMMENTS_BY_POST = `${API_URL_POST_COMMENTS}/:postId` // GET /api/posts/comments/:postId
+export const API_URL_POST_COMMENTS_UPDATE = `${API_URL_POST_COMMENTS}/:commentId` // PUT /api/posts/comments/:commentId
+export const API_URL_POST_COMMENTS_DELETE = `${API_URL_POST_COMMENTS}/:commentId` // DELETE /api/posts/comments/:commentId
 
 // ==================== POST LIKES ====================
-export const API_URL_POST_LIKES_TOGGLE = `${API_URL_POSTS}/posts/likes/toggle` // POST /api/posts/posts/likes/toggle
-export const API_URL_POST_LIKES_BY_POST = `${API_URL_POSTS}/posts/:postId/likes` // GET /api/posts/posts/:postId/likes
-export const API_URL_POST_LIKES_COUNT = `${API_URL_POSTS}/posts/:postId/likes/count` // Para obtener solo el conteo
+export const API_URL_POST_LIKES_TOGGLE = `${API_URL_POSTS}/likes/toggle` // POST /api/posts/likes/toggle
+export const API_URL_POST_LIKES_BY_POST = `${API_URL_POSTS}/:postId/likes` // GET /api/posts/:postId/likes
+export const API_URL_POST_LIKES_COUNT = `${API_URL_POSTS}/:postId/likes/count` // Para obtener solo el conteo
 
 // ==================== TOOLS ====================
 export const API_URL_TOOLS = `${BASE_URL}/tools`

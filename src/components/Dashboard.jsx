@@ -42,7 +42,7 @@ import {
   getTestimonials,
   updateTestimonials,
 } from '../services/testimonialService';
-import { getPosts } from '../services/postService';
+import { getAllPosts as getPosts } from '../services/postService';
 import { getSocialMedia } from '../services/socialMediaService';
 import { getLandingPageContent } from '../services/landingPageService';
 import { getStats } from '../services/statsService';

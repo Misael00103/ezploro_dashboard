@@ -1,61 +1,22 @@
-// services/userService.js
+// services/userService.js - Servicio de usuarios actualizado para Dashboard
 import {
   API_URL_USERS_ME,
   API_URL_USERS_UPDATE,
   API_URL_PASSWORD_CHANGE,
   API_URL_USERS_UPLOAD_IMAGE,
-  API_URL_NOTIFICATIONS_PREFERENCES
+  API_URL_NOTIFICATIONS_PREFERENCES,
+  DASHBOARD_CONFIG
 } from './config';
+import { getAuthToken, getCurrentUserId } from './authService';
 import { jwtDecode } from 'jwt-decode';
 
-// Helper function to get auth token from localStorage
-const getAuthToken = () => {
-  return localStorage.getItem('token') || '';
-};
-
-// Helper function to get userId from localStorage or token
+// Helper function to get userId (usando el servicio de auth)
 const getUserId = () => {
-  // First try localStorage
-  const userId = localStorage.getItem('userId');
-  if (userId && userId !== 'undefined' && userId !== 'null') {
-    return userId;
-  }
-
-  // Try to get from user object in localStorage
-  const userStr = localStorage.getItem('user');
-  if (userStr) {
-    try {
-      const user = JSON.parse(userStr);
-      const id = user.user_id || user.id || user._id;
-      if (id) {
-        localStorage.setItem('userId', id);
-        return id;
-      }
-    } catch (error) {
-      console.error('Error parsing user from localStorage:', error);
-    }
-  }
-
-  // Fallback: Extract user_id from token
-  const token = getAuthToken();
-  if (token) {
-    try {
-      const decoded = jwtDecode(token);
-      const id = decoded.user_id || decoded.id || decoded.sub;
-      if (id) {
-        localStorage.setItem('userId', id);
-        return id;
-      }
-    } catch (error) {
-      console.error('Error decoding JWT:', error);
-    }
-  }
-  
-  return null;
+  return getCurrentUserId();
 };
 
-// Export getUserId for use in other services
-export const getCurrentUserId = getUserId;
+// Export getCurrentUserId for backward compatibility
+export { getCurrentUserId };
 
 // Helper function to make authenticated fetch requests
 export const fetchWithAuth = async (url, options = {}) => {
@@ -71,15 +32,25 @@ export const fetchWithAuth = async (url, options = {}) => {
   };
 
   const response = await fetch(url, { ...options, headers });
+  
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+    
     if (response.status === 401) {
-      throw new Error('No autorizado: Por favor, inicia sesión nuevamente.');
+      // Sesión expirada, limpiar localStorage y redirigir
+      localStorage.removeItem(DASHBOARD_CONFIG.AUTH.TOKEN_KEY);
+      localStorage.removeItem(DASHBOARD_CONFIG.AUTH.USER_KEY);
+      localStorage.removeItem(DASHBOARD_CONFIG.AUTH.USER_ID_KEY);
+      throw new Error('Sesión expirada: Por favor, inicia sesión nuevamente.');
     }
-    // Don't throw "ID de usuario inválido" for 400 errors from server
-    // Let the server response be handled by the calling function
+    
+    if (response.status === 403) {
+      throw new Error('Acceso denegado: No tienes permisos para realizar esta acción.');
+    }
+    
     throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
   }
+  
   return response.json();
 };
 
@@ -98,6 +69,7 @@ export const getUserProfile = async () => {
       }
     }
     return data.data;
+    console.log('getUserProfile data:', data);
   } catch (error) {
     console.error('Error en userService.getUserProfile:', error);
     throw error;
@@ -117,14 +89,14 @@ export const updateUserProfile = async (userData) => {
       body: JSON.stringify(userData),
     });
 
-    // Update localStorage with new user data
-    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-    localStorage.setItem('user', JSON.stringify({ ...currentUser, ...data.data }));
+    // Update localStorage with new user data usando configuración del dashboard
+    const currentUser = JSON.parse(localStorage.getItem(DASHBOARD_CONFIG.AUTH.USER_KEY) || '{}');
+    localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_KEY, JSON.stringify({ ...currentUser, ...data.data }));
     
     // Update user ID with fallbacks
     const newUserId = data.data.user_id || data.data.id || data.data._id;
     if (newUserId) {
-      localStorage.setItem('userId', newUserId);
+      localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_ID_KEY, newUserId);
     }
 
     return data.data;

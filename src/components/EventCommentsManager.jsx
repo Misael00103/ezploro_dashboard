@@ -16,7 +16,7 @@ import {
   X
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { getCurrentUserId } from '../services/userService';
+import { getCurrentUserId } from '../services/authService';
 import { 
   getEventComments, 
   createEventComment, 

@@ -54,22 +54,22 @@ const Login = ({ onLogin }) => {
         }),
       });
 
+     /// if (!response.ok) {
+      //  throw new Error(data.message || 'Credenciales inválidas');
+     // }
+      
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Credenciales inválidas');
-      }
-
-      if (!data.data || !data.data.token) {
+      console.log(data);
+      if (!data.user || !data.token) {
         throw new Error('No se recibió un token de autenticación');
       }
-
+      
       // Store user data and token
-      localStorage.setItem('token', data.data.token);
-      localStorage.setItem('user', JSON.stringify(data.data.user));
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
       
       // Store user ID with multiple fallbacks
-      const userId = data.data.user.user_id || data.data.user._id || data.data.user.id;
+      const userId = data.user.user_id || data.user.id || data.user.id;
       if (userId) {
         localStorage.setItem('userId', userId);
       } else {
@@ -79,7 +79,7 @@ const Login = ({ onLogin }) => {
       // Debug authentication state after login
       debugAuthState();
       
-      onLogin(data.data.user);
+      onLogin(data.user);
       navigate('/dashboard');
     } catch (err) {
       setError(err.message || 'Error al iniciar sesión. Verifica tus credenciales.');

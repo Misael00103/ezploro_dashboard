@@ -44,7 +44,9 @@ const UserManagementManager = () => {
     location: '',
     website: '',
     username: '',
+    lastname: '',
     display_name: '',
+    lastname: '',
     profile_picture: '',
     banner_image: '',
     online_status: false, // Default to offline
@@ -118,6 +120,7 @@ const UserManagementManager = () => {
           location: userData.location || '',
           website: userData.website || '',
           username: userData.username || '',
+          lastname: userData.lastname || '',
           display_name: userData.display_name || '',
           profile_picture: userData.profile_picture || '',
           banner_image: userData.banner_image || '',

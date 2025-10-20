@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { createPost, updatePost, deletePost, getUserPosts, togglePostLike } from '../services/postService';
-import { getCurrentUserId } from '../services/userService';
+import { getCurrentUserId } from '../services/authService';
 import PostComments from './PostComments';
 
 const PostsManager = ({ posts = [], setPosts }) => {
@@ -64,6 +64,20 @@ const PostsManager = ({ posts = [], setPosts }) => {
     setCurrentUserId(userId);
   }, []);
   const { toast } = useToast();
+
+  const getAllPosts = async () => {
+    try {
+      const allPosts = await getPosts();
+      setLocalPosts(allPosts);
+      if (setPosts) {
+        setPosts(allPosts);
+      }
+    } catch (error) {
+      console.error('Error loading all posts:', error);
+    }
+  };
+
+
 
   const postsToShow = posts.length > 0 ? posts : localPosts;
   const filteredPosts = postsToShow.filter(post => {

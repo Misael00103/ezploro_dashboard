@@ -175,9 +175,16 @@ const RankingsManager = () => {
                 <div className="flex-1">
                   <p className="font-medium text-white">{event.title}</p>
                   {event.organizer && (
-                    <p className="text-sm text-purple-300">
-                      Por: {event.organizer.display_name || event.organizer.username}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <img 
+                        src={event.organizer.profile_picture || event.organizer.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(event.organizer.display_name || event.organizer.username || 'User')}&background=7c3aed&color=fff&size=20`} 
+                        alt={event.organizer.display_name || event.organizer.username}
+                        className="w-5 h-5 rounded-full object-cover"
+                      />
+                      <p className="text-sm text-purple-300">
+                        Por: {event.organizer.display_name || event.organizer.username}
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>
