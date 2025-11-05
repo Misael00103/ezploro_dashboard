@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -23,21 +23,103 @@ import {
   Globe
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
-import { mockSocialMedia } from '../mock';
+import {
+  getAllSocialNetworks,
+  createSocialNetwork,
+  updateSocialNetwork,
+  deleteSocialNetwork,
+  toggleSocialNetwork,
+  getTotalFollowers
+} from '../services/socialMediaService';
 
-const SocialMediaManager = () => {
-  const [socialMedia, setSocialMedia] = useState(mockSocialMedia);
+const SocialMediaManager = ({ socialMedia = [], setSocialMedia }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedSocial, setSelectedSocial] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [localSocialMedia, setLocalSocialMedia] = useState([]);
+  const [totalFollowers, setTotalFollowers] = useState(0);
   const [formData, setFormData] = useState({
     platform: '',
     name: '',
     url: '',
     icon: '',
-    followers: 0
+    followers: ''
   });
   const { toast } = useToast();
+
+  // Cargar redes sociales al montar el componente
+  useEffect(() => {
+    loadSocialNetworks();
+  }, []);
+
+  const loadSocialNetworks = async () => {
+    try {
+      setIsLoading(true);
+      const networks = await getAllSocialNetworks();
+      
+      // Si no hay redes o el array está vacío, mantener estado vacío
+      if (!networks || networks.length === 0) {
+        setLocalSocialMedia([]);
+        if (setSocialMedia) {
+          setSocialMedia([]);
+        }
+        return;
+      }
+
+      // Mapear los datos del backend al formato del frontend
+      const formattedNetworks = networks.map(network => ({
+        id: network.id || network.social_network_id,
+        platform: network.plataforma || network.platform,
+        name: network.nombre_usuario || network.name,
+        url: network.url,
+        icon: network.icono || network.icon || getIconFromPlatform(network.plataforma || network.platform),
+        followers: network.cantidad_seguidores || network.followers || 0,
+        is_active: network.activa !== undefined ? network.activa : (network.is_active !== undefined ? network.is_active : true),
+      }));
+      
+      setLocalSocialMedia(formattedNetworks);
+      if (setSocialMedia) {
+        setSocialMedia(formattedNetworks);
+      }
+
+      // Cargar total de seguidores
+      try {
+        const total = await getTotalFollowers();
+        setTotalFollowers(total);
+      } catch (error) {
+        console.error('Error loading total followers:', error);
+        // Si falla, calcular desde los datos locales
+        const calculatedTotal = formattedNetworks.reduce((sum, s) => sum + (s.followers || 0), 0);
+        setTotalFollowers(calculatedTotal);
+      }
+    } catch (error) {
+      console.error('Error loading social networks:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Error al cargar las redes sociales",
+        variant: "destructive"
+      });
+      // Mantener el estado vacío si hay error
+      setLocalSocialMedia([]);
+      if (setSocialMedia) {
+        setSocialMedia([]);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getIconFromPlatform = (platform) => {
+    const platformLower = (platform || '').toLowerCase();
+    if (platformLower.includes('facebook')) return 'facebook';
+    if (platformLower.includes('instagram')) return 'instagram';
+    if (platformLower.includes('twitter') || platformLower.includes('x')) return 'twitter';
+    if (platformLower.includes('linkedin')) return 'linkedin';
+    if (platformLower.includes('youtube')) return 'youtube';
+    if (platformLower.includes('tiktok')) return 'music';
+    return 'globe';
+  };
 
   const platformIcons = {
     facebook: Facebook,
@@ -57,15 +139,54 @@ const SocialMediaManager = () => {
     { name: 'YouTube', value: 'youtube', icon: 'youtube' },
     { name: 'TikTok', value: 'tiktok', icon: 'music' },
     { name: 'Discord', value: 'discord', icon: 'globe' },
-    { name: 'Telegram', value: 'telegram', icon: 'globe' }
+    { name: 'Telegram', value: 'telegram', icon: 'globe' },
+    { name: 'WhatsApp', value: 'whatsapp', icon: 'globe' },
+    { name: 'Pinterest', value: 'pinterest', icon: 'globe' },
+    { name: 'Snapchat', value: 'snapchat', icon: 'globe' },
+    { name: 'Spotify', value: 'spotify', icon: 'music' }
   ];
+
+  const handleIconSelect = (iconValue) => {
+    setFormData({
+      ...formData,
+      icon: iconValue
+    });
+  };
+
+  const handlePlatformSelect = (platform) => {
+    const icon = getIconFromPlatform(platform.value);
+    setFormData({
+      ...formData,
+      platform: platform.name, // Usar el nombre para que coincida con el valor del select
+      icon: icon
+    });
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: name === 'followers' ? parseInt(value) || 0 : value
-    });
+    if (name === 'followers') {
+      // Permitir campo vacío mientras el usuario escribe
+      if (value === '') {
+        setFormData({
+          ...formData,
+          followers: ''
+        });
+      } else {
+        // Convertir a número solo si hay un valor válido
+        const numValue = parseInt(value);
+        if (!isNaN(numValue)) {
+          setFormData({
+            ...formData,
+            followers: numValue
+          });
+        }
+      }
+    } else {
+      setFormData({
+        ...formData,
+        [name]: value
+      });
+    }
   };
 
   const resetForm = () => {
@@ -74,7 +195,7 @@ const SocialMediaManager = () => {
       name: '',
       url: '',
       icon: '',
-      followers: 0
+      followers: ''
     });
   };
 
@@ -90,33 +211,56 @@ const SocialMediaManager = () => {
       return;
     }
 
-    const newSocial = {
-      id: Math.max(...socialMedia.map(s => s.id)) + 1,
-      ...formData,
-      name: formData.name || formData.platform.toLowerCase(),
-      is_active: true
-    };
+    try {
+      setIsLoading(true);
+      // Convertir nombre de plataforma a valor para el backend
+      const selectedPlatform = availablePlatforms.find(p => p.name === formData.platform);
+      const platformValue = selectedPlatform ? selectedPlatform.value : formData.platform.toLowerCase();
+      const icon = formData.icon || getIconFromPlatform(platformValue);
+      const followersValue = formData.followers === '' || formData.followers === undefined ? 0 : parseInt(formData.followers) || 0;
+      const newNetwork = await createSocialNetwork({
+        platform: platformValue,
+        name: formData.name || platformValue,
+        url: formData.url,
+        icon: icon,
+        followers: followersValue,
+        active: true
+      });
 
-    const updatedSocial = [...socialMedia, newSocial];
-    setSocialMedia(updatedSocial);
-    
-    toast({
-      title: "Red social agregada",
-      description: "La red social se ha agregado exitosamente",
-    });
+      // Recargar todas las redes sociales después de crear
+      await loadSocialNetworks();
+      
+      toast({
+        title: "Red social agregada",
+        description: "La red social se ha agregado exitosamente",
+      });
 
-    setIsCreateModalOpen(false);
-    resetForm();
+      setIsCreateModalOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error('Error creating social network:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Error al crear la red social",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleEdit = (social) => {
     setSelectedSocial(social);
+    // Convertir el valor de plataforma al nombre para que coincida con el select
+    const platformValue = social.platform || social.plataforma;
+    const platformName = availablePlatforms.find(p => p.value === platformValue || p.name === platformValue)?.name || platformValue;
+    
     setFormData({
-      platform: social.platform,
-      name: social.name,
+      platform: platformName,
+      name: social.name || social.nombre_usuario,
       url: social.url,
-      icon: social.icon,
-      followers: social.followers || 0
+      icon: social.icon || social.icono,
+      followers: social.followers || social.cantidad_seguidores || ''
     });
     setIsEditModalOpen(true);
   };
@@ -124,47 +268,106 @@ const SocialMediaManager = () => {
   const handleUpdate = async (e) => {
     e.preventDefault();
     
-    const updatedSocial = socialMedia.map(social =>
-      social.id === selectedSocial.id
-        ? { ...social, ...formData }
-        : social
-    );
-    
-    setSocialMedia(updatedSocial);
-    
-    toast({
-      title: "Red social actualizada",
-      description: "Los cambios se han guardado exitosamente",
-    });
+    if (!selectedSocial) {
+      toast({
+        title: "Error",
+        description: "No se ha seleccionado una red social",
+        variant: "destructive"
+      });
+      return;
+    }
 
-    setIsEditModalOpen(false);
-    resetForm();
-    setSelectedSocial(null);
+    try {
+      setIsLoading(true);
+      const networkId = selectedSocial.id || selectedSocial.social_network_id;
+      // Convertir nombre de plataforma a valor para el backend
+      const selectedPlatform = availablePlatforms.find(p => p.name === formData.platform);
+      const platformValue = selectedPlatform ? selectedPlatform.value : formData.platform.toLowerCase();
+      const icon = formData.icon || getIconFromPlatform(platformValue);
+      const followersValue = formData.followers === '' || formData.followers === undefined ? 0 : parseInt(formData.followers) || 0;
+      
+      await updateSocialNetwork(networkId, {
+        platform: platformValue,
+        name: formData.name,
+        url: formData.url,
+        icon: icon,
+        followers: followersValue,
+        active: selectedSocial.is_active !== undefined ? selectedSocial.is_active : (selectedSocial.activa !== undefined ? selectedSocial.activa : true)
+      });
+
+      // Recargar todas las redes sociales después de actualizar
+      await loadSocialNetworks();
+      
+      toast({
+        title: "Red social actualizada",
+        description: "Los cambios se han guardado exitosamente",
+      });
+
+      setIsEditModalOpen(false);
+      resetForm();
+      setSelectedSocial(null);
+    } catch (error) {
+      console.error('Error updating social network:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Error al actualizar la red social",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleToggleStatus = (socialId) => {
-    const updatedSocial = socialMedia.map(social =>
-      social.id === socialId
-        ? { ...social, is_active: !social.is_active }
-        : social
-    );
-    
-    setSocialMedia(updatedSocial);
-    
-    toast({
-      title: "Estado actualizado",
-      description: "El estado de la red social se ha actualizado",
-    });
+  const handleToggleStatus = async (socialId) => {
+    try {
+      setIsLoading(true);
+      await toggleSocialNetwork(socialId);
+      
+      // Recargar todas las redes sociales después de cambiar estado
+      await loadSocialNetworks();
+      
+      toast({
+        title: "Estado actualizado",
+        description: "El estado de la red social se ha actualizado",
+      });
+    } catch (error) {
+      console.error('Error toggling social network status:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Error al cambiar el estado",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleDelete = (socialId) => {
-    const updatedSocial = socialMedia.filter(social => social.id !== socialId);
-    setSocialMedia(updatedSocial);
-    
-    toast({
-      title: "Red social eliminada",
-      description: "La red social se ha eliminado exitosamente",
-    });
+  const handleDelete = async (socialId) => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar esta red social?')) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await deleteSocialNetwork(socialId);
+      
+      // Recargar todas las redes sociales después de eliminar
+      await loadSocialNetworks();
+      
+      toast({
+        title: "Red social eliminada",
+        description: "La red social se ha eliminado exitosamente",
+      });
+    } catch (error) {
+      console.error('Error deleting social network:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Error al eliminar la red social",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getIcon = (iconName) => {
@@ -181,8 +384,10 @@ const SocialMediaManager = () => {
     return followers.toString();
   };
 
-  const activeCount = socialMedia.filter(s => s.is_active).length;
-  const totalFollowers = socialMedia.reduce((sum, s) => sum + (s.followers || 0), 0);
+  const socialMediaToShow = socialMedia.length > 0 ? socialMedia : localSocialMedia;
+  const activeCount = socialMediaToShow.filter(s => s.is_active || s.activa).length;
+  const calculatedTotalFollowers = socialMediaToShow.reduce((sum, s) => sum + (s.followers || s.cantidad_seguidores || 0), 0);
+  const finalTotalFollowers = totalFollowers > 0 ? totalFollowers : calculatedTotalFollowers;
 
   return (
     <div className="space-y-6">
@@ -207,7 +412,7 @@ const SocialMediaManager = () => {
               <Users className="h-5 w-5 text-purple-400" />
               <div className="text-center">
                 <p className="text-sm text-purple-200">Seguidores</p>
-                <p className="text-xl font-bold text-white">{formatFollowers(totalFollowers)}</p>
+                <p className="text-xl font-bold text-white">{formatFollowers(finalTotalFollowers)}</p>
               </div>
             </div>
           </Card>
@@ -224,11 +429,36 @@ const SocialMediaManager = () => {
 
       {/* Social Media Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {socialMedia.map(social => {
-          const IconComponent = getIcon(social.icon);
-          
-          return (
-            <Card key={social.id} className="bg-black/40 border-purple-500/30">
+        {isLoading && socialMediaToShow.length === 0 ? (
+          <div className="col-span-full">
+            <Card className="bg-black/40 border-purple-500/30">
+              <CardContent className="pt-6">
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto mb-4"></div>
+                  <p className="text-purple-300">Cargando redes sociales...</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : socialMediaToShow.length === 0 ? (
+          <div className="col-span-full">
+            <Card className="bg-black/40 border-purple-500/30">
+              <CardContent className="pt-6">
+                <div className="text-center py-8">
+                  <Globe className="h-16 w-16 text-purple-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-white mb-2">No hay redes sociales</h3>
+                  <p className="text-purple-300">Agrega tus primeras redes sociales para comenzar.</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          socialMediaToShow.map(social => {
+            const IconComponent = getIcon(social.icon || social.icono);
+            const isActive = social.is_active !== undefined ? social.is_active : (social.activa !== undefined ? social.activa : true);
+            
+            return (
+            <Card key={social.id || social.social_network_id} className="bg-black/40 border-purple-500/30">
               <CardContent className="pt-6">
                 <div className="space-y-4">
                   {/* Header */}
@@ -238,15 +468,15 @@ const SocialMediaManager = () => {
                         <IconComponent className="h-6 w-6 text-purple-300" />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-white">{social.platform}</h3>
-                        <p className="text-sm text-purple-300">@{social.name}</p>
+                        <h3 className="font-semibold text-white">{social.platform || social.plataforma}</h3>
+                        <p className="text-sm text-purple-300">@{social.name || social.nombre_usuario}</p>
                       </div>
                     </div>
-                    <Badge className={social.is_active 
+                    <Badge className={isActive
                       ? 'bg-green-900/50 text-green-200 border-green-600/30'
                       : 'bg-red-900/50 text-red-200 border-red-600/30'
                     }>
-                      {social.is_active ? (
+                      {isActive ? (
                         <><CheckCircle className="h-3 w-3 mr-1" />Activa</>
                       ) : (
                         <><XCircle className="h-3 w-3 mr-1" />Inactiva</>
@@ -273,13 +503,13 @@ const SocialMediaManager = () => {
                   </div>
 
                   {/* Followers */}
-                  {social.followers && (
+                  {(social.followers || social.cantidad_seguidores) && (
                     <div className="space-y-1">
                       <p className="text-xs text-purple-400">Seguidores</p>
                       <div className="flex items-center space-x-1">
                         <Users className="h-4 w-4 text-purple-300" />
                         <p className="text-sm font-medium text-white">
-                          {formatFollowers(social.followers)}
+                          {formatFollowers(social.followers || social.cantidad_seguidores || 0)}
                         </p>
                       </div>
                     </div>
@@ -290,13 +520,14 @@ const SocialMediaManager = () => {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => handleToggleStatus(social.id)}
-                      className={social.is_active 
+                      onClick={() => handleToggleStatus(social.id || social.social_network_id)}
+                      disabled={isLoading}
+                      className={isActive
                         ? "text-red-400 hover:bg-red-900/50"
                         : "text-green-400 hover:bg-green-900/50"
                       }
                     >
-                      {social.is_active ? (
+                      {isActive ? (
                         <>
                           <XCircle className="h-4 w-4 mr-1" />
                           Desactivar
@@ -312,6 +543,7 @@ const SocialMediaManager = () => {
                       size="sm"
                       variant="ghost"
                       onClick={() => handleEdit(social)}
+                      disabled={isLoading}
                       className="text-purple-300 hover:bg-purple-900/50"
                     >
                       <Edit className="h-4 w-4" />
@@ -319,7 +551,8 @@ const SocialMediaManager = () => {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => handleDelete(social.id)}
+                      onClick={() => handleDelete(social.id || social.social_network_id)}
+                      disabled={isLoading}
                       className="text-red-400 hover:bg-red-900/50"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -329,20 +562,7 @@ const SocialMediaManager = () => {
               </CardContent>
             </Card>
           );
-        })}
-
-        {socialMedia.length === 0 && (
-          <div className="col-span-full">
-            <Card className="bg-black/40 border-purple-500/30">
-              <CardContent className="pt-6">
-                <div className="text-center py-8">
-                  <Globe className="h-16 w-16 text-purple-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-white mb-2">No hay redes sociales</h3>
-                  <p className="text-purple-300">Agrega tus primeras redes sociales para comenzar.</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        })
         )}
       </div>
 
@@ -361,7 +581,14 @@ const SocialMediaManager = () => {
               <select
                 name="platform"
                 value={formData.platform}
-                onChange={handleInputChange}
+                onChange={(e) => {
+                  const selectedPlatform = availablePlatforms.find(p => p.name === e.target.value);
+                  if (selectedPlatform) {
+                    handlePlatformSelect(selectedPlatform);
+                  } else {
+                    handleInputChange(e);
+                  }
+                }}
                 className="w-full p-2 bg-black/50 border border-purple-500/30 rounded-md text-white"
                 required
               >
@@ -401,15 +628,31 @@ const SocialMediaManager = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="icon" className="text-purple-200">Icono</Label>
-              <Input
-                id="icon"
-                name="icon"
-                value={formData.icon}
-                onChange={handleInputChange}
-                className="bg-black/50 border-purple-500/30 text-white"
-                placeholder="facebook, instagram, twitter..."
-              />
+              <Label className="text-purple-200">Icono</Label>
+              <div className="grid grid-cols-6 gap-2 p-2 bg-black/30 border border-purple-500/30 rounded-md">
+                {Object.keys(platformIcons).map(iconKey => {
+                  const IconComponent = platformIcons[iconKey];
+                  const isSelected = formData.icon === iconKey;
+                  return (
+                    <button
+                      key={iconKey}
+                      type="button"
+                      onClick={() => handleIconSelect(iconKey)}
+                      className={`p-2 rounded-md transition-all ${
+                        isSelected
+                          ? 'bg-purple-600 border-2 border-purple-400'
+                          : 'bg-black/50 border border-purple-500/30 hover:bg-purple-900/50'
+                      }`}
+                      title={iconKey}
+                    >
+                      <IconComponent className={`h-5 w-5 ${isSelected ? 'text-white' : 'text-purple-300'}`} />
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-purple-400">
+                Icono seleccionado: <span className="text-white font-medium">{formData.icon || 'Ninguno'}</span>
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -418,10 +661,11 @@ const SocialMediaManager = () => {
                 id="followers"
                 name="followers"
                 type="number"
-                value={formData.followers}
+                value={formData.followers === '' ? '' : formData.followers}
                 onChange={handleInputChange}
                 className="bg-black/50 border-purple-500/30 text-white"
                 placeholder="0"
+                min="0"
               />
             </div>
 
@@ -436,9 +680,10 @@ const SocialMediaManager = () => {
               </Button>
               <Button
                 type="submit"
+                disabled={isLoading}
                 className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
               >
-                Agregar
+                {isLoading ? 'Agregando...' : 'Agregar'}
               </Button>
             </div>
           </form>
@@ -460,7 +705,14 @@ const SocialMediaManager = () => {
               <select
                 name="platform"
                 value={formData.platform}
-                onChange={handleInputChange}
+                onChange={(e) => {
+                  const selectedPlatform = availablePlatforms.find(p => p.name === e.target.value);
+                  if (selectedPlatform) {
+                    handlePlatformSelect(selectedPlatform);
+                  } else {
+                    handleInputChange(e);
+                  }
+                }}
                 className="w-full p-2 bg-black/50 border border-purple-500/30 rounded-md text-white"
                 required
               >
@@ -498,14 +750,31 @@ const SocialMediaManager = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-icon" className="text-purple-200">Icono</Label>
-              <Input
-                id="edit-icon"
-                name="icon"
-                value={formData.icon}
-                onChange={handleInputChange}
-                className="bg-black/50 border-purple-500/30 text-white"
-              />
+              <Label className="text-purple-200">Icono</Label>
+              <div className="grid grid-cols-6 gap-2 p-2 bg-black/30 border border-purple-500/30 rounded-md">
+                {Object.keys(platformIcons).map(iconKey => {
+                  const IconComponent = platformIcons[iconKey];
+                  const isSelected = formData.icon === iconKey;
+                  return (
+                    <button
+                      key={iconKey}
+                      type="button"
+                      onClick={() => handleIconSelect(iconKey)}
+                      className={`p-2 rounded-md transition-all ${
+                        isSelected
+                          ? 'bg-purple-600 border-2 border-purple-400'
+                          : 'bg-black/50 border border-purple-500/30 hover:bg-purple-900/50'
+                      }`}
+                      title={iconKey}
+                    >
+                      <IconComponent className={`h-5 w-5 ${isSelected ? 'text-white' : 'text-purple-300'}`} />
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-purple-400">
+                Icono seleccionado: <span className="text-white font-medium">{formData.icon || 'Ninguno'}</span>
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -514,9 +783,11 @@ const SocialMediaManager = () => {
                 id="edit-followers"
                 name="followers"
                 type="number"
-                value={formData.followers}
+                value={formData.followers === '' ? '' : formData.followers}
                 onChange={handleInputChange}
                 className="bg-black/50 border-purple-500/30 text-white"
+                placeholder="0"
+                min="0"
               />
             </div>
 
@@ -531,9 +802,10 @@ const SocialMediaManager = () => {
               </Button>
               <Button
                 type="submit"
+                disabled={isLoading}
                 className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
               >
-                Actualizar
+                {isLoading ? 'Actualizando...' : 'Actualizar'}
               </Button>
             </div>
           </form>

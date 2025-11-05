@@ -199,35 +199,61 @@ export const getAllPosts = async () => {
     });
     const posts = response.data || response || [];
     
+    // Obtener ID del usuario actual para verificar likes
+    let currentUserId = null;
+    try {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        const user = JSON.parse(userData);
+        currentUserId = user.user_id || user.id;
+      }
+    } catch (e) {
+      console.error('Error getting current user ID:', e);
+    }
+    
     // Add additional metadata for dashboard
     const postsWithMetadata = await Promise.all(posts.map(async (post) => {
       try {
+        const postId = post.post_id || post.id;
+        if (!postId) return post;
+
         // Get likes count
-        const likesUrl = API_URL_POST_LIKES_BY_POST.replace(':postId', post.post_id);
+        const likesUrl = API_URL_POST_LIKES_BY_POST.replace(':postId', postId);
         const likesResponse = await fetchWithAuth(likesUrl, {
           method: 'GET',
         });
         const likesData = likesResponse.data || likesResponse || [];
         
         // Get comments count
-        const commentsUrl = API_URL_POST_COMMENTS_BY_POST.replace(':postId', post.post_id);
+        const commentsUrl = API_URL_POST_COMMENTS_BY_POST.replace(':postId', postId);
         const commentsResponse = await fetchWithAuth(commentsUrl, {
           method: 'GET',
         });
         const commentsData = commentsResponse.data || commentsResponse || [];
         
+        // Verificar si el usuario actual ha dado like
+        let user_liked = false;
+        if (currentUserId && Array.isArray(likesData)) {
+          user_liked = likesData.some(like => 
+            String(like.user_id || like.user?.user_id) === String(currentUserId)
+          );
+        }
+        
         return {
           ...post,
-          likes_count: Array.isArray(likesData) ? likesData.length : 0,
-          comments_count: Array.isArray(commentsData) ? commentsData.length : 0,
-          created_at_formatted: new Date(post.created_at).toLocaleDateString(),
+          likes_count: Array.isArray(likesData) ? likesData.length : (typeof likesData === 'object' && likesData.likes ? likesData.likes : 0),
+          comments_count: Array.isArray(commentsData) ? commentsData.length : (typeof commentsData === 'object' && commentsData.comments_count ? commentsData.comments_count : 0),
+          user_liked: user_liked,
+          created_at_formatted: post.created_at ? new Date(post.created_at).toLocaleDateString() : '',
         };
       } catch (error) {
+        console.error(`Error processing post ${post.post_id || post.id}:`, error);
         return {
           ...post,
           likes_count: 0,
           comments_count: 0,
-          created_at_formatted: new Date(post.created_at).toLocaleDateString(),
+          user_liked: false,
+          created_at_formatted: post.created_at ? new Date(post.created_at).toLocaleDateString() : '',
         };
       }
     }));
@@ -242,11 +268,27 @@ export const getAllPosts = async () => {
 // Create comment
 export const createComment = async (commentData) => {
   try {
-    const response = await fetchWithAuth(`${API_URL_POSTS}/comments`, {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    const response = await fetch(`${API_URL_POSTS}/comments`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify(commentData),
     });
-    const comment = response.data || response;
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    const comment = result.data || result;
     
     // Procesar datos del usuario en el comentario
     if (comment && comment.user) {
@@ -269,11 +311,27 @@ export const createComment = async (commentData) => {
 // Update comment
 export const updateComment = async (commentId, content) => {
   try {
-    const response = await fetchWithAuth(`${API_URL_POSTS}/comments/${commentId}`, {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    const response = await fetch(`${API_URL_POSTS}/comments/${commentId}`, {
       method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({ content }),
     });
-    const comment = response.data || response;
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    const comment = result.data || result;
     
     // Procesar datos del usuario en el comentario
     if (comment && comment.user) {
@@ -296,10 +354,25 @@ export const updateComment = async (commentId, content) => {
 // Delete comment
 export const deleteComment = async (commentId) => {
   try {
-    const response = await fetchWithAuth(`${API_URL_POSTS}/comments/${commentId}`, {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    const response = await fetch(`${API_URL_POSTS}/comments/${commentId}`, {
       method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     });
-    return response;
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result;
   } catch (error) {
     console.error('Error deleting comment:', error);
     throw error;
@@ -310,23 +383,26 @@ export const deleteComment = async (commentId) => {
 export const getPostComments = async (postId) => {
   try {
     const url = API_URL_POST_COMMENTS_BY_POST.replace(':postId', postId);
-    console.log('Fetching comments for post:', postId);
-    console.log('API URL:', url);
     const response = await fetchWithAuth(url, {
       method: 'GET',
     });
-    console.log('Comments API response:', response);
     const comments = response.data || response || [];
     
-    // Procesar fotos de perfil en comentarios
+    // Procesar fotos de perfil en comentarios y manejar diferentes formatos de ID
     return comments.map(comment => ({
       ...comment,
+      comment_post_id: comment.comment_post_id || comment.comment_id || comment.id,
+      comment_id: comment.comment_post_id || comment.comment_id || comment.id,
       user: comment.user ? {
         ...comment.user,
         profile_picture: comment.user.profile_picture ? 
-          `${BASE_URL_IMAGE}/${comment.user.profile_picture}` : null,
+          (comment.user.profile_picture.startsWith('http') 
+            ? comment.user.profile_picture 
+            : `${BASE_URL_IMAGE}/${comment.user.profile_picture}`) : null,
         avatar: comment.user.avatar ? 
-          `${BASE_URL_IMAGE}/${comment.user.avatar}` : null,
+          (comment.user.avatar.startsWith('http') 
+            ? comment.user.avatar 
+            : `${BASE_URL_IMAGE}/${comment.user.avatar}`) : null,
       } : null,
     }));
   } catch (error) {
@@ -338,11 +414,31 @@ export const getPostComments = async (postId) => {
 // Toggle post like
 export const togglePostLike = async (postId) => {
   try {
-    const response = await fetchWithAuth(API_URL_POST_LIKES_TOGGLE, {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    const response = await fetch(API_URL_POST_LIKES_TOGGLE, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({ post_id: postId }),
     });
-    return response.data || response;
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    // El backend devuelve { message: 'Like agregado', liked: true } o { message: 'Like removido', liked: false }
+    return {
+      liked: result.liked !== undefined ? result.liked : (result.message?.includes('agregado') ? true : false),
+      ...result
+    };
   } catch (error) {
     console.error('Error toggling post like:', error);
     throw error;

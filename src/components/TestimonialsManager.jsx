@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -18,9 +18,18 @@ import {
   Search,
   Eye,
   CheckCircle,
-  XCircle
+  XCircle,
+  Loader2,
+  Upload
 } from 'lucide-react';
-import { useToast } from '../hooks/use-toast';
+import { toast } from 'react-hot-toast';
+import {
+  getAllTestimonials,
+  createTestimonial,
+  updateTestimonial,
+  deleteTestimonial,
+  toggleTestimonial
+} from '../services/testimonialService';
 
 const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -28,6 +37,7 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedTestimonial, setSelectedTestimonial] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     testimonio: '',
     name_testimonio: '',
@@ -35,18 +45,24 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
     imagen_testimonio: '',
     is_active: true
   });
-  const { toast } = useToast();
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [editImageFile, setEditImageFile] = useState(null);
+  const [editImagePreview, setEditImagePreview] = useState(null);
 
   const filteredTestimonials = testimonials.filter(testimonial => {
-    const matchesSearch = testimonial.testimonio.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         testimonial.name_testimonio.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         testimonial.cargo_testimonio.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = testimonial.testimonio?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         testimonial.name_testimonio?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         testimonial.cargo_testimonio?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || 
                          (filterStatus === 'active' && testimonial.is_active) ||
                          (filterStatus === 'inactive' && !testimonial.is_active);
     
     return matchesSearch && matchesStatus;
   });
+
+  const activeCount = testimonials.filter(t => t.is_active).length;
+  const inactiveCount = testimonials.filter(t => !t.is_active).length;
 
   const handleInputChange = (e) => {
     setFormData({
@@ -70,37 +86,117 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
       imagen_testimonio: '',
       is_active: true
     });
+    setImageFile(null);
+    setImagePreview(null);
   };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+      // Limpiar URL si se selecciona un archivo
+      setFormData({ ...formData, imagen_testimonio: '' });
+    }
+  };
+
+  const handleEditImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setEditImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEditImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+      // Limpiar URL si se selecciona un archivo
+      setFormData({ ...formData, imagen_testimonio: '' });
+    }
+  };
+
+  const handleUrlChange = (e) => {
+    const url = e.target.value;
+    setFormData({ ...formData, imagen_testimonio: url });
+    
+    // Si hay URL válida, mostrar preview
+    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+      setImagePreview(url);
+      // Limpiar archivo si se ingresa URL
+      setImageFile(null);
+    } else if (!url) {
+      setImagePreview(null);
+    }
+  };
+
+  const handleEditUrlChange = (e) => {
+    const url = e.target.value;
+    setFormData({ ...formData, imagen_testimonio: url });
+    
+    // Si hay URL válida, mostrar preview
+    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+      setEditImagePreview(url);
+      // Limpiar archivo si se ingresa URL
+      setEditImageFile(null);
+    }
+  };
+
+  const loadTestimonials = async () => {
+    try {
+      setIsLoading(true);
+      // Usar getAllTestimonials para obtener todos los testimonios (activos e inactivos)
+      const data = await getAllTestimonials({ 
+        limit: 100, 
+        offset: 0
+      });
+      updateTestimonials(data);
+    } catch (error) {
+      console.error('Error loading testimonials:', error);
+      toast.error('Error al cargar los testimonios');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (testimonials.length === 0) {
+      loadTestimonials();
+    }
+  }, []);
 
   const handleCreate = async (e) => {
     e.preventDefault();
     
     if (!formData.testimonio || !formData.name_testimonio || !formData.cargo_testimonio) {
-      toast({
-        title: "Error",
-        description: "Por favor completa todos los campos requeridos",
-        variant: "destructive"
-      });
+      toast.error('Por favor completa todos los campos requeridos');
       return;
     }
 
-    const newTestimonial = {
-      id: Math.max(...testimonials.map(t => t.id)) + 1,
-      ...formData,
-      imagen_testimonio: formData.imagen_testimonio || `https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face`,
-      created_at: new Date().toISOString()
-    };
+    // Validar que tenga imagen (archivo o URL)
+    if (!imageFile && !formData.imagen_testimonio) {
+      toast.error('Debes proporcionar una imagen (archivo o URL)');
+      return;
+    }
 
-    const updatedTestimonials = [...testimonials, newTestimonial];
-    updateTestimonials(updatedTestimonials);
-    
-    toast({
-      title: "Testimonio creado",
-      description: "El testimonio se ha creado exitosamente",
-    });
-
-    setIsCreateModalOpen(false);
-    resetForm();
+    try {
+      setIsLoading(true);
+      const newTestimonial = await createTestimonial(formData, imageFile || null);
+      
+      toast.success('Testimonio creado exitosamente');
+      setIsCreateModalOpen(false);
+      resetForm();
+      
+      // Recargar testimonios
+      await loadTestimonials();
+    } catch (error) {
+      console.error('Error creating testimonial:', error);
+      toast.error(error.message || 'Error al crear el testimonio');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleEdit = (testimonial) => {
@@ -112,53 +208,85 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
       imagen_testimonio: testimonial.imagen_testimonio,
       is_active: testimonial.is_active
     });
+    setEditImagePreview(testimonial.imagen_testimonio);
+    setEditImageFile(null);
     setIsEditModalOpen(true);
   };
 
   const handleUpdate = async (e) => {
     e.preventDefault();
     
-    const updatedTestimonials = testimonials.map(testimonial =>
-      testimonial.id === selectedTestimonial.id
-        ? { ...testimonial, ...formData }
-        : testimonial
-    );
-    
-    updateTestimonials(updatedTestimonials);
-    
-    toast({
-      title: "Testimonio actualizado",
-      description: "El testimonio se ha actualizado exitosamente",
-    });
+    if (!selectedTestimonial) return;
 
-    setIsEditModalOpen(false);
-    resetForm();
-    setSelectedTestimonial(null);
+    if (!formData.testimonio || !formData.name_testimonio || !formData.cargo_testimonio) {
+      toast.error('Por favor completa todos los campos requeridos');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const testimonialId = selectedTestimonial.testimonial_id || selectedTestimonial.id;
+      await updateTestimonial(testimonialId, formData, editImageFile || null);
+      
+      toast.success('Testimonio actualizado exitosamente');
+      setIsEditModalOpen(false);
+      resetForm();
+      setSelectedTestimonial(null);
+      setEditImageFile(null);
+      setEditImagePreview(null);
+      
+      // Recargar testimonios
+      await loadTestimonials();
+    } catch (error) {
+      console.error('Error updating testimonial:', error);
+      toast.error(error.message || 'Error al actualizar el testimonio');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleDelete = (testimonialId) => {
-    const updatedTestimonials = testimonials.filter(testimonial => testimonial.id !== testimonialId);
-    updateTestimonials(updatedTestimonials);
-    
-    toast({
-      title: "Testimonio eliminado",
-      description: "El testimonio se ha eliminado exitosamente",
-    });
+  const handleDelete = async (testimonialId) => {
+    if (!window.confirm('¿Estás seguro de que deseas eliminar este testimonio?')) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const id = typeof testimonialId === 'object' 
+        ? (testimonialId.testimonial_id || testimonialId.id)
+        : testimonialId;
+      
+      await deleteTestimonial(id);
+      toast.success('Testimonio eliminado exitosamente');
+      
+      // Recargar testimonios
+      await loadTestimonials();
+    } catch (error) {
+      console.error('Error deleting testimonial:', error);
+      toast.error(error.message || 'Error al eliminar el testimonio');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleToggleStatus = (testimonialId) => {
-    const updatedTestimonials = testimonials.map(testimonial =>
-      testimonial.id === testimonialId
-        ? { ...testimonial, is_active: !testimonial.is_active }
-        : testimonial
-    );
-    
-    updateTestimonials(updatedTestimonials);
-    
-    toast({
-      title: "Estado actualizado",
-      description: "El estado del testimonio se ha actualizado",
-    });
+  const handleToggleStatus = async (testimonialId) => {
+    try {
+      setIsLoading(true);
+      const id = typeof testimonialId === 'object' 
+        ? (testimonialId.testimonial_id || testimonialId.id)
+        : testimonialId;
+      
+      await toggleTestimonial(id);
+      toast.success('Estado del testimonio actualizado');
+      
+      // Recargar testimonios
+      await loadTestimonials();
+    } catch (error) {
+      console.error('Error toggling testimonial status:', error);
+      toast.error(error.message || 'Error al cambiar el estado del testimonio');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const formatDate = (dateString) => {
@@ -168,9 +296,6 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
       day: 'numeric'
     });
   };
-
-  const activeCount = testimonials.filter(t => t.is_active).length;
-  const inactiveCount = testimonials.filter(t => !t.is_active).length;
 
   return (
     <div className="space-y-6">
@@ -247,7 +372,7 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
       {/* Testimonials Grid */}
       <div className="grid gap-6">
         {filteredTestimonials.map(testimonial => (
-          <Card key={testimonial.id} className="bg-black/40 border-purple-500/30">
+          <Card key={testimonial.testimonial_id || testimonial.id} className="bg-black/40 border-purple-500/30">
             <CardContent className="pt-6">
               <div className="flex gap-6">
                 {/* Avatar */}
@@ -267,7 +392,7 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
                       <h3 className="font-semibold text-white">{testimonial.name_testimonio}</h3>
                       <p className="text-sm text-purple-300">{testimonial.cargo_testimonio}</p>
                       <p className="text-xs text-purple-400">
-                        Creado: {formatDate(testimonial.created_at)}
+                        Creado: {testimonial.created_at ? formatDate(testimonial.created_at) : 'N/A'}
                       </p>
                     </div>
                     <Badge 
@@ -299,9 +424,9 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
                       <Star className="h-4 w-4 text-yellow-400" />
                     </div>
                     <p className="text-purple-200 italic">
-                      "{testimonial.testimonio.length > 150 
+                      "{testimonial.testimonio && testimonial.testimonio.length > 150 
                         ? `${testimonial.testimonio.substring(0, 150)}...`
-                        : testimonial.testimonio}"
+                        : testimonial.testimonio || 'Sin testimonio'}"
                     </p>
                   </div>
                 </div>
@@ -311,7 +436,8 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => handleToggleStatus(testimonial.id)}
+                    onClick={() => handleToggleStatus(testimonial.testimonial_id || testimonial.id)}
+                    disabled={isLoading}
                     className={testimonial.is_active 
                       ? "text-red-400 hover:bg-red-900/50"
                       : "text-green-400 hover:bg-green-900/50"
@@ -333,6 +459,7 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
                     size="sm"
                     variant="ghost"
                     onClick={() => handleEdit(testimonial)}
+                    disabled={isLoading}
                     className="text-purple-300 hover:bg-purple-900/50"
                   >
                     <Edit className="h-4 w-4" />
@@ -340,7 +467,8 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => handleDelete(testimonial.id)}
+                    onClick={() => handleDelete(testimonial.testimonial_id || testimonial.id)}
+                    disabled={isLoading}
                     className="text-red-400 hover:bg-red-900/50"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -400,15 +528,45 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="imagen_testimonio" className="text-purple-200">URL de Imagen</Label>
+              <Label htmlFor="image" className="text-purple-200">Imagen desde Archivo</Label>
+              <div className="flex items-center space-x-4">
+                {imagePreview && (
+                  <div className="w-20 h-20 rounded-lg overflow-hidden border border-purple-500/30">
+                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <div className="flex-1">
+                  <Input
+                    id="image"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="bg-black/50 border-purple-500/30 text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700"
+                  />
+                  <p className="text-xs text-purple-400 mt-1">Selecciona una imagen desde tu dispositivo</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="imagen_testimonio" className="text-purple-200">O desde URL</Label>
               <Input
                 id="imagen_testimonio"
                 name="imagen_testimonio"
+                type="url"
                 value={formData.imagen_testimonio}
-                onChange={handleInputChange}
+                onChange={handleUrlChange}
                 className="bg-black/50 border-purple-500/30 text-white"
-                placeholder="https://example.com/imagen.jpg (opcional)"
+                placeholder="https://example.com/imagen.jpg"
               />
+              <p className="text-xs text-purple-400">Pega la URL de una imagen (http:// o https://)</p>
+            </div>
+            
+            <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3">
+              <p className="text-xs text-purple-300">
+                <strong>Nota:</strong> Debes proporcionar una imagen usando <strong>archivo</strong> o <strong>URL</strong>. 
+                Si proporcionas ambos, se usará el archivo.
+              </p>
             </div>
             
             <div className="space-y-2">
@@ -446,9 +604,17 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
               </Button>
               <Button
                 type="submit"
+                disabled={isLoading}
                 className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
               >
-                Crear Testimonio
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Creando...
+                  </>
+                ) : (
+                  'Crear Testimonio'
+                )}
               </Button>
             </div>
           </form>
@@ -491,14 +657,38 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-imagen_testimonio" className="text-purple-200">URL de Imagen</Label>
+              <Label htmlFor="edit-image" className="text-purple-200">Nueva Imagen desde Archivo</Label>
+              <div className="flex items-center space-x-4">
+                {editImagePreview && (
+                  <div className="w-20 h-20 rounded-lg overflow-hidden border border-purple-500/30">
+                    <img src={editImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <div className="flex-1">
+                  <Input
+                    id="edit-image"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleEditImageChange}
+                    className="bg-black/50 border-purple-500/30 text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700"
+                  />
+                  <p className="text-xs text-purple-400 mt-1">Deja vacío para mantener la imagen actual</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-imagen_testimonio" className="text-purple-200">O desde URL</Label>
               <Input
                 id="edit-imagen_testimonio"
                 name="imagen_testimonio"
+                type="url"
                 value={formData.imagen_testimonio}
-                onChange={handleInputChange}
+                onChange={handleEditUrlChange}
                 className="bg-black/50 border-purple-500/30 text-white"
+                placeholder="https://example.com/imagen.jpg"
               />
+              <p className="text-xs text-purple-400">Pega la URL de una imagen para reemplazar la actual</p>
             </div>
             
             <div className="space-y-2">
@@ -536,9 +726,17 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
               </Button>
               <Button
                 type="submit"
+                disabled={isLoading}
                 className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
               >
-                Actualizar
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Actualizando...
+                  </>
+                ) : (
+                  'Actualizar'
+                )}
               </Button>
             </div>
           </form>

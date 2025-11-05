@@ -19,7 +19,9 @@ import {
   User,
   CheckCircle,
   Clock,
+  Download,
 } from 'lucide-react';
+import { AnimatedCounter } from './AnimatedCounter';
 import { toast, Toaster } from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
 import EventsManager from './EventsManager';
@@ -40,7 +42,7 @@ import {
 } from '../services/contactService';
 import {
   getTestimonials,
-  updateTestimonials,
+  updateTestimonial,
 } from '../services/testimonialService';
 import { getAllPosts as getPosts } from '../services/postService';
 import { getSocialMedia } from '../services/socialMediaService';
@@ -62,6 +64,7 @@ const Dashboard = ({ onLogout }) => {
   const [stats, setStats] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [appDownloads, setAppDownloads] = useState(0); // Contador de descargas de app
 
   // Listen for user data changes in localStorage
   useEffect(() => {
@@ -148,6 +151,15 @@ const Dashboard = ({ onLogout }) => {
         setSocialMedia(socialMediaData);
         setLandingContent(landingData);
         setStats(statsData);
+        
+        // Cargar descargas de app desde stats o usar valor por defecto
+        if (statsData && statsData.appDownloads !== undefined) {
+          setAppDownloads(statsData.appDownloads);
+        } else {
+          // Si no hay datos en stats, usar un valor por defecto o consultar otro endpoint
+          // Por ahora usaremos un valor simulado que se puede actualizar desde el backend
+          setAppDownloads(0);
+        }
       } catch (error) {
         console.error('Error loading dashboard data:', error);
         setError(error.message || 'Error al cargar los datos del panel');
@@ -180,16 +192,53 @@ const Dashboard = ({ onLogout }) => {
 
   const handleUpdateEvents = async (newEvents) => {
     try {
-      const updatedEvent = await updateEvents(newEvents);
-      setEvents((prev) =>
-        prev.map((event) =>
-          event.id === updatedEvent.id ? updatedEvent : event
-        )
-      );
-      toast.success('Evento actualizado correctamente');
+      // Si es un array, significa que es una actualización de lista completa (después de crear/eliminar)
+      if (Array.isArray(newEvents)) {
+        setEvents(newEvents);
+        return;
+      }
+      
+      // Si es un objeto, es una actualización de un evento individual
+      if (newEvents && (newEvents.id || newEvents.event_id)) {
+        // Verificar si el evento ya existe en la lista para evitar duplicados
+        const eventId = newEvents.id || newEvents.event_id;
+        const existingEvent = events.find(e => 
+          (e.id === eventId || e.event_id === eventId)
+        );
+        
+        if (existingEvent) {
+          // Si existe, actualizarlo
+          const updatedEvent = await updateEvents(newEvents);
+          setEvents((prev) =>
+            prev.map((event) =>
+              (event.id === eventId || event.event_id === eventId) 
+                ? updatedEvent 
+                : event
+            )
+          );
+          toast.success('Evento actualizado correctamente');
+        } else {
+          // Si no existe, agregarlo solo si tiene un ID válido
+          if (eventId && eventId !== 'undefined' && eventId !== 'null') {
+            setEvents((prev) => {
+              // Verificar nuevamente antes de agregar para evitar duplicados
+              const alreadyExists = prev.some(e => 
+                (e.id === eventId || e.event_id === eventId)
+              );
+              if (alreadyExists) {
+                return prev;
+              }
+              return [...prev, newEvents];
+            });
+          }
+        }
+      }
     } catch (error) {
       console.error('Error updating events:', error);
-      toast.error(error.message || 'Error al actualizar el evento');
+      // Solo mostrar error si realmente había un error (no si es solo actualización de estado)
+      if (newEvents && (newEvents.id || newEvents.event_id)) {
+        toast.error(error.message || 'Error al actualizar el evento');
+      }
     }
   };
 
@@ -208,18 +257,27 @@ const Dashboard = ({ onLogout }) => {
     }
   };
 
-  const handleUpdateTestimonials = async (newTestimonials) => {
-    try {
-      const updatedTestimonial = await updateTestimonials(newTestimonials);
+  const handleUpdateTestimonials = (newTestimonials) => {
+    // Si es un array, reemplazar toda la lista
+    if (Array.isArray(newTestimonials)) {
+      setTestimonials(newTestimonials);
+      return;
+    }
+    
+    // Si es un objeto, es una actualización de un testimonio individual
+    if (newTestimonials && (newTestimonials.id || newTestimonials.testimonial_id)) {
+      const testimonialId = newTestimonials.id || newTestimonials.testimonial_id;
       setTestimonials((prev) =>
         prev.map((testimonial) =>
-          testimonial.id === updatedTestimonial.id ? updatedTestimonial : testimonial
+          (testimonial.id === testimonialId || testimonial.testimonial_id === testimonialId)
+            ? newTestimonials
+            : testimonial
         )
       );
       toast.success('Testimonio actualizado correctamente');
-    } catch (error) {
-      console.error('Error updating testimonials:', error);
-      toast.error(error.message || 'Error al actualizar el testimonio');
+    } else {
+      // Si no es ni array ni objeto válido, recargar desde el backend
+      loadDashboardData();
     }
   };
 
@@ -370,68 +428,97 @@ const Dashboard = ({ onLogout }) => {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-              <Card className="bg-black/40 border-purple-500/30">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-purple-200">
-                    Total Eventos
-                  </CardTitle>
-                  <Calendar className="h-4 w-4 text-purple-400" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-white">{events.length}</div>
-                  <p className="text-xs text-purple-300">
-                    Eventos disponibles
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-black/40 border-purple-500/30">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-purple-200">
-                    Total Contactos
-                  </CardTitle>
-                  <MessageCircle className="h-4 w-4 text-purple-400" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-white">
-                    {contacts.length}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+              <AnimatedCounter
+                title="Total Eventos"
+                value={events.length}
+                description="Eventos disponibles"
+                icon={Calendar}
+                color="purple"
+                modalContent={
+                  <div className="space-y-4">
+                    <p className="text-lg font-semibold">Eventos activos en el sistema</p>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <div className="p-4 bg-purple-900/20 rounded-lg">
+                        <p className="text-xl font-bold text-purple-300">
+                          {events.filter(e => e.status === 'upcoming').length}
+                        </p>
+                        <p className="text-sm text-purple-400">Próximos</p>
+                      </div>
+                      <div className="p-4 bg-purple-900/20 rounded-lg">
+                        <p className="text-xl font-bold text-purple-300">
+                          {events.filter(e => e.status === 'past').length}
+                        </p>
+                        <p className="text-sm text-purple-400">Pasados</p>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-xs text-purple-300">
-                    Contactos registrados
-                  </p>
-                </CardContent>
-              </Card>
+                }
+              />
 
-              <Card className="bg-black/40 border-purple-500/30">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-purple-200">
-                    Testimonios
-                  </CardTitle>
-                  <Star className="h-4 w-4 text-purple-400" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-white">{testimonials.length}</div>
-                  <p className="text-xs text-purple-300">
-                    Testimonios activos
-                  </p>
-                </CardContent>
-              </Card>
+              <AnimatedCounter
+                title="Total Contactos"
+                value={contacts.length}
+                description="Contactos registrados"
+                icon={MessageCircle}
+                color="blue"
+                modalContent={
+                  <div className="space-y-2">
+                    <p className="text-lg">Contactos en la base de datos</p>
+                    <p className="text-sm text-purple-300">
+                      {contacts.filter(c => c.status === 'active').length} activos
+                    </p>
+                  </div>
+                }
+              />
 
-              <Card className="bg-black/40 border-purple-500/30">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-purple-200">
-                    Total Posts
-                  </CardTitle>
-                  <FileText className="h-4 w-4 text-purple-400" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-white">{posts.length}</div>
-                  <p className="text-xs text-purple-300">
-                    Contenido de usuarios
-                  </p>
-                </CardContent>
-              </Card>
+              <AnimatedCounter
+                title="Testimonios"
+                value={testimonials.length}
+                description="Testimonios activos"
+                icon={Star}
+                color="orange"
+                modalContent={
+                  <div className="space-y-2">
+                    <p className="text-lg">Testimonios de usuarios</p>
+                    <p className="text-sm text-purple-300">
+                      Calificaciones promedio en el sistema
+                    </p>
+                  </div>
+                }
+              />
+
+              <AnimatedCounter
+                title="Total Posts"
+                value={posts.length}
+                description="Contenido de usuarios"
+                icon={FileText}
+                color="green"
+                modalContent={
+                  <div className="space-y-2">
+                    <p className="text-lg">Posts creados por usuarios</p>
+                    <p className="text-sm text-purple-300">
+                      Contenido generado en la plataforma
+                    </p>
+                  </div>
+                }
+              />
+
+              <AnimatedCounter
+                title="Descargas App"
+                value={appDownloads}
+                description="Usuarios que descargaron la app"
+                icon={Download}
+                color="pink"
+                modalContent={
+                  <div className="space-y-2">
+                    <p className="text-lg">Descargas totales de la aplicación</p>
+                    <p className="text-sm text-purple-300">
+                      Usuarios que han instalado la app móvil
+                    </p>
+                  </div>
+                }
+              />
             </div>
 
             <div className="grid gap-6 md:grid-cols-2">

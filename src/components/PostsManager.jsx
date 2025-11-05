@@ -20,7 +20,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
-import { createPost, updatePost, deletePost, getUserPosts, togglePostLike } from '../services/postService';
+import { createPost, updatePost, deletePost, getAllPosts, togglePostLike } from '../services/postService';
 import { getCurrentUserId } from '../services/authService';
 import PostComments from './PostComments';
 
@@ -39,43 +39,39 @@ const PostsManager = ({ posts = [], setPosts }) => {
   const [activeCommentsPost, setActiveCommentsPost] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
   
-  // Load posts on component mount
+  // Load posts on component mount - Cargar TODOS los posts
   useEffect(() => {
     const loadPosts = async () => {
       try {
-        const userId = getCurrentUserId();
-        if (userId) {
-          const userPosts = await getUserPosts(userId);
-          setLocalPosts(userPosts);
-          if (setPosts) {
-            setPosts(userPosts);
-          }
+        setIsLoading(true);
+        // Cargar todos los posts de todas las personas
+        const { getAllPosts } = await import('../services/postService');
+        const allPosts = await getAllPosts();
+        setLocalPosts(allPosts);
+        if (setPosts) {
+          setPosts(allPosts);
         }
       } catch (error) {
         console.error('Error loading posts:', error);
+        toast({
+          title: "Error",
+          description: "Error al cargar los posts",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
       }
     };
     
     loadPosts();
-  }, [setPosts]);
+  }, []); // Removido setPosts de las dependencias para evitar loops infinitos
 
   useEffect(() => {
     const userId = getCurrentUserId();
     setCurrentUserId(userId);
   }, []);
+  
   const { toast } = useToast();
-
-  const getAllPosts = async () => {
-    try {
-      const allPosts = await getPosts();
-      setLocalPosts(allPosts);
-      if (setPosts) {
-        setPosts(allPosts);
-      }
-    } catch (error) {
-      console.error('Error loading all posts:', error);
-    }
-  };
 
 
 
@@ -130,9 +126,21 @@ const PostsManager = ({ posts = [], setPosts }) => {
       const response = await createPost(formData);
       const newPost = response.data || response;
       
-      setLocalPosts(prev => [...prev, newPost]);
-      if (setPosts) {
-        setPosts(prev => [...prev, newPost]);
+      // Recargar todos los posts después de crear para evitar duplicados
+      try {
+        const { getAllPosts } = await import('../services/postService');
+        const allPosts = await getAllPosts();
+        setLocalPosts(allPosts);
+        if (setPosts) {
+          setPosts(allPosts);
+        }
+      } catch (fetchError) {
+        console.error('Error al recargar posts:', fetchError);
+        // Si falla la recarga, agregar solo el nuevo post
+        setLocalPosts(prev => [...prev, newPost]);
+        if (setPosts) {
+          setPosts(prev => [...prev, newPost]);
+        }
       }
       
       toast({
@@ -172,17 +180,29 @@ const PostsManager = ({ posts = [], setPosts }) => {
       const response = await updatePost(selectedPost.post_id || selectedPost.id, formData);
       const updatedPost = response.data || response;
       
-      setLocalPosts(prev => prev.map(post =>
-        (post.post_id || post.id) === (selectedPost.post_id || selectedPost.id)
-          ? { ...post, ...updatedPost }
-          : post
-      ));
-      if (setPosts) {
-        setPosts(prev => prev.map(post =>
+      // Recargar todos los posts después de actualizar para evitar problemas de sincronización
+      try {
+        const { getAllPosts } = await import('../services/postService');
+        const allPosts = await getAllPosts();
+        setLocalPosts(allPosts);
+        if (setPosts) {
+          setPosts(allPosts);
+        }
+      } catch (fetchError) {
+        console.error('Error al recargar posts:', fetchError);
+        // Si falla la recarga, actualizar solo el post modificado
+        setLocalPosts(prev => prev.map(post =>
           (post.post_id || post.id) === (selectedPost.post_id || selectedPost.id)
             ? { ...post, ...updatedPost }
             : post
         ));
+        if (setPosts) {
+          setPosts(prev => prev.map(post =>
+            (post.post_id || post.id) === (selectedPost.post_id || selectedPost.id)
+              ? { ...post, ...updatedPost }
+              : post
+          ));
+        }
       }
       
       toast({
@@ -214,9 +234,21 @@ const PostsManager = ({ posts = [], setPosts }) => {
       setIsLoading(true);
       await deletePost(postId);
       
-      setLocalPosts(prev => prev.filter(post => (post.post_id || post.id) !== postId));
-      if (setPosts) {
-        setPosts(prev => prev.filter(post => (post.post_id || post.id) !== postId));
+      // Recargar todos los posts después de eliminar para evitar problemas de sincronización
+      try {
+        const { getAllPosts } = await import('../services/postService');
+        const allPosts = await getAllPosts();
+        setLocalPosts(allPosts);
+        if (setPosts) {
+          setPosts(allPosts);
+        }
+      } catch (fetchError) {
+        console.error('Error al recargar posts:', fetchError);
+        // Si falla la recarga, actualizar la lista local eliminando el post
+        setLocalPosts(prev => prev.filter(post => (post.post_id || post.id) !== postId));
+        if (setPosts) {
+          setPosts(prev => prev.filter(post => (post.post_id || post.id) !== postId));
+        }
       }
       
       toast({
@@ -247,24 +279,39 @@ const PostsManager = ({ posts = [], setPosts }) => {
 
   const handleLike = async (postId) => {
     try {
+      setIsLoading(true);
       const response = await togglePostLike(postId);
-      const isLiked = response.liked;
+      const isLiked = response.liked !== undefined ? response.liked : (response.data?.liked !== undefined ? response.data.liked : true);
       
-      // Update local state
-      const updatePost = (post) => {
+      // Actualizar inmediatamente el estado local para feedback visual
+      const updatePostImmediate = (post) => {
         if ((post.post_id || post.id) === postId) {
+          const currentLikes = post.likes_count || 0;
           return {
             ...post,
-            likes_count: isLiked ? (post.likes_count || 0) + 1 : Math.max((post.likes_count || 0) - 1, 0),
+            likes_count: isLiked ? currentLikes + 1 : Math.max(currentLikes - 1, 0),
             user_liked: isLiked
           };
         }
         return post;
       };
       
-      setLocalPosts(prev => prev.map(updatePost));
+      setLocalPosts(prev => prev.map(updatePostImmediate));
       if (setPosts) {
-        setPosts(prev => prev.map(updatePost));
+        setPosts(prev => prev.map(updatePostImmediate));
+      }
+      
+      // Recargar todos los posts después de hacer like para obtener el estado actualizado del servidor
+      try {
+        const { getAllPosts } = await import('../services/postService');
+        const allPosts = await getAllPosts();
+        setLocalPosts(allPosts);
+        if (setPosts) {
+          setPosts(allPosts);
+        }
+      } catch (fetchError) {
+        console.error('Error al recargar posts:', fetchError);
+        // Si falla la recarga, mantener el estado local actualizado
       }
       
       toast({
@@ -275,9 +322,11 @@ const PostsManager = ({ posts = [], setPosts }) => {
       console.error('Error toggling like:', error);
       toast({
         title: "Error",
-        description: "Error al dar like al post",
+        description: error.message || "Error al dar like al post",
         variant: "destructive"
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -351,7 +400,27 @@ const PostsManager = ({ posts = [], setPosts }) => {
 
       {/* Posts Grid */}
       <div className="grid gap-6">
-        {filteredPosts.map(post => (
+        {isLoading && postsToShow.length === 0 ? (
+          <Card className="bg-black/40 border-purple-500/30">
+            <CardContent className="pt-6">
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto mb-4"></div>
+                <p className="text-purple-300">Cargando posts...</p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : filteredPosts.length === 0 ? (
+          <Card className="bg-black/40 border-purple-500/30">
+            <CardContent className="pt-6">
+              <div className="text-center py-8">
+                <MessageCircle className="h-16 w-16 text-purple-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-white mb-2">No se encontraron posts</h3>
+                <p className="text-purple-300">No hay posts que coincidan con la búsqueda.</p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          filteredPosts.map(post => (
           <Card key={post.post_id || post.id} className="bg-black/40 border-purple-500/30">
             <CardContent className="pt-6">
               <div className="flex gap-6">
@@ -407,7 +476,8 @@ const PostsManager = ({ posts = [], setPosts }) => {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleLike(post.post_id || post.id)}
-                      className={`flex items-center space-x-1 p-0 h-auto hover:bg-transparent ${
+                      disabled={isLoading}
+                      className={`flex items-center space-x-1 p-0 h-auto hover:bg-transparent transition-colors ${
                         post.user_liked ? 'text-red-400' : 'text-purple-200 hover:text-red-400'
                       }`}
                     >
@@ -428,48 +498,39 @@ const PostsManager = ({ posts = [], setPosts }) => {
 
 
 
-                {/* Actions */}
-                <div className="flex flex-col space-y-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-purple-300 hover:bg-purple-900/50"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleEdit(post)}
-                    className="text-purple-300 hover:bg-purple-900/50"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDelete(post.post_id || post.id)}
-                    className="text-red-400 hover:bg-red-900/50"
-                    disabled={isLoading}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+                {/* Actions - Solo mostrar si el post es del usuario actual */}
+                {currentUserId && (post.user_id === currentUserId || post.user?.user_id === currentUserId) && (
+                  <div className="flex flex-col space-y-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-purple-300 hover:bg-purple-900/50"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleEdit(post)}
+                      className="text-purple-300 hover:bg-purple-900/50"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDelete(post.post_id || post.id)}
+                      className="text-red-400 hover:bg-red-900/50"
+                      disabled={isLoading}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
-        ))}
-
-        {filteredPosts.length === 0 && (
-          <Card className="bg-black/40 border-purple-500/30">
-            <CardContent className="pt-6">
-              <div className="text-center py-8">
-                <MessageCircle className="h-16 w-16 text-purple-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-white mb-2">No se encontraron posts</h3>
-                <p className="text-purple-300">No hay posts que coincidan con la búsqueda.</p>
-              </div>
-            </CardContent>
-          </Card>
+          ))
         )}
       </div>
 

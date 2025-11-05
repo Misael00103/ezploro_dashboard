@@ -31,10 +31,27 @@ export const fetchWithAuth = async (url, options = {}) => {
     ...options.headers,
   };
 
+  // Log para debugging
+  console.log('🔵 fetchWithAuth - URL:', url);
+  console.log('🔵 fetchWithAuth - Method:', options.method || 'GET');
+  console.log('🔵 fetchWithAuth - Headers:', {
+    'Content-Type': headers['Content-Type'],
+    'Authorization': headers.Authorization ? `${headers.Authorization.substring(0, 20)}...` : 'Missing'
+  });
+
   const response = await fetch(url, { ...options, headers });
+  
+  console.log('🔵 fetchWithAuth - Response status:', response.status);
+  console.log('🔵 fetchWithAuth - Response ok:', response.ok);
   
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+    
+    console.error('🔴 fetchWithAuth - Error response:', {
+      status: response.status,
+      statusText: response.statusText,
+      errorData
+    });
     
     if (response.status === 401) {
       // Sesión expirada, limpiar localStorage y redirigir

@@ -23,6 +23,10 @@ import {
   X
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
+import { createEvent, updateEvent, deleteEvent } from '../services/eventService';
+import { getAuthToken } from '../services/authService';
+import { getCurrentUserId } from '../services/userService';
+import { searchPlaces as searchPlacesAPI, getPlaceDetails, reverseGeocode } from '../services/placesService';
 
 const EventsManager = ({ events, updateEvents }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,12 +38,22 @@ const EventsManager = ({ events, updateEvents }) => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
+    resume: '',
     date_time: '',
+    end_date_time: '',
     location: '',
     category: '',
     subcategory: '',
     status: 'upcoming',
-    cover_image: null
+    cover_image: null,
+    price: 0,
+    video_url: '',
+    address: '',
+    city: '',
+    state: '',
+    country: 'República Dominicana',
+    online: false,
+    faqs: []
   });
   const [locationSuggestions, setLocationSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -47,19 +61,103 @@ const EventsManager = ({ events, updateEvents }) => {
   const { toast } = useToast();
 
   const categories = [
-    'Tecnología', 'Negocios', 'Educación', 'Entretenimiento', 'Deportes', 'Cultura',
-    'Música', 'Arte', 'Gastronomía', 'Salud', 'Fitness', 'Viajes', 'Moda', 'Fotografía',
-    'Literatura', 'Cine', 'Teatro', 'Danza', 'Conferencias', 'Talleres', 'Networking',
-    'Startups', 'Marketing', 'Finanzas', 'Inmobiliario', 'Automotriz', 'Gaming'
+    'Música',
+    'Comida & Bebida',
+    'Deportes & Fitness',
+    'Teatro',
+    'Tecnología & Educación',
+    'Familia',
+    'Ferias & Mercados',
+    'Naturaleza & Aire Libre',
+    'Caridad & Comunidad',
+    'Online',
+    'After',
+    'Casino'
   ];
   
   const subcategories = {
-    'Tecnología': ['Desarrollo Web', 'Inteligencia Artificial', 'Blockchain', 'Ciberseguridad', 'IoT'],
-    'Negocios': ['Emprendimiento', 'Inversiones', 'E-commerce', 'Liderazgo', 'Ventas'],
-    'Educación': ['Cursos Online', 'Talleres', 'Seminarios', 'Certificaciones', 'Idiomas'],
-    'Entretenimiento': ['Conciertos', 'Festivales', 'Shows', 'Comedia', 'Karaoke'],
-    'Deportes': ['Fútbol', 'Basketball', 'Tenis', 'Running', 'Ciclismo', 'Natación'],
-    'Cultura': ['Museos', 'Exposiciones', 'Historia', 'Tradiciones', 'Patrimonio']
+    'Música': [
+      'Reguetón / Dembow',
+      'Bachata',
+      'Merengue',
+      'Electrónica',
+      'Salsa',
+      'Trap / Hip-Hop',
+      'Pop',
+      'Rock / Alternativo',
+      'Karaoke',
+      'Otros'
+    ],
+    'Comida & Bebida': [
+      'Brunch',
+      'Comida rápida',
+      'Dominicana',
+      'Internacional',
+      'Asiática',
+      'Mexicana',
+      'Mariscos',
+      'Italiana',
+      'Catas & Bebidas'
+    ],
+    'Deportes & Fitness': [
+      'Béisbol',
+      'Baloncesto',
+      'Fútbol',
+      'Boxeo',
+      'Fitness',
+      'Running / Maratones',
+      'Baile'
+    ],
+    'Teatro': [
+      'Obras de teatro',
+      'Stand-up comedy',
+      'Musicales',
+      'Danza'
+    ],
+    'Tecnología & Educación': [
+      'Conferencias',
+      'Talleres / cursos',
+      'Startups / Innovacion'
+    ],
+    'Familia': [
+      'Eventos infantiles',
+      'Aire libre',
+      'Talleres para niños',
+      'Shows familiares',
+      'Actividades escolares'
+    ],
+    'Ferias & Mercados': [
+      'Ferias de comida',
+      'Mercados artesanales',
+      'Moda & diseño',
+      'Libros & cultura',
+      'Ferias inmobiliarias / negocios',
+      'Feria anime y cultura pop',
+      'Videojuegos / eSports'
+    ],
+    'Naturaleza & Aire Libre': [
+      'Excursiones',
+      'Camping',
+      'Ecoturismo',
+      'Actividades acuáticas',
+      'Aventuras extremas'
+    ],
+    'Caridad & Comunidad': [
+      'Eventos benéficos',
+      'Voluntariado',
+      'Donaciones',
+      'Campañas sociales'
+    ],
+    'Online': [
+      'Webinars',
+      'Talleres virtuales',
+      'Networking online',
+      'Streaming',
+      'Cursos en línea'
+    ],
+    'Casino': [
+      'Torneos'
+    ]
   };
 
   const filteredEvents = events.filter(event => {
@@ -89,12 +187,22 @@ const EventsManager = ({ events, updateEvents }) => {
     setFormData({
       title: '',
       description: '',
+      resume: '',
       date_time: '',
+      end_date_time: '',
       location: '',
       category: '',
       subcategory: '',
       status: 'upcoming',
-      cover_image: null
+      cover_image: null,
+      price: 0,
+      video_url: '',
+      address: '',
+      city: '',
+      state: '',
+      country: 'República Dominicana',
+      online: false,
+      faqs: []
     });
     setLocationSuggestions([]);
     setShowSuggestions(false);
@@ -108,6 +216,103 @@ const EventsManager = ({ events, updateEvents }) => {
     }
   };
 
+  const addFAQ = () => {
+    setFormData({
+      ...formData,
+      faqs: [...formData.faqs, { id: Date.now(), question: '', answer: '' }]
+    });
+  };
+
+  const removeFAQ = (id) => {
+    setFormData({
+      ...formData,
+      faqs: formData.faqs.filter(faq => faq.id !== id)
+    });
+  };
+
+  const updateFAQ = (id, field, value) => {
+    setFormData({
+      ...formData,
+      faqs: formData.faqs.map(faq =>
+        faq.id === id ? { ...faq, [field]: value } : faq
+      )
+    });
+  };
+
+  // Obtener ubicación actual del usuario
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast({
+        title: "Error",
+        description: "Tu navegador no soporta geolocalización",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setSelectedCoordinates({ lat: latitude, lng: longitude });
+        
+        // Usar geocoding inverso para obtener la dirección
+        try {
+          const result = await reverseGeocode(latitude, longitude);
+          const addressComponents = result.address_components;
+          
+          // Extraer información de la dirección
+          let address = '';
+          let city = '';
+          let state = '';
+          let country = 'República Dominicana';
+          
+          addressComponents.forEach(component => {
+            if (component.types.includes('street_number') || component.types.includes('route')) {
+              address += component.long_name + ' ';
+            }
+            if (component.types.includes('locality')) {
+              city = component.long_name;
+            }
+            if (component.types.includes('administrative_area_level_1')) {
+              state = component.long_name;
+            }
+            if (component.types.includes('country')) {
+              country = component.long_name;
+            }
+          });
+          
+          setFormData({
+            ...formData,
+            location: result.formatted_address,
+            address: address.trim(),
+            city: city || state,
+            state: state,
+            country: country
+          });
+          
+          toast({
+            title: "Ubicación obtenida",
+            description: "Se ha obtenido tu ubicación actual",
+          });
+        } catch (error) {
+          console.error('Error en geocoding inverso:', error);
+          toast({
+            title: "Ubicación obtenida",
+            description: "Coordenadas obtenidas, pero no se pudo obtener la dirección completa",
+          });
+        }
+      },
+      (error) => {
+        toast({
+          title: "Error",
+          description: "No se pudo obtener tu ubicación. Por favor, permite el acceso a la ubicación o ingresa la dirección manualmente.",
+          variant: "destructive"
+        });
+      }
+    );
+  };
+
+  // Buscar lugares usando Google Places API a través del backend
   const searchPlaces = async (query) => {
     if (!query || query.length < 3) {
       setLocationSuggestions([]);
@@ -115,43 +320,98 @@ const EventsManager = ({ events, updateEvents }) => {
       return;
     }
 
-    // Use Google Places API through a proxy or backend
     try {
-      // Dominican Republic locations
-      const mockSuggestions = [
-        { description: `${query}, Santo Domingo, República Dominicana`, place_id: `${query}_1` },
-        { description: `${query}, Santiago, República Dominicana`, place_id: `${query}_2` },
-        { description: `${query}, Punta Cana, República Dominicana`, place_id: `${query}_3` },
-        { description: `${query}, La Romana, República Dominicana`, place_id: `${query}_4` },
-        { description: `${query}, Puerto Plata, República Dominicana`, place_id: `${query}_5` }
-      ];
-      setLocationSuggestions(mockSuggestions);
+      const predictions = await searchPlacesAPI(query);
+      
+      if (predictions && predictions.length > 0) {
+        setLocationSuggestions(predictions);
       setShowSuggestions(true);
+      } else {
+        setLocationSuggestions([]);
+        setShowSuggestions(false);
+      }
     } catch (error) {
       console.error('Error searching places:', error);
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
     }
   };
 
+  // Manejar selección de lugar y obtener detalles completos
   const handleLocationSelect = async (place) => {
     setFormData({ ...formData, location: place.description });
     setShowSuggestions(false);
     
-    // Set coordinates for Dominican Republic cities
-    const cityCoordinates = {
-      'Santo Domingo': { lat: 18.4861, lng: -69.9312 },
-      'Santiago': { lat: 19.4517, lng: -70.6970 },
-      'Punta Cana': { lat: 18.5601, lng: -68.3725 },
-      'La Romana': { lat: 18.4273, lng: -68.9728 },
-      'Puerto Plata': { lat: 19.7930, lng: -70.6862 }
-    };
-    
-    const city = Object.keys(cityCoordinates).find(c => place.description.includes(c));
-    setSelectedCoordinates(city ? cityCoordinates[city] : { lat: 18.4861, lng: -69.9312 });
+    try {
+      const result = await getPlaceDetails(place.place_id);
+      
+      // Extraer coordenadas
+      if (result.geometry && result.geometry.location) {
+        let lat, lng;
+        // Manejar tanto funciones como valores directos
+        if (typeof result.geometry.location.lat === 'function') {
+          lat = result.geometry.location.lat();
+          lng = result.geometry.location.lng();
+        } else {
+          lat = result.geometry.location.lat;
+          lng = result.geometry.location.lng;
+        }
+        setSelectedCoordinates({ 
+          lat: Number(lat) || 0, 
+          lng: Number(lng) || 0 
+        });
+      }
+      
+      // Extraer información de la dirección
+      if (result.address_components) {
+        let address = '';
+        let city = '';
+        let state = '';
+        let country = 'República Dominicana';
+        
+        result.address_components.forEach(component => {
+          if (component.types.includes('street_number') || component.types.includes('route')) {
+            address += component.long_name + ' ';
+          }
+          if (component.types.includes('locality') || component.types.includes('sublocality')) {
+            city = component.long_name;
+          }
+          if (component.types.includes('administrative_area_level_1')) {
+            state = component.long_name;
+          }
+          if (component.types.includes('country')) {
+            country = component.long_name;
+          }
+        });
+        
+        setFormData({
+          ...formData,
+          location: result.formatted_address || place.description,
+          address: address.trim() || result.name || '',
+          city: city || state || '',
+          state: state || '',
+          country: country
+        });
+      }
+    } catch (error) {
+      console.error('Error obteniendo detalles del lugar:', error);
+      // Si falla, al menos establecer la descripción
+      setFormData({ ...formData, location: place.description });
+    }
   };
 
   const handleLocationInputChange = (e) => {
     const value = e.target.value;
     setFormData({ ...formData, location: value });
+    
+    // Si el campo está vacío, ocultar sugerencias
+    if (!value || value.trim().length === 0) {
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    
+    // Buscar lugares después de escribir
     searchPlaces(value);
   };
 
@@ -167,24 +427,61 @@ const EventsManager = ({ events, updateEvents }) => {
       return;
     }
 
-    const newEvent = {
-      id: Math.max(...events.map(e => e.id)) + 1,
-      ...formData,
-      coordinates: selectedCoordinates,
-      cover_image: formData.cover_image ? URL.createObjectURL(formData.cover_image) : null,
-      attendees_count: 0,
-      subscribers_count: 0,
-      likes_count: 0,
-      created_by: {
-        id: 1,
-        name: "Admin User",
-        email: "admin@scapeevents.com"
-      },
-      created_at: new Date().toISOString()
-    };
+    try {
+      const userId = getCurrentUserId();
+      if (!userId) {
+        toast({
+          title: "Error",
+          description: "No se pudo obtener el ID del usuario. Por favor inicia sesión nuevamente.",
+          variant: "destructive"
+        });
+        return;
+      }
 
-    const updatedEvents = [...events, newEvent];
-    updateEvents(updatedEvents);
+      // Preparar datos del evento según el formato esperado por el backend
+      const eventData = {
+        title: formData.title,
+        description: formData.description,
+        resume: formData.resume || formData.description.substring(0, 200),
+        organizer_id: userId,
+        date_time: formData.date_time,
+        end_date_time: formData.end_date_time || formData.date_time,
+        location: formData.location,
+        online: formData.online || false,
+        category: formData.category,
+        subcategory: formData.subcategory || '',
+        price: formData.price || 0,
+        video_url: formData.video_url || '',
+        address: formData.address || '',
+        city: formData.city || '',
+        state: formData.state || '',
+        country: formData.country || 'República Dominicana',
+        faqs: formData.faqs.filter(faq => faq.question.trim() && faq.answer.trim()), // Solo enviar FAQs completas
+        cover_image: formData.cover_image,
+      };
+
+      // Si hay coordenadas, agregarlas
+      if (selectedCoordinates) {
+        eventData.latitude = selectedCoordinates.lat;
+        eventData.longitude = selectedCoordinates.lng;
+        eventData.location = {
+          type: "Point",
+          coordinates: [selectedCoordinates.lng, selectedCoordinates.lat]
+        };
+      }
+
+      const newEvent = await createEvent(eventData);
+      
+      // Recargar la lista completa de eventos desde el servidor para evitar duplicados
+      try {
+        const { getEvents } = await import('../services/eventService');
+        const updatedEventsList = await getEvents();
+        updateEvents(updatedEventsList);
+      } catch (fetchError) {
+        console.error('Error al recargar eventos:', fetchError);
+        // Si falla la recarga, agregar solo el nuevo evento si no existe ya
+        updateEvents(newEvent);
+      }
     
     toast({
       title: "Evento creado",
@@ -193,31 +490,146 @@ const EventsManager = ({ events, updateEvents }) => {
 
     setIsCreateModalOpen(false);
     resetForm();
+    } catch (error) {
+      console.error('Error al crear evento:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Error al crear el evento. Por favor intenta nuevamente.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleEdit = (event) => {
     setSelectedEvent(event);
+    
+    // Preparar fecha para el input datetime-local
+    const formatDateTimeLocal = (dateString) => {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
+
     setFormData({
-      title: event.title,
-      description: event.description,
-      date_time: event.date_time.slice(0, 16),
-      location: event.location,
-      category: event.category,
-      status: event.status
+      title: event.title || '',
+      description: event.description || '',
+      resume: event.resume || '',
+      date_time: formatDateTimeLocal(event.date_time),
+      end_date_time: formatDateTimeLocal(event.end_date_time),
+      location: typeof event.location === 'string' ? event.location : '',
+      category: event.category || '',
+      subcategory: event.subcategory || '',
+      price: event.price || 0,
+      video_url: event.video_url || event.videoUrl || '',
+      address: event.address || '',
+      city: event.city || '',
+      state: event.state || '',
+      country: event.country || '',
+      online: event.online || false,
+      status: event.status || 'upcoming',
+      cover_image: null, // No pre-cargar imagen en edición
+      faqs: event.faqs && Array.isArray(event.faqs) && event.faqs.length > 0
+        ? event.faqs.map((faq, idx) => ({
+            id: faq.id || Date.now() + idx,
+            question: faq.question || '',
+            answer: faq.answer || ''
+          }))
+        : []
     });
+
+    // Si hay coordenadas en el evento, establecerlas
+    if (event.location && typeof event.location === 'object' && event.location.coordinates) {
+      setSelectedCoordinates({
+        lat: event.location.coordinates[1],
+        lng: event.location.coordinates[0]
+      });
+    } else if (event.latitude && event.longitude) {
+      setSelectedCoordinates({
+        lat: event.latitude,
+        lng: event.longitude
+      });
+    }
+
     setIsEditModalOpen(true);
   };
 
   const handleUpdate = async (e) => {
     e.preventDefault();
     
-    const updatedEvents = events.map(event =>
-      event.id === selectedEvent.id
-        ? { ...event, ...formData }
-        : event
-    );
-    
-    updateEvents(updatedEvents);
+    if (!selectedEvent) {
+      toast({
+        title: "Error",
+        description: "No se ha seleccionado un evento para editar",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const eventId = selectedEvent.id || selectedEvent.event_id || selectedEvent.eventId;
+      if (!eventId) {
+        toast({
+          title: "Error",
+          description: "No se pudo obtener el ID del evento",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Preparar datos para actualizar
+      const eventData = {
+        id: eventId,
+        event_id: eventId,
+        title: formData.title,
+        description: formData.description,
+        resume: formData.resume || formData.description?.substring(0, 200) || '',
+        date_time: formData.date_time,
+        end_date_time: formData.end_date_time || formData.date_time,
+        location: formData.location,
+        online: formData.online || false,
+        category: formData.category,
+        subcategory: formData.subcategory || '',
+        price: formData.price || 0,
+        video_url: formData.video_url || '',
+        address: formData.address || '',
+        city: formData.city || '',
+        state: formData.state || '',
+        country: formData.country || '',
+        faqs: formData.faqs.filter(faq => faq.question.trim() && faq.answer.trim()), // Solo enviar FAQs completas
+      };
+
+      // Si hay nueva imagen
+      if (formData.cover_image) {
+        eventData.cover_image = formData.cover_image;
+      }
+
+      // Si hay coordenadas actualizadas
+      if (selectedCoordinates) {
+        eventData.latitude = selectedCoordinates.lat;
+        eventData.longitude = selectedCoordinates.lng;
+        eventData.location = {
+          type: "Point",
+          coordinates: [selectedCoordinates.lng, selectedCoordinates.lat]
+        };
+      }
+
+      const updatedEvent = await updateEvent(eventId, eventData);
+      
+      // Recargar la lista completa de eventos desde el servidor para evitar problemas de sincronización
+      try {
+        const { getEvents } = await import('../services/eventService');
+        const updatedEventsList = await getEvents();
+        updateEvents(updatedEventsList);
+      } catch (fetchError) {
+        console.error('Error al recargar eventos:', fetchError);
+        // Si falla la recarga, actualizar solo el evento modificado
+        updateEvents(updatedEvent);
+      }
     
     toast({
       title: "Evento actualizado",
@@ -227,16 +639,61 @@ const EventsManager = ({ events, updateEvents }) => {
     setIsEditModalOpen(false);
     resetForm();
     setSelectedEvent(null);
+    } catch (error) {
+      console.error('Error al actualizar evento:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Error al actualizar el evento. Por favor intenta nuevamente.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const handleDelete = (eventId) => {
-    const updatedEvents = events.filter(event => event.id !== eventId);
+  const handleDelete = async (event) => {
+    const eventId = event.id || event.event_id || event.eventId;
+    
+    if (!eventId) {
+      toast({
+        title: "Error",
+        description: "No se pudo obtener el ID del evento",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!window.confirm('¿Estás seguro de que deseas eliminar este evento? Esta acción no se puede deshacer.')) {
+      return;
+    }
+
+    try {
+      await deleteEvent(eventId);
+      
+      // Recargar la lista completa de eventos desde el servidor para evitar problemas de sincronización
+      try {
+        const { getEvents } = await import('../services/eventService');
+        const updatedEventsList = await getEvents();
+        updateEvents(updatedEventsList);
+      } catch (fetchError) {
+        console.error('Error al recargar eventos:', fetchError);
+        // Si falla la recarga, actualizar la lista local eliminando el evento
+        const updatedEvents = events.filter(e => 
+          (e.id !== eventId && e.event_id !== eventId && e.eventId !== eventId)
+        );
     updateEvents(updatedEvents);
+      }
     
     toast({
       title: "Evento eliminado",
       description: "El evento se ha eliminado exitosamente",
     });
+    } catch (error) {
+      console.error('Error al eliminar evento:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Error al eliminar el evento. Por favor intenta nuevamente.",
+        variant: "destructive"
+      });
+    }
   };
 
   const getStatusColor = (status) => {
@@ -277,14 +734,15 @@ const EventsManager = ({ events, updateEvents }) => {
               Crear Evento
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-black/90 border-purple-500/30 text-white max-w-md">
-            <DialogHeader>
+          <DialogContent className="bg-black/90 border-purple-500/30 text-white max-w-md max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogHeader className="flex-shrink-0">
               <DialogTitle className="text-white">Crear Nuevo Evento</DialogTitle>
               <DialogDescription className="text-purple-300">
                 Completa la información para crear un nuevo evento
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleCreate} className="space-y-4">
+            <div className="flex-1 overflow-y-auto pr-2 -mr-2 custom-scrollbar">
+              <form onSubmit={handleCreate} className="space-y-4 pb-4">
               <div className="space-y-2">
                 <Label htmlFor="title" className="text-purple-200">Título *</Label>
                 <Input
@@ -294,6 +752,19 @@ const EventsManager = ({ events, updateEvents }) => {
                   onChange={handleInputChange}
                   className="bg-black/50 border-purple-500/30 text-white"
                   required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="resume" className="text-purple-200">Resumen</Label>
+                <Textarea
+                  id="resume"
+                  name="resume"
+                  value={formData.resume}
+                  onChange={handleInputChange}
+                  className="bg-black/50 border-purple-500/30 text-white"
+                  rows={2}
+                  placeholder="Breve descripción del evento..."
                 />
               </div>
               
@@ -310,8 +781,9 @@ const EventsManager = ({ events, updateEvents }) => {
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="date_time" className="text-purple-200">Fecha y Hora *</Label>
+                  <Label htmlFor="date_time" className="text-purple-200">Fecha y Hora Inicio *</Label>
                 <Input
                   id="date_time"
                   name="date_time"
@@ -321,7 +793,101 @@ const EventsManager = ({ events, updateEvents }) => {
                   className="bg-black/50 border-purple-500/30 text-white"
                   required
                 />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="end_date_time" className="text-purple-200">Fecha y Hora Fin</Label>
+                  <Input
+                    id="end_date_time"
+                    name="end_date_time"
+                    type="datetime-local"
+                    value={formData.end_date_time}
+                    onChange={handleInputChange}
+                    className="bg-black/50 border-purple-500/30 text-white"
+                  />
+                </div>
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="price" className="text-purple-200">Precio</Label>
+                <Input
+                  id="price"
+                  name="price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.price}
+                  onChange={handleInputChange}
+                  className="bg-black/50 border-purple-500/30 text-white"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="online"
+                    name="online"
+                    checked={formData.online}
+                    onChange={(e) => setFormData({ ...formData, online: e.target.checked })}
+                    className="w-4 h-4 text-purple-600 bg-black border-purple-500 rounded focus:ring-purple-500"
+                  />
+                  <Label htmlFor="online" className="text-purple-200 cursor-pointer">Evento Online</Label>
+                </div>
+              </div>
+
+              {!formData.online && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="city" className="text-purple-200">Ciudad *</Label>
+                      <Input
+                        id="city"
+                        name="city"
+                        value={formData.city}
+                        onChange={handleInputChange}
+                        className="bg-black/50 border-purple-500/30 text-white"
+                        placeholder="Santo Domingo"
+                        required={!formData.online}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="state" className="text-purple-200">Estado/Provincia *</Label>
+                      <Input
+                        id="state"
+                        name="state"
+                        value={formData.state}
+                        onChange={handleInputChange}
+                        className="bg-black/50 border-purple-500/30 text-white"
+                        placeholder="Distrito Nacional"
+                        required={!formData.online}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="address" className="text-purple-200">Dirección</Label>
+                    <Input
+                      id="address"
+                      name="address"
+                      value={formData.address}
+                      onChange={handleInputChange}
+                      className="bg-black/50 border-purple-500/30 text-white"
+                      placeholder="Calle, número, sector..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="country" className="text-purple-200">País *</Label>
+                    <Input
+                      id="country"
+                      name="country"
+                      value={formData.country}
+                      onChange={handleInputChange}
+                      className="bg-black/50 border-purple-500/30 text-white"
+                      required={!formData.online}
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="cover_image" className="text-purple-200">Imagen de Portada</Label>
@@ -341,33 +907,57 @@ const EventsManager = ({ events, updateEvents }) => {
               </div>
 
               <div className="space-y-2 relative">
+                <div className="flex justify-between items-center">
                 <Label htmlFor="location" className="text-purple-200">Ubicación *</Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={getCurrentLocation}
+                    className="text-xs text-purple-300 border-purple-500/30 hover:bg-purple-900/50"
+                  >
+                    <MapPin className="h-3 w-3 mr-1" />
+                    Usar mi ubicación
+                  </Button>
+                </div>
                 <Input
                   id="location"
                   name="location"
                   value={formData.location}
                   onChange={handleLocationInputChange}
+                  onFocus={() => {
+                    // Si hay texto y sugerencias, mostrar desplegable al hacer focus
+                    if (formData.location && formData.location.length >= 3 && locationSuggestions.length > 0) {
+                      setShowSuggestions(true);
+                    }
+                  }}
                   className="bg-black/50 border-purple-500/30 text-white"
-                  placeholder="Buscar ubicación..."
+                  placeholder="Buscar ubicación o dirección..."
                   required
+                  autoComplete="off"
                 />
                 {showSuggestions && locationSuggestions.length > 0 && (
-                  <div className="absolute z-50 w-full mt-1 bg-black border border-purple-500/30 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  <div className="absolute z-50 w-full mt-1 bg-black border border-purple-500/30 rounded-md shadow-lg max-h-60 overflow-y-auto custom-scrollbar">
                     {locationSuggestions.map((suggestion) => (
                       <div
                         key={suggestion.place_id}
                         className="px-3 py-2 hover:bg-purple-900/50 cursor-pointer text-white text-sm border-b border-purple-500/20 last:border-b-0"
+                        onMouseDown={(e) => {
+                          // Prevenir que el blur del input cierre el desplegable antes del click
+                          e.preventDefault();
+                        }}
                         onClick={() => handleLocationSelect(suggestion)}
                       >
                         <div className="flex items-center space-x-2">
-                          <MapPin className="h-3 w-3 text-purple-400" />
-                          <span>{suggestion.description}</span>
+                          <MapPin className="h-3 w-3 text-purple-400 flex-shrink-0" />
+                          <span className="truncate">{suggestion.description}</span>
                         </div>
                       </div>
                     ))}
                     <div className="px-3 py-2 border-t border-purple-500/30">
                       <button
                         type="button"
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => setShowSuggestions(false)}
                         className="text-xs text-purple-400 hover:text-purple-300 flex items-center space-x-1"
                       >
@@ -379,7 +969,7 @@ const EventsManager = ({ events, updateEvents }) => {
                 )}
                 {selectedCoordinates && (
                   <p className="text-xs text-purple-400">
-                    Coordenadas: {selectedCoordinates.lat.toFixed(4)}, {selectedCoordinates.lng.toFixed(4)}
+                    Coordenadas: {Number(selectedCoordinates.lat).toFixed(4)}, {Number(selectedCoordinates.lng).toFixed(4)}
                   </p>
                 )}
               </div>
@@ -421,7 +1011,62 @@ const EventsManager = ({ events, updateEvents }) => {
                 </div>
               )}
 
-              <div className="flex justify-end space-x-2">
+              {/* FAQs Section */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <Label className="text-purple-200">Preguntas Frecuentes (FAQs)</Label>
+                  <Button
+                    type="button"
+                    onClick={addFAQ}
+                    size="sm"
+                    variant="outline"
+                    className="text-purple-300 border-purple-500/30 hover:bg-purple-900/50"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Agregar FAQ
+                  </Button>
+                </div>
+                <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                  {formData.faqs.map((faq, index) => (
+                    <div key={faq.id} className="p-3 bg-black/30 border border-purple-500/20 rounded-lg space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-purple-400">FAQ #{index + 1}</span>
+                        <Button
+                          type="button"
+                          onClick={() => removeFAQ(faq.id)}
+                          size="sm"
+                          variant="ghost"
+                          className="text-red-400 hover:bg-red-900/50 h-6 w-6 p-0"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        <Input
+                          placeholder="Pregunta..."
+                          value={faq.question}
+                          onChange={(e) => updateFAQ(faq.id, 'question', e.target.value)}
+                          className="bg-black/50 border-purple-500/30 text-white text-sm"
+                        />
+                        <Textarea
+                          placeholder="Respuesta..."
+                          value={faq.answer}
+                          onChange={(e) => updateFAQ(faq.id, 'answer', e.target.value)}
+                          className="bg-black/50 border-purple-500/30 text-white text-sm"
+                          rows={2}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {formData.faqs.length === 0 && (
+                    <p className="text-sm text-purple-400 text-center py-4">
+                      No hay FAQs agregadas. Haz clic en "Agregar FAQ" para agregar una.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-4 border-t border-purple-500/30">
                 <Button
                   type="button"
                   variant="ghost"
@@ -438,6 +1083,7 @@ const EventsManager = ({ events, updateEvents }) => {
                 </Button>
               </div>
             </form>
+            </div>
           </DialogContent>
         </Dialog>
       </div>
@@ -497,7 +1143,7 @@ const EventsManager = ({ events, updateEvents }) => {
       {/* Events Grid */}
       <div className="grid gap-6">
         {filteredEvents.map(event => (
-          <Card key={event.id} className="bg-black/40 border-purple-500/30">
+          <Card key={event.id || event.event_id || event.eventId || `event-${event.title}`} className="bg-black/40 border-purple-500/30">
             <CardHeader>
               <div className="flex justify-between items-start">
                 <div className="space-y-2">
@@ -588,7 +1234,7 @@ const EventsManager = ({ events, updateEvents }) => {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => handleDelete(event.id)}
+                    onClick={() => handleDelete(event)}
                     className="text-red-400 hover:bg-red-900/50"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -614,14 +1260,15 @@ const EventsManager = ({ events, updateEvents }) => {
 
       {/* Edit Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="bg-black/90 border-purple-500/30 text-white max-w-md">
-          <DialogHeader>
+        <DialogContent className="bg-black/90 border-purple-500/30 text-white max-w-md max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="text-white">Editar Evento</DialogTitle>
             <DialogDescription className="text-purple-300">
               Modifica la información del evento
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleUpdate} className="space-y-4">
+          <div className="flex-1 overflow-y-auto pr-2 -mr-2 custom-scrollbar">
+          <form onSubmit={handleUpdate} className="space-y-4 pb-4">
             <div className="space-y-2">
               <Label htmlFor="edit-title" className="text-purple-200">Título *</Label>
               <Input
@@ -635,20 +1282,21 @@ const EventsManager = ({ events, updateEvents }) => {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="edit-description" className="text-purple-200">Descripción *</Label>
+              <Label htmlFor="edit-resume" className="text-purple-200">Resumen</Label>
               <Textarea
-                id="edit-description"
-                name="description"
-                value={formData.description}
+                id="edit-resume"
+                name="resume"
+                value={formData.resume}
                 onChange={handleInputChange}
                 className="bg-black/50 border-purple-500/30 text-white"
-                rows={3}
-                required
+                rows={2}
+                placeholder="Breve descripción del evento..."
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-date_time" className="text-purple-200">Fecha y Hora *</Label>
+                <Label htmlFor="edit-date_time" className="text-purple-200">Fecha y Hora Inicio *</Label>
               <Input
                 id="edit-date_time"
                 name="date_time"
@@ -658,18 +1306,132 @@ const EventsManager = ({ events, updateEvents }) => {
                 className="bg-black/50 border-purple-500/30 text-white"
                 required
               />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-end_date_time" className="text-purple-200">Fecha y Hora Fin</Label>
+                <Input
+                  id="edit-end_date_time"
+                  name="end_date_time"
+                  type="datetime-local"
+                  value={formData.end_date_time}
+                  onChange={handleInputChange}
+                  className="bg-black/50 border-purple-500/30 text-white"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-location" className="text-purple-200">Ubicación *</Label>
+              <Label htmlFor="edit-price" className="text-purple-200">Precio</Label>
               <Input
-                id="edit-location"
-                name="location"
-                value={formData.location}
+                id="edit-price"
+                name="price"
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.price}
                 onChange={handleInputChange}
                 className="bg-black/50 border-purple-500/30 text-white"
-                required
+                placeholder="0.00"
               />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="edit-online"
+                  name="online"
+                  checked={formData.online}
+                  onChange={(e) => setFormData({ ...formData, online: e.target.checked })}
+                  className="w-4 h-4 text-purple-600 bg-black border-purple-500 rounded focus:ring-purple-500"
+                />
+                <Label htmlFor="edit-online" className="text-purple-200 cursor-pointer">Evento Online</Label>
+              </div>
+            </div>
+
+            {formData.online && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-video_url" className="text-purple-200">URL de Video/Reunión</Label>
+                <Input
+                  id="edit-video_url"
+                  name="video_url"
+                  type="url"
+                  value={formData.video_url}
+                  onChange={handleInputChange}
+                  className="bg-black/50 border-purple-500/30 text-white"
+                  placeholder="https://zoom.us/j/..."
+                />
+              </div>
+            )}
+
+            {!formData.online && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-city" className="text-purple-200">Ciudad *</Label>
+                    <Input
+                      id="edit-city"
+                      name="city"
+                      value={formData.city}
+                      onChange={handleInputChange}
+                      className="bg-black/50 border-purple-500/30 text-white"
+                      placeholder="Santo Domingo"
+                      required={!formData.online}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-state" className="text-purple-200">Estado/Provincia *</Label>
+                    <Input
+                      id="edit-state"
+                      name="state"
+                      value={formData.state}
+                      onChange={handleInputChange}
+                      className="bg-black/50 border-purple-500/30 text-white"
+                      placeholder="Distrito Nacional"
+                      required={!formData.online}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-address" className="text-purple-200">Dirección</Label>
+                  <Input
+                    id="edit-address"
+                    name="address"
+                    value={formData.address}
+                    onChange={handleInputChange}
+                    className="bg-black/50 border-purple-500/30 text-white"
+                    placeholder="Calle, número, sector..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-country" className="text-purple-200">País *</Label>
+                  <Input
+                    id="edit-country"
+                    name="country"
+                    value={formData.country}
+                    onChange={handleInputChange}
+                    className="bg-black/50 border-purple-500/30 text-white"
+                    required={!formData.online}
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-cover_image" className="text-purple-200">Nueva Imagen de Portada (opcional)</Label>
+              <div className="flex items-center space-x-2">
+                <Input
+                  id="edit-cover_image"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="bg-black/50 border-purple-500/30 text-white file:bg-purple-600 file:text-white file:border-0 file:rounded"
+                />
+                <Upload className="h-4 w-4 text-purple-400" />
+              </div>
+              {formData.cover_image && (
+                <p className="text-sm text-purple-300">Archivo: {formData.cover_image.name}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -702,7 +1464,184 @@ const EventsManager = ({ events, updateEvents }) => {
               </Select>
             </div>
 
-            <div className="flex justify-end space-x-2">
+            <div className="space-y-2 relative">
+              <div className="flex justify-between items-center">
+                <Label htmlFor="edit-location" className="text-purple-200">Ubicación *</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={getCurrentLocation}
+                  className="text-xs text-purple-300 border-purple-500/30 hover:bg-purple-900/50"
+                >
+                  <MapPin className="h-3 w-3 mr-1" />
+                  Usar mi ubicación
+                </Button>
+              </div>
+              <Input
+                id="edit-location"
+                name="location"
+                value={formData.location}
+                onChange={handleLocationInputChange}
+                onFocus={() => {
+                  // Si hay texto y sugerencias, mostrar desplegable al hacer focus
+                  if (formData.location && formData.location.length >= 3 && locationSuggestions.length > 0) {
+                    setShowSuggestions(true);
+                  }
+                }}
+                className="bg-black/50 border-purple-500/30 text-white"
+                placeholder="Buscar ubicación o dirección..."
+                required
+                autoComplete="off"
+              />
+              {showSuggestions && locationSuggestions.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-black border border-purple-500/30 rounded-md shadow-lg max-h-60 overflow-y-auto custom-scrollbar">
+                  {locationSuggestions.map((suggestion) => (
+                    <div
+                      key={suggestion.place_id}
+                      className="px-3 py-2 hover:bg-purple-900/50 cursor-pointer text-white text-sm border-b border-purple-500/20 last:border-b-0"
+                      onMouseDown={(e) => {
+                        // Prevenir que el blur del input cierre el desplegable antes del click
+                        e.preventDefault();
+                      }}
+                      onClick={() => handleLocationSelect(suggestion)}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="h-3 w-3 text-purple-400 flex-shrink-0" />
+                        <span className="truncate">{suggestion.description}</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="px-3 py-2 border-t border-purple-500/30">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => setShowSuggestions(false)}
+                      className="text-xs text-purple-400 hover:text-purple-300 flex items-center space-x-1"
+                    >
+                      <X className="h-3 w-3" />
+                      <span>Cerrar</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+              {selectedCoordinates && (
+                <p className="text-xs text-purple-400">
+                  Coordenadas: {Number(selectedCoordinates.lat).toFixed(4)}, {Number(selectedCoordinates.lng).toFixed(4)}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-cover_image" className="text-purple-200">Nueva Imagen de Portada (opcional)</Label>
+              <div className="flex items-center space-x-2">
+                <Input
+                  id="edit-cover_image"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="bg-black/50 border-purple-500/30 text-white file:bg-purple-600 file:text-white file:border-0 file:rounded"
+                />
+                <Upload className="h-4 w-4 text-purple-400" />
+              </div>
+              {formData.cover_image && (
+                <p className="text-sm text-purple-300">Archivo: {formData.cover_image.name}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-category" className="text-purple-200">Categoría *</Label>
+              <Select value={formData.category} onValueChange={(value) => {
+                handleSelectChange('category', value);
+                setFormData(prev => ({ ...prev, subcategory: '' }));
+              }}>
+                <SelectTrigger className="bg-black/50 border-purple-500/30 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-black border-purple-500/30">
+                  {categories.map(category => (
+                    <SelectItem key={category} value={category} className="text-white hover:bg-purple-900/50">
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.category && subcategories[formData.category] && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-subcategory" className="text-purple-200">Subcategoría</Label>
+                <Select value={formData.subcategory} onValueChange={(value) => handleSelectChange('subcategory', value)}>
+                  <SelectTrigger className="bg-black/50 border-purple-500/30 text-white">
+                    <SelectValue placeholder="Selecciona una subcategoría" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-black border-purple-500/30">
+                    {subcategories[formData.category].map(subcategory => (
+                      <SelectItem key={subcategory} value={subcategory} className="text-white hover:bg-purple-900/50">
+                        {subcategory}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* FAQs Section */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <Label className="text-purple-200">Preguntas Frecuentes (FAQs)</Label>
+                <Button
+                  type="button"
+                  onClick={addFAQ}
+                  size="sm"
+                  variant="outline"
+                  className="text-purple-300 border-purple-500/30 hover:bg-purple-900/50"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Agregar FAQ
+                </Button>
+              </div>
+              <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                {formData.faqs.map((faq, index) => (
+                  <div key={faq.id} className="p-3 bg-black/30 border border-purple-500/20 rounded-lg space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-purple-400">FAQ #{index + 1}</span>
+                      <Button
+                        type="button"
+                        onClick={() => removeFAQ(faq.id)}
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-400 hover:bg-red-900/50 h-6 w-6 p-0"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <Input
+                        placeholder="Pregunta..."
+                        value={faq.question}
+                        onChange={(e) => updateFAQ(faq.id, 'question', e.target.value)}
+                        className="bg-black/50 border-purple-500/30 text-white text-sm"
+                      />
+                      <Textarea
+                        placeholder="Respuesta..."
+                        value={faq.answer}
+                        onChange={(e) => updateFAQ(faq.id, 'answer', e.target.value)}
+                        className="bg-black/50 border-purple-500/30 text-white text-sm"
+                        rows={2}
+                      />
+                    </div>
+                  </div>
+                ))}
+                {formData.faqs.length === 0 && (
+                  <p className="text-sm text-purple-400 text-center py-4">
+                    No hay FAQs agregadas. Haz clic en "Agregar FAQ" para agregar una.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-4 border-t border-purple-500/30">
               <Button
                 type="button"
                 variant="ghost"
@@ -719,6 +1658,7 @@ const EventsManager = ({ events, updateEvents }) => {
               </Button>
             </div>
           </form>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

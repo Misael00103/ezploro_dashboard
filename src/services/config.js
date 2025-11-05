@@ -196,6 +196,13 @@ export const API_URL_GAMIFICATION_ACTION = `${API_URL_GAMIFICATION}/action`
 export const API_URL_GAMIFICATION_POINTS = `${API_URL_GAMIFICATION}/points/:user_id`
 export const API_URL_GAMIFICATION_REDEEM = `${API_URL_GAMIFICATION}/redeem`
 export const API_URL_GAMIFICATION_HISTORY = `${API_URL_GAMIFICATION}/history/:user_id`
+export const API_URL_RULES = `${BASE_URL}/rules`
+
+// ==================== POINTS ====================
+export const API_URL_POINTS = `${BASE_URL}/points`
+export const API_URL_POINTS_ACTIONS = `${API_URL_POINTS}/actions/:userId`
+export const API_URL_POINTS_CLAIM = `${API_URL_POINTS}/actions/:actionId/claim/:userId`
+export const API_URL_POINTS_TRANSACTIONS = `${API_URL_POINTS}/transactions/claimed/:userId`
 
 // ==================== GROUP CHAT ====================
 export const API_URL_GROUP_CHAT = `${BASE_URL}/groups`
@@ -230,7 +237,7 @@ export const API_URL_RANKINGS_EVENTOS_MAS_SUSCRITOS = `${API_URL_RANKINGS}/event
 export const API_URL_RANKINGS_EVENTOS_MAS_LIKES = `${API_URL_RANKINGS}/eventos-mas-likes`
 
 // ==================== TESTIMONIALS ====================
-export const API_URL_TESTIMONIALS = `${BASE_URL}/testimonials`
+export const API_URL_TESTIMONIALS = `${BASE_URL}/testimonial`
 export const API_URL_TESTIMONIALS_CREATE = `${API_URL_TESTIMONIALS}`
 export const API_URL_TESTIMONIALS_LIST = `${API_URL_TESTIMONIALS}`
 export const API_URL_TESTIMONIALS_BY_ID = `${API_URL_TESTIMONIALS}/:id`
@@ -318,7 +325,25 @@ export const API_URL_OFFERS_TOGGLE_STATUS = `${API_URL_OFFERS}/:id/toggle-status
 // Configuración adicional
 export const GOOGLE_MAPS_API_KEY = "AIzaSyAr4IpigO3ZN4_Qcv8ME59x5-KjjDVY0Wc"
 
+// Google Places API endpoints (proxy through backend)
+export const API_URL_PLACES_AUTOCOMPLETE = `${BASE_URL}/places/autocomplete`
+export const API_URL_PLACES_DETAILS = `${BASE_URL}/places/details`
+export const API_URL_PLACES_GEOCODE = `${BASE_URL}/places/geocode`
+
+// ==================== SOCIAL NETWORKS ====================
+// El router está montado en /api directamente, no en /api/social-networks
+export const API_URL_SOCIAL_NETWORKS = `${BASE_URL}`
+export const API_URL_SOCIAL_NETWORKS_ALL = `${API_URL_SOCIAL_NETWORKS}/all-networks`
+export const API_URL_SOCIAL_NETWORKS_ACTIVE = `${API_URL_SOCIAL_NETWORKS}/active-networks`
+export const API_URL_SOCIAL_NETWORKS_TOTAL_FOLLOWERS = `${API_URL_SOCIAL_NETWORKS}/total-network-followers`
+export const API_URL_SOCIAL_NETWORKS_BY_ID = `${API_URL_SOCIAL_NETWORKS}/network/:id`
+export const API_URL_SOCIAL_NETWORKS_CREATE = `${API_URL_SOCIAL_NETWORKS}/network/`
+export const API_URL_SOCIAL_NETWORKS_UPDATE = `${API_URL_SOCIAL_NETWORKS}/network/:id`
+export const API_URL_SOCIAL_NETWORKS_TOGGLE = `${API_URL_SOCIAL_NETWORKS}/network/:id/toggle`
+export const API_URL_SOCIAL_NETWORKS_DELETE = `${API_URL_SOCIAL_NETWORKS}/network/:id`
+export const API_URL_SOCIAL_NETWORKS_COUNT = `${API_URL_SOCIAL_NETWORKS}/count/:plataforma`
+
 // ==================== MISSING API URLS ====================
 export const API_URL_CONTACTS = `${BASE_URL}/contact`
-export const API_URL_SOCIAL_MEDIA = `${BASE_URL}/social-media`
+export const API_URL_SOCIAL_MEDIA = `${BASE_URL}/social-media` // Mantener por compatibilidad
 export const API_URL_LANDING_PAGE = `${BASE_URL}/landing-page`

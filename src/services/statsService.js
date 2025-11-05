@@ -15,6 +15,7 @@ export const getStats = async () => {
       totalUsers: 0,
       totalTestimonials: 0,
       totalPosts: 0,
+      appDownloads: 0,
       topCategories: []
     };
   } catch (error) {
@@ -27,6 +28,7 @@ export const getStats = async () => {
       totalUsers: 0,
       totalTestimonials: 0,
       totalPosts: 0,
+      appDownloads: 0,
       topCategories: []
     };
   }
