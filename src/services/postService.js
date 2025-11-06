@@ -478,6 +478,12 @@ export const createPostComment = async (postId, { text, images = [] }) => {
       throw new Error('No hay token de autenticación');
     }
 
+    // Obtener user_id del usuario actual
+    const userId = getCurrentUserId();
+    if (!userId) {
+      throw new Error('No se pudo obtener el ID del usuario');
+    }
+
     // Si hay imágenes, usar FormData, sino usar JSON
     let body;
     let headers = {
@@ -487,6 +493,7 @@ export const createPostComment = async (postId, { text, images = [] }) => {
     if (images && images.length > 0) {
       const formData = new FormData();
       formData.append('post_id', postId);
+      formData.append('user_id', userId);
       formData.append('content', text);
       images.forEach(img => formData.append('images', img));
       body = formData;
@@ -494,9 +501,12 @@ export const createPostComment = async (postId, { text, images = [] }) => {
       headers['Content-Type'] = 'application/json';
       body = JSON.stringify({
         post_id: postId,
+        user_id: userId,
         content: text
       });
     }
+
+    console.log('💬 Creando comentario:', { post_id: postId, user_id: userId, content: text });
 
     const response = await fetch(API_URL_POST_COMMENTS_CREATE, {
       method: 'POST',
