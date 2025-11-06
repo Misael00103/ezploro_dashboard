@@ -473,25 +473,41 @@ export const getPostComments = async (postId) => {
 // Create post comment
 export const createPostComment = async (postId, { text, images = [] }) => {
   try {
-    const formData = new FormData();
-    formData.append('text', text);
-    formData.append('post_id', postId);
-    images.forEach(img => formData.append('images', img));
-
     const token = getAuthToken();
     if (!token) {
       throw new Error('No hay token de autenticación');
     }
 
+    // Si hay imágenes, usar FormData, sino usar JSON
+    let body;
+    let headers = {
+      Authorization: `Bearer ${token}`,
+    };
+
+    if (images && images.length > 0) {
+      const formData = new FormData();
+      formData.append('post_id', postId);
+      formData.append('content', text);
+      images.forEach(img => formData.append('images', img));
+      body = formData;
+    } else {
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify({
+        post_id: postId,
+        content: text
+      });
+    }
+
     const response = await fetch(API_URL_POST_COMMENTS_CREATE, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData
+      headers: headers,
+      body: body
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Error al comentar');
+      console.error('❌ Error al crear comentario:', errorData);
+      throw new Error(errorData.message || errorData.error || 'Error al comentar');
     }
 
     const result = await response.json();

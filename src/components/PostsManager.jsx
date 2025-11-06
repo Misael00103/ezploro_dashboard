@@ -35,6 +35,22 @@ const CommentItem = ({ comment, postId, currentUserId, depth = 0, onCommentChang
     return String(commentUserId) === String(currentUserId);
   };
 
+  const handleLike = async () => {
+    setLoading(true);
+    try {
+      // Usar el endpoint de likes de posts, pero con el comment_id
+      const commentId = comment.comment_post_id || comment.id;
+      await togglePostLike(commentId);
+      onCommentChange(); // Recargar comentarios para actualizar el contador
+      toast({ title: "Like actualizado" });
+    } catch (error) {
+      console.error('Error al dar like al comentario:', error);
+      toast({ title: "Error", description: "Error al dar like", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleReply = async () => {
     if (!replyText.trim()) return;
     setLoading(true);
@@ -159,7 +175,13 @@ const CommentItem = ({ comment, postId, currentUserId, depth = 0, onCommentChang
           )}
 
           <div className="flex gap-3 text-xs">
-            <Button variant="ghost" size="sm" className="text-purple-300 hover:text-red-400 p-0 h-auto">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleLike}
+              disabled={loading}
+              className="text-purple-300 hover:text-red-400 p-0 h-auto"
+            >
               <Heart className="h-3.5 w-3.5 mr-1" /> {comment.likes_count || 0}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setReplying(!replying)} className="text-purple-300 p-0 h-auto">
@@ -318,8 +340,9 @@ const PostCommentsModal = ({ postId, isOpen, onClose, onCommentAdded }) => {
       await loadComments();
       onCommentAdded();
       toast({ title: "Comentario enviado" });
-    } catch {
-      toast({ title: "Error", description: "Error al comentar", variant: "destructive" });
+    } catch (error) {
+      console.error('Error al crear comentario:', error);
+      toast({ title: "Error", description: error.message || "Error al comentar", variant: "destructive" });
     } finally {
       setLoading(false);
     }
