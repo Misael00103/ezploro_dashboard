@@ -3,8 +3,9 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { Badge } from './ui/badge';
 import { MessageCircle, Send, Trash2, Edit, Reply, X } from 'lucide-react';
-import { getPostComments, createComment, updateComment, deleteComment } from '../services/postService';
+import { getPostComments, createComment, updateComment, deleteComment, createReply } from '../services/postService';
 import { getCurrentUserId } from '../services/authService';
 import { useToast } from '../hooks/use-toast';
 
@@ -35,7 +36,63 @@ const PostComments = ({ postId, isOpen, onClose, onCommentAdded }) => {
     try {
       setIsLoading(true);
       const commentsData = await getPostComments(postId);
-      setComments(commentsData || []);
+      
+      console.log('📥 Comments data received:', commentsData);
+      
+      // Normalizar IDs - función helper para obtener ID consistente
+      const normalizeId = (comment) => {
+        return String(comment.comment_post_id || comment.comment_id || comment.id || '');
+      };
+      
+      // Agrupar comentarios y respuestas
+      const commentsMap = new Map(); // Map para almacenar comentarios por ID
+      const repliesMap = new Map(); // Map para almacenar replies por parent_id
+      const topLevelComments = [];
+      
+      // Primero, identificar todos los comentarios principales y las respuestas
+      (commentsData || []).forEach(comment => {
+        const commentId = normalizeId(comment);
+        const parentId = comment.parent_comment_id || comment.parent_comment;
+        const normalizedParentId = parentId ? String(parentId) : null;
+        
+        console.log(`🔍 Comment ID: ${commentId}, Parent ID: ${normalizedParentId || 'NONE'}`);
+        
+        if (normalizedParentId) {
+          // Es una respuesta/reply - guardarla temporalmente
+          if (!repliesMap.has(normalizedParentId)) {
+            repliesMap.set(normalizedParentId, []);
+          }
+          repliesMap.get(normalizedParentId).push(comment);
+          console.log(`✅ Added reply to parent ${normalizedParentId}`);
+        } else {
+          // Es un comentario principal - guardarlo en el map para referencia rápida
+          commentsMap.set(commentId, comment);
+          topLevelComments.push(comment);
+          console.log(`📝 Added top-level comment ${commentId}`);
+        }
+      });
+      
+      console.log('🗺️ Replies map:', Array.from(repliesMap.entries()));
+      console.log('📋 Top level comments:', topLevelComments.length);
+      
+      // Ahora agregar las replies a cada comentario principal
+      // Ordenar replies por fecha de creación (más antiguos primero)
+      const commentsWithReplies = topLevelComments.map(comment => {
+        const commentId = normalizeId(comment);
+        const replies = (repliesMap.get(commentId) || []).sort((a, b) => {
+          const dateA = new Date(a.created_at || a.createdAt || 0);
+          const dateB = new Date(b.created_at || b.createdAt || 0);
+          return dateA - dateB; // Orden ascendente (más antiguos primero)
+        });
+        console.log(`🔗 Comment ${commentId} has ${replies.length} replies`);
+        return {
+          ...comment,
+          replies: replies
+        };
+      });
+      
+      console.log('✅ Final comments with replies:', commentsWithReplies);
+      setComments(commentsWithReplies);
     } catch (error) {
       console.error('Error loading comments:', error);
       toast({
@@ -173,15 +230,20 @@ const PostComments = ({ postId, isOpen, onClose, onCommentAdded }) => {
 
     try {
       setIsSubmitting(true);
-      // Nota: La funcionalidad de replies para comentarios de posts aún no está implementada en el backend
-      // Cuando se implemente, usar aquí el servicio correspondiente
-      toast({
-        title: "Información",
-        description: "La funcionalidad de replies estará disponible pronto",
+      await createReply(commentId, {
+        post_id: postId,
+        content: replyContent.trim()
       });
       
+      // Recargar comentarios después de crear para mostrar la respuesta
+      await loadComments();
       setReplyingToCommentId(null);
       setReplyContent('');
+      
+      toast({
+        title: "Respuesta enviada",
+        description: "Tu respuesta se ha publicado exitosamente",
+      });
     } catch (error) {
       console.error('Error submitting reply:', error);
       toast({
@@ -221,7 +283,7 @@ const PostComments = ({ postId, isOpen, onClose, onCommentAdded }) => {
           <div className="flex items-center space-x-2">
             <MessageCircle className="h-5 w-5 text-purple-400" />
             <h3 className="text-lg font-semibold text-white">Comentarios</h3>
-            <span className="text-sm text-purple-300">({comments.length})</span>
+            <span className="text-sm text-purple-300">({comments.length + (comments.reduce((sum, c) => sum + (c.replies?.length || 0), 0))})</span>
           </div>
           <Button
             variant="ghost"
@@ -406,22 +468,61 @@ const PostComments = ({ postId, isOpen, onClose, onCommentAdded }) => {
                             </div>
                           )}
                           
-                          {/* Replies display (cuando se implemente en el backend) */}
+                          {/* Replies display - Mostrar JUSTO DESPUÉS del comentario padre */}
                           {comment.replies && comment.replies.length > 0 && (
-                            <div className="mt-3 ml-4 space-y-2 border-l-2 border-purple-500/30 pl-3">
-                              {comment.replies.map((reply) => (
-                                <div key={reply.comment_reply_id || reply.id} className="bg-black/20 rounded p-2">
-                                  <div className="flex items-center space-x-2 mb-1">
-                                    <span className="text-xs font-medium text-white">
-                                      {reply.user?.display_name || reply.user?.name || 'Usuario'}
-                                    </span>
-                                    <span className="text-xs text-purple-400">
-                                      {formatDate(reply.created_at)}
-                                    </span>
+                            <div className="mt-4 ml-6 space-y-3 border-l-3 border-purple-500/40 pl-4 bg-black/10 rounded-r-lg py-2">
+                              <div className="text-xs text-purple-400/70 mb-2 font-medium">
+                                {comment.replies.length} {comment.replies.length === 1 ? 'respuesta' : 'respuestas'}
+                              </div>
+                              {comment.replies.map((reply) => {
+                                const replyId = reply.comment_post_id || reply.comment_id || reply.id;
+                                const isReplyOwner = isCommentOwner(reply);
+                                
+                                return (
+                                  <div key={replyId} className="bg-black/30 rounded-lg p-3 border border-purple-500/20">
+                                    <div className="flex items-start space-x-2">
+                                      <Avatar className="w-6 h-6 flex-shrink-0 border border-purple-500/30">
+                                        <AvatarImage 
+                                          src={reply.user?.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(reply.user?.display_name || reply.user?.username || 'User')}&background=7c3aed&color=fff&size=24`}
+                                          alt={reply.user?.username || 'User'}
+                                        />
+                                        <AvatarFallback className="bg-purple-700 text-white text-xs">
+                                          {(reply.user?.display_name || reply.user?.username || 'U').charAt(0).toUpperCase()}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <div className="flex items-center space-x-2">
+                                            <span className="text-xs font-semibold text-purple-300">
+                                              {reply.user?.display_name || reply.user?.username || 'Usuario'}
+                                            </span>
+                                            <span className="text-xs text-purple-400/70">
+                                              {formatDate(reply.created_at)}
+                                            </span>
+                                            <Badge variant="outline" className="h-4 px-1.5 text-[10px] border-purple-500/30 text-purple-400">
+                                              Respuesta
+                                            </Badge>
+                                          </div>
+                                          {isReplyOwner && (
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => handleDeleteComment(replyId)}
+                                              className="h-5 w-5 p-0 text-red-400 hover:text-red-300"
+                                              title="Eliminar respuesta"
+                                            >
+                                              <Trash2 className="h-2.5 w-2.5" />
+                                            </Button>
+                                          )}
+                                        </div>
+                                        <p className="text-sm text-purple-200 leading-relaxed whitespace-pre-wrap break-words mt-1">
+                                          {reply.content || reply.text}
+                                        </p>
+                                      </div>
+                                    </div>
                                   </div>
-                                  <p className="text-sm text-purple-200">{reply.text || reply.content}</p>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </>

@@ -301,6 +301,13 @@ export const API_URL_POST_COMMENTS_BY_POST = `${API_URL_POST_COMMENTS}/:postId` 
 export const API_URL_POST_COMMENTS_UPDATE = `${API_URL_POST_COMMENTS}/:commentId` // PUT /api/posts/comments/:commentId
 export const API_URL_POST_COMMENTS_DELETE = `${API_URL_POST_COMMENTS}/:commentId` // DELETE /api/posts/comments/:commentId
 
+// ==================== POST REPLY COMMENTS ====================
+export const API_URL_POST_REPLIES = `${API_URL_POSTS}/replies` // POST /api/posts/replies
+export const API_URL_POST_REPLIES_BY_COMMENT = `${API_URL_POST_REPLIES}/comment/:comment_post_id` // GET /api/posts/replies/comment/:comment_post_id
+export const API_URL_POST_REPLIES_UPDATE = `${API_URL_POST_REPLIES}/:reply_id` // PUT /api/posts/replies/:reply_id
+export const API_URL_POST_REPLIES_DELETE = `${API_URL_POST_REPLIES}/:reply_id` // DELETE /api/posts/replies/:reply_id
+export const API_URL_POST_REPLIES_COUNT = `${API_URL_POST_REPLIES}/comment/:comment_post_id/count` // GET /api/posts/replies/comment/:comment_post_id/count
+
 // ==================== POST LIKES ====================
 export const API_URL_POST_LIKES_TOGGLE = `${API_URL_POSTS}/likes/toggle` // POST /api/posts/likes/toggle
 export const API_URL_POST_LIKES_BY_POST = `${API_URL_POSTS}/:postId/likes` // GET /api/posts/:postId/likes

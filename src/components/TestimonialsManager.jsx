@@ -186,8 +186,8 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
       const newTestimonial = await createTestimonial(formData, imageFile || null);
       
       toast.success('Testimonio creado exitosamente');
-      setIsCreateModalOpen(false);
-      resetForm();
+    setIsCreateModalOpen(false);
+    resetForm();
       
       // Recargar testimonios
       await loadTestimonials();
@@ -229,9 +229,9 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
       await updateTestimonial(testimonialId, formData, editImageFile || null);
       
       toast.success('Testimonio actualizado exitosamente');
-      setIsEditModalOpen(false);
-      resetForm();
-      setSelectedTestimonial(null);
+    setIsEditModalOpen(false);
+    resetForm();
+    setSelectedTestimonial(null);
       setEditImageFile(null);
       setEditImagePreview(null);
       
@@ -298,37 +298,37 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">Gestión de Testimonios</h2>
-          <p className="text-purple-300">Administra los testimonios de clientes y usuarios</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-white">Gestión de Testimonios</h2>
+          <p className="text-sm sm:text-base text-purple-300">Administra los testimonios de clientes y usuarios</p>
         </div>
-        <div className="flex space-x-4">
-          <Card className="bg-black/40 border-purple-500/30 px-4 py-2">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
+          <Card className="bg-black/40 border-purple-500/30 px-3 sm:px-4 py-2 flex-1 sm:flex-initial">
             <div className="flex items-center space-x-2">
-              <CheckCircle className="h-5 w-5 text-green-400" />
-              <div className="text-center">
-                <p className="text-sm text-purple-200">Activos</p>
-                <p className="text-xl font-bold text-white">{activeCount}</p>
+              <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-green-400 flex-shrink-0" />
+              <div className="text-center min-w-0">
+                <p className="text-xs sm:text-sm text-purple-200">Activos</p>
+                <p className="text-lg sm:text-xl font-bold text-white">{activeCount}</p>
               </div>
             </div>
           </Card>
-          <Card className="bg-black/40 border-purple-500/30 px-4 py-2">
+          <Card className="bg-black/40 border-purple-500/30 px-3 sm:px-4 py-2 flex-1 sm:flex-initial">
             <div className="flex items-center space-x-2">
-              <XCircle className="h-5 w-5 text-red-400" />
-              <div className="text-center">
-                <p className="text-sm text-purple-200">Inactivos</p>
-                <p className="text-xl font-bold text-white">{inactiveCount}</p>
+              <XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-400 flex-shrink-0" />
+              <div className="text-center min-w-0">
+                <p className="text-xs sm:text-sm text-purple-200">Inactivos</p>
+                <p className="text-lg sm:text-xl font-bold text-white">{inactiveCount}</p>
               </div>
             </div>
           </Card>
           <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800">
+              <Button className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" />
-                Crear Testimonio
+                <span className="text-xs sm:text-sm">Crear Testimonio</span>
               </Button>
             </DialogTrigger>
           </Dialog>
@@ -370,36 +370,36 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
       </Card>
 
       {/* Testimonials Grid */}
-      <div className="grid gap-6">
+      <div className="space-y-4 sm:space-y-6">
         {filteredTestimonials.map(testimonial => (
-          <Card key={testimonial.testimonial_id || testimonial.id} className="bg-black/40 border-purple-500/30">
-            <CardContent className="pt-6">
-              <div className="flex gap-6">
+          <Card key={testimonial.testimonial_id || testimonial.id} className="bg-black/40 border-purple-500/30 overflow-hidden hover:border-purple-500/50 transition-colors">
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
                 {/* Avatar */}
-                <div className="flex-shrink-0">
-                  <Avatar className="w-16 h-16">
-                    <AvatarImage src={testimonial.imagen_testimonio} alt={testimonial.name_testimonio} />
-                    <AvatarFallback className="bg-purple-600 text-white text-xl">
-                      {testimonial.name_testimonio.charAt(0)}
+                <div className="flex-shrink-0 flex justify-center sm:justify-start">
+                  <Avatar className="w-20 h-20 sm:w-24 sm:h-24">
+                    <AvatarImage src={testimonial.imagen_testimonio} alt={testimonial.name_testimonio} className="object-cover" />
+                    <AvatarFallback className="bg-purple-600 text-white text-xl sm:text-2xl">
+                      {testimonial.name_testimonio?.charAt(0) || 'U'}
                     </AvatarFallback>
                   </Avatar>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <h3 className="font-semibold text-white">{testimonial.name_testimonio}</h3>
-                      <p className="text-sm text-purple-300">{testimonial.cargo_testimonio}</p>
+                <div className="flex-1 space-y-3 min-w-0">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <h3 className="font-semibold text-white text-base sm:text-lg truncate">{testimonial.name_testimonio}</h3>
+                      <p className="text-xs sm:text-sm text-purple-300 truncate">{testimonial.cargo_testimonio}</p>
                       <p className="text-xs text-purple-400">
                         Creado: {testimonial.created_at ? formatDate(testimonial.created_at) : 'N/A'}
                       </p>
                     </div>
                     <Badge 
-                      className={testimonial.is_active 
+                      className={`${testimonial.is_active 
                         ? 'bg-green-900/50 text-green-200 border-green-600/30'
                         : 'bg-red-900/50 text-red-200 border-red-600/30'
-                      }
+                      } flex-shrink-0 w-fit`}
                     >
                       {testimonial.is_active ? (
                         <>
@@ -432,26 +432,26 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
                 </div>
 
                 {/* Actions */}
-                <div className="flex flex-col space-y-2">
+                <div className="flex flex-row sm:flex-col space-x-2 sm:space-x-0 sm:space-y-2 pt-2 sm:pt-0 border-t sm:border-t-0 sm:border-l border-purple-500/20 sm:pl-4 sm:ml-4">
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => handleToggleStatus(testimonial.testimonial_id || testimonial.id)}
                     disabled={isLoading}
-                    className={testimonial.is_active 
+                    className={`${testimonial.is_active 
                       ? "text-red-400 hover:bg-red-900/50"
                       : "text-green-400 hover:bg-green-900/50"
-                    }
+                    } flex-shrink-0 p-2`}
                   >
                     {testimonial.is_active ? (
                       <>
-                        <XCircle className="h-4 w-4 mr-1" />
-                        Desactivar
+                        <XCircle className="h-4 w-4 sm:mr-1" />
+                        <span className="hidden sm:inline">Desactivar</span>
                       </>
                     ) : (
                       <>
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Activar
+                        <CheckCircle className="h-4 w-4 sm:mr-1" />
+                        <span className="hidden sm:inline">Activar</span>
                       </>
                     )}
                   </Button>
@@ -460,18 +460,20 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
                     variant="ghost"
                     onClick={() => handleEdit(testimonial)}
                     disabled={isLoading}
-                    className="text-purple-300 hover:bg-purple-900/50"
+                    className="text-purple-300 hover:bg-purple-900/50 flex-shrink-0 p-2"
                   >
-                    <Edit className="h-4 w-4" />
+                    <Edit className="h-4 w-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Editar</span>
                   </Button>
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => handleDelete(testimonial.testimonial_id || testimonial.id)}
                     disabled={isLoading}
-                    className="text-red-400 hover:bg-red-900/50"
+                    className="text-red-400 hover:bg-red-900/50 flex-shrink-0 p-2"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Eliminar</span>
                   </Button>
                 </div>
               </div>
@@ -502,7 +504,7 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name_testimonio" className="text-purple-200">Nombre *</Label>
                 <Input
@@ -631,7 +633,7 @@ const TestimonialsManager = ({ testimonials, updateTestimonials }) => {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleUpdate} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="edit-name_testimonio" className="text-purple-200">Nombre *</Label>
                 <Input

@@ -96,73 +96,79 @@ const LandingPageManager = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">Landing Page Manager</h2>
-          <p className="text-purple-300">Edita el contenido y configuración de la página principal</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-white">Landing Page Manager</h2>
+          <p className="text-sm sm:text-base text-purple-300">Edita el contenido y configuración de la página principal</p>
         </div>
-        <div className="flex space-x-2">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <Button
             variant="outline"
             onClick={handlePreview}
-            className="border-purple-500/30 text-purple-300 hover:bg-purple-900/50"
+            className="border-purple-500/30 text-purple-300 hover:bg-purple-900/50 w-full sm:w-auto"
           >
             <Eye className="h-4 w-4 mr-2" />
-            Vista Previa
+            <span className="text-xs sm:text-sm">Vista Previa</span>
           </Button>
           <Button
             onClick={handleSave}
-            className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+            className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 w-full sm:w-auto"
           >
             <Save className="h-4 w-4 mr-2" />
-            Guardar Cambios
+            <span className="text-xs sm:text-sm">Guardar Cambios</span>
           </Button>
         </div>
       </div>
 
       {/* Content Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 bg-black/30 border border-purple-500/30">
-          <TabsTrigger 
-            value="hero" 
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
-          >
-            <Monitor className="h-4 w-4 mr-2" />
-            Hero Section
-          </TabsTrigger>
-          <TabsTrigger 
-            value="features" 
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
-          >
-            <Layout className="h-4 w-4 mr-2" />
-            Características
-          </TabsTrigger>
-          <TabsTrigger 
-            value="about" 
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
-          >
-            <Type className="h-4 w-4 mr-2" />
-            Acerca de
-          </TabsTrigger>
-          <TabsTrigger 
-            value="cta" 
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            Call to Action
-          </TabsTrigger>
-        </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
+        <div className="w-full overflow-x-auto scrollbar-hide pb-2">
+          <TabsList className="inline-flex w-max min-w-full bg-black/30 border border-purple-500/30 rounded-lg p-1.5 gap-1 sm:gap-1.5 md:gap-2">
+            <TabsTrigger 
+              value="hero" 
+              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all"
+            >
+              <Monitor className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Hero Section</span>
+              <span className="sm:hidden">Hero</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="features" 
+              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all"
+            >
+              <Layout className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden md:inline">Características</span>
+              <span className="md:hidden">Caract.</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="about" 
+              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all"
+            >
+              <Type className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Acerca de</span>
+              <span className="sm:hidden">Acerca</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="cta" 
+              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all"
+            >
+              <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Call to Action</span>
+              <span className="sm:hidden">CTA</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Hero Section */}
         <TabsContent value="hero">
           <Card className="bg-black/40 border-purple-500/30">
             <CardHeader>
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <CardTitle className="text-white">Sección Hero</CardTitle>
-                  <CardDescription className="text-purple-300">
+                  <CardTitle className="text-white text-lg sm:text-xl">Sección Hero</CardTitle>
+                  <CardDescription className="text-purple-300 text-sm sm:text-base">
                     Configura el contenido principal de la página de inicio
                   </CardDescription>
                 </div>
@@ -171,7 +177,7 @@ const LandingPageManager = () => {
                     checked={content.hero.is_active}
                     onCheckedChange={(checked) => handleHeroChange('is_active', checked)}
                   />
-                  <Label className="text-purple-200">
+                  <Label className="text-purple-200 text-sm">
                     {content.hero.is_active ? 'Activo' : 'Inactivo'}
                   </Label>
                 </div>
@@ -245,10 +251,10 @@ const LandingPageManager = () => {
         <TabsContent value="features">
           <Card className="bg-black/40 border-purple-500/30">
             <CardHeader>
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <CardTitle className="text-white">Sección de Características</CardTitle>
-                  <CardDescription className="text-purple-300">
+                  <CardTitle className="text-white text-lg sm:text-xl">Sección de Características</CardTitle>
+                  <CardDescription className="text-purple-300 text-sm sm:text-base">
                     Configura las características principales de tu plataforma
                   </CardDescription>
                 </div>
@@ -257,14 +263,14 @@ const LandingPageManager = () => {
                     checked={content.features.is_active}
                     onCheckedChange={(checked) => handleFeaturesChange('is_active', checked)}
                   />
-                  <Label className="text-purple-200">
+                  <Label className="text-purple-200 text-sm">
                     {content.features.is_active ? 'Activo' : 'Inactivo'}
                   </Label>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+            <CardContent className="space-y-4 sm:space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-purple-200">Título de Sección</Label>
                   <Input
@@ -309,7 +315,7 @@ const LandingPageManager = () => {
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label className="text-purple-200">Título</Label>
                           <Input
@@ -350,10 +356,10 @@ const LandingPageManager = () => {
         <TabsContent value="about">
           <Card className="bg-black/40 border-purple-500/30">
             <CardHeader>
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <CardTitle className="text-white">Sección Acerca de</CardTitle>
-                  <CardDescription className="text-purple-300">
+                  <CardTitle className="text-white text-lg sm:text-xl">Sección Acerca de</CardTitle>
+                  <CardDescription className="text-purple-300 text-sm sm:text-base">
                     Configura la información sobre tu empresa o historia
                   </CardDescription>
                 </div>
@@ -362,7 +368,7 @@ const LandingPageManager = () => {
                     checked={content.about.is_active}
                     onCheckedChange={(checked) => handleAboutChange('is_active', checked)}
                   />
-                  <Label className="text-purple-200">
+                  <Label className="text-purple-200 text-sm">
                     {content.about.is_active ? 'Activo' : 'Inactivo'}
                   </Label>
                 </div>
@@ -405,10 +411,10 @@ const LandingPageManager = () => {
         <TabsContent value="cta">
           <Card className="bg-black/40 border-purple-500/30">
             <CardHeader>
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <CardTitle className="text-white">Call to Action</CardTitle>
-                  <CardDescription className="text-purple-300">
+                  <CardTitle className="text-white text-lg sm:text-xl">Call to Action</CardTitle>
+                  <CardDescription className="text-purple-300 text-sm sm:text-base">
                     Configura la sección de llamada a la acción final
                   </CardDescription>
                 </div>
@@ -417,7 +423,7 @@ const LandingPageManager = () => {
                     checked={content.cta.is_active}
                     onCheckedChange={(checked) => handleCtaChange('is_active', checked)}
                   />
-                  <Label className="text-purple-200">
+                  <Label className="text-purple-200 text-sm">
                     {content.cta.is_active ? 'Activo' : 'Inactivo'}
                   </Label>
                 </div>
@@ -443,7 +449,7 @@ const LandingPageManager = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-purple-200">Texto del Botón</Label>
                   <Input

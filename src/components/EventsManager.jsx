@@ -720,16 +720,16 @@ const EventsManager = ({ events, updateEvents }) => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-white">Gestión de Eventos</h2>
-          <p className="text-purple-300">Administra todos los eventos de la plataforma</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-xl sm:text-2xl font-bold text-white">Gestión de Eventos</h2>
+          <p className="text-sm sm:text-base text-purple-300 mt-1">Administra todos los eventos de la plataforma</p>
         </div>
         <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800">
+            <Button className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800">
               <Plus className="h-4 w-4 mr-2" />
               Crear Evento
             </Button>
@@ -1090,8 +1090,8 @@ const EventsManager = ({ events, updateEvents }) => {
 
       {/* Filters */}
       <Card className="bg-black/40 border-purple-500/30">
-        <CardContent className="pt-6">
-          <div className="grid gap-4 md:grid-cols-3">
+        <CardContent className="pt-4 sm:pt-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label className="text-purple-200">Buscar</Label>
               <div className="relative">
@@ -1141,85 +1141,87 @@ const EventsManager = ({ events, updateEvents }) => {
       </Card>
 
       {/* Events Grid */}
-      <div className="grid gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
         {filteredEvents.map(event => (
-          <Card key={event.id || event.event_id || event.eventId || `event-${event.title}`} className="bg-black/40 border-purple-500/30">
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div className="space-y-2">
-                  <div className="flex items-start space-x-3">
-                    {event.cover_image && (
-                      <img 
-                        src={event.cover_image} 
-                        alt={event.title}
-                        className="w-16 h-16 rounded-lg object-cover"
-                      />
-                    )}
-                    <div className="flex-1">
-                      <CardTitle className="text-white">{event.title}</CardTitle>
-                      <CardDescription className="text-purple-300">
-                        {event.description}
-                      </CardDescription>
-                      {event.organizer && (
-                        <div className="flex items-center space-x-2 mt-1">
-                          <img 
-                            src={event.organizer.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(event.organizer.display_name || event.organizer.username || 'User')}&background=7c3aed&color=fff&size=24`} 
-                            alt={event.organizer.display_name || event.organizer.username}
-                            className="w-6 h-6 rounded-full object-cover"
-                            onError={(e) => {
-                              e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(event.organizer.display_name || event.organizer.username || 'User')}&background=7c3aed&color=fff&size=24`;
-                            }}
-                          />
-                          <p className="text-xs text-purple-400">
-                            Por: {event.organizer.display_name || event.organizer.username}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-4 text-sm text-purple-200">
-                    <div className="flex items-center space-x-1">
-                      <Calendar className="h-4 w-4" />
-                      <span>{formatDate(event.date_time)}</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <MapPin className="h-4 w-4" />
-                      <span>{typeof event.location === 'string' ? event.location : 'Ubicación no disponible'}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-col space-y-2 items-end">
-                  <Badge className={getStatusColor(event.status)}>
+          <Card key={event.id || event.event_id || event.eventId || `event-${event.title}`} className="bg-black/40 border-purple-500/30 overflow-hidden hover:border-purple-500/50 transition-colors">
+            {/* Event Image - Full Width */}
+            {event.cover_image && (
+              <div className="w-full h-48 sm:h-56 md:h-52 lg:h-64 xl:h-72 relative overflow-hidden">
+                <img 
+                  src={event.cover_image} 
+                  alt={event.title}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex flex-col gap-1.5 sm:gap-2">
+                  <Badge className={`${getStatusColor(event.status)} text-xs sm:text-sm px-2 py-0.5`}>
                     {event.status === 'upcoming' ? 'Próximo' : 
                      event.status === 'ongoing' ? 'En curso' : 'Pasado'}
                   </Badge>
-                  <Badge variant="secondary" className="bg-purple-900/50 text-purple-200">
+                  <Badge variant="secondary" className="bg-purple-900/50 text-purple-200 text-xs sm:text-sm px-2 py-0.5">
                     {event.category}
                   </Badge>
                 </div>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex justify-between items-center">
-                <div className="flex space-x-6 text-sm text-purple-200">
-                  <div className="flex items-center space-x-1">
-                    <Users className="h-4 w-4" />
-                    <span>{event.attendees_count} asistentes</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <Users className="h-4 w-4" />
-                    <span>{event.subscribers_count} suscritos</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <Heart className="h-4 w-4" />
-                    <span>{event.likes_count} likes</span>
+            )}
+            <CardHeader className="p-4 sm:p-6">
+              <div className="space-y-2 sm:space-y-3">
+                <div>
+                  <CardTitle className="text-white text-base sm:text-lg md:text-xl mb-1 sm:mb-2 line-clamp-2">{event.title}</CardTitle>
+                  <CardDescription className="text-purple-300 text-xs sm:text-sm md:text-base line-clamp-2">
+                    {event.description}
+                  </CardDescription>
+                  {event.organizer && (
+                    <div className="flex items-center space-x-2 mt-2">
+                      <img 
+                        src={event.organizer.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(event.organizer.display_name || event.organizer.username || 'User')}&background=7c3aed&color=fff&size=32`} 
+                        alt={event.organizer.display_name || event.organizer.username}
+                        className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 rounded-full object-cover border-2 border-purple-500/30 flex-shrink-0"
+                        onError={(e) => {
+                          e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(event.organizer.display_name || event.organizer.username || 'User')}&background=7c3aed&color=fff&size=32`;
+                        }}
+                      />
+                      <p className="text-xs sm:text-sm text-purple-400 truncate">
+                        Por: {event.organizer.display_name || event.organizer.username}
+                      </p>
+                    </div>
+                  )}
+                  <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm text-purple-200 mt-2 sm:mt-3">
+                    <div className="flex items-center space-x-1 min-w-0">
+                      <Calendar className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                      <span className="truncate">{formatDate(event.date_time)}</span>
+                    </div>
+                    <div className="flex items-center space-x-1 min-w-0 flex-1 sm:flex-initial">
+                      <MapPin className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                      <span className="truncate">{typeof event.location === 'string' ? event.location : 'Ubicación no disponible'}</span>
+                    </div>
                   </div>
                 </div>
-                <div className="flex space-x-2">
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="flex flex-col gap-3 sm:gap-4">
+                <div className="flex flex-wrap gap-3 sm:gap-4 md:gap-6 text-xs sm:text-sm text-purple-200">
+                  <div className="flex items-center space-x-1">
+                    <Users className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                    <span>{event.attendees_count || 0} asistentes</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <Users className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                    <span>{event.subscribers_count || 0} suscritos</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <Heart className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                    <span>{event.likes_count || 0} likes</span>
+                  </div>
+                </div>
+                <div className="flex space-x-2 justify-end">
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="text-purple-300 hover:bg-purple-900/50"
+                    className="text-purple-300 hover:bg-purple-900/50 h-8 w-8 p-0"
+                    title="Ver evento"
                   >
                     <Eye className="h-4 w-4" />
                   </Button>
@@ -1227,7 +1229,8 @@ const EventsManager = ({ events, updateEvents }) => {
                     size="sm"
                     variant="ghost"
                     onClick={() => handleEdit(event)}
-                    className="text-purple-300 hover:bg-purple-900/50"
+                    className="text-purple-300 hover:bg-purple-900/50 h-8 w-8 p-0"
+                    title="Editar evento"
                   >
                     <Edit className="h-4 w-4" />
                   </Button>
@@ -1235,7 +1238,8 @@ const EventsManager = ({ events, updateEvents }) => {
                     size="sm"
                     variant="ghost"
                     onClick={() => handleDelete(event)}
-                    className="text-red-400 hover:bg-red-900/50"
+                    className="text-red-400 hover:bg-red-900/50 h-8 w-8 p-0"
+                    title="Eliminar evento"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

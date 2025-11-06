@@ -208,15 +208,15 @@ const Dashboard = ({ onLogout }) => {
         
         if (existingEvent) {
           // Si existe, actualizarlo
-          const updatedEvent = await updateEvents(newEvents);
-          setEvents((prev) =>
-            prev.map((event) =>
+      const updatedEvent = await updateEvents(newEvents);
+      setEvents((prev) =>
+        prev.map((event) =>
               (event.id === eventId || event.event_id === eventId) 
                 ? updatedEvent 
                 : event
-            )
-          );
-          toast.success('Evento actualizado correctamente');
+        )
+      );
+      toast.success('Evento actualizado correctamente');
         } else {
           // Si no existe, agregarlo solo si tiene un ID válido
           if (eventId && eventId !== 'undefined' && eventId !== 'null') {
@@ -237,7 +237,7 @@ const Dashboard = ({ onLogout }) => {
       console.error('Error updating events:', error);
       // Solo mostrar error si realmente había un error (no si es solo actualización de estado)
       if (newEvents && (newEvents.id || newEvents.event_id)) {
-        toast.error(error.message || 'Error al actualizar el evento');
+      toast.error(error.message || 'Error al actualizar el evento');
       }
     }
   };
@@ -313,23 +313,23 @@ const Dashboard = ({ onLogout }) => {
       {/* Header */}
       <header className="bg-black/50 backdrop-blur-sm border-b border-purple-500/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
-              <div className="w-24 h-24 rounded-lg flex items-center justify-center">
+          <div className="flex justify-between items-center h-16 py-2">
+            <div className="flex items-center space-x-2 min-w-0 flex-1">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 rounded-lg flex items-center justify-center flex-shrink-0">
                 <img 
                   src={require('../img/logoezploro.png')} 
                   alt="Ezploro Logo" 
-                  className="w-24 h-24 object-contain"
+                  className="w-full h-full object-contain"
                 />
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-white">Ezploro</h1>
-                <p className="text-sm text-purple-300">Panel de Administración</p>
+              <div className="min-w-0 flex-1">
+                <h1 className="text-base sm:text-lg md:text-xl font-bold text-white truncate">Ezploro</h1>
+                <p className="text-xs sm:text-sm text-purple-300 hidden sm:block">Panel de Administración</p>
               </div>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <Avatar className="h-8 w-8">
+            <div className="flex items-center space-x-2 sm:space-x-4 flex-shrink-0">
+              <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
                 <AvatarImage 
                   src={user?.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.display_name || user?.name || 'User')}&background=7c3aed&color=fff&size=32`} 
                   alt={user?.name}
@@ -337,19 +337,21 @@ const Dashboard = ({ onLogout }) => {
                     e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.display_name || user?.name || 'User')}&background=7c3aed&color=fff&size=32`;
                   }}
                 />
-                <AvatarFallback className="bg-purple-600 text-white">
+                <AvatarFallback className="bg-purple-600 text-white text-xs">
                   {(user?.name || 'U').charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              <span className="text-white font-medium hidden sm:block">{user?.display_name || user?.name}</span>
-              <Badge variant={user?.online_status ? 'default' : 'secondary'} className="ml-2">
+              <span className="text-white font-medium hidden md:block text-sm lg:text-base truncate max-w-[120px] lg:max-w-none">
+                {user?.display_name || user?.name}
+              </span>
+              <Badge variant={user?.online_status ? 'default' : 'secondary'} className="ml-2 hidden sm:inline-flex text-xs">
                 {user?.online_status ? 'En línea' : 'Desconectado'}
               </Badge>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleLogout}
-                className="text-purple-300 hover:text-white hover:bg-purple-900/50"
+                className="text-purple-300 hover:text-white hover:bg-purple-900/50 p-2"
               >
                 <LogOut className="h-4 w-4" />
               </Button>
@@ -359,76 +361,87 @@ const Dashboard = ({ onLogout }) => {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-9 bg-black/30 border border-purple-500/30">
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
+          <div className="w-full">
+            <TabsList className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-9 gap-2 sm:gap-2.5 bg-black/40 border border-purple-500/30 rounded-lg p-3 sm:p-4 md:p-5 [&>*]:w-full" style={{ display: 'grid', height: '100%' }}>
             <TabsTrigger
               value="overview"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
+              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
             >
-              <BarChart3 className="h-4 w-4 mr-2" />
-              Resumen
+              <BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Resumen</span>
+              <span className="sm:hidden">Res.</span>
             </TabsTrigger>
             <TabsTrigger
               value="events"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
+              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
             >
-              <Calendar className="h-4 w-4 mr-2" />
-              Eventos
+              <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Eventos</span>
+              <span className="sm:hidden">Ev.</span>
             </TabsTrigger>
             <TabsTrigger
               value="contacts"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
+              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
             >
-              <MessageCircle className="h-4 w-4 mr-2" />
-              Contactos
+              <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Contactos</span>
+              <span className="sm:hidden">Cont.</span>
             </TabsTrigger>
             <TabsTrigger
               value="testimonials"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
+              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
             >
-              <Star className="h-4 w-4 mr-2" />
-              Testimonios
+              <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden md:inline">Testimonios</span>
+              <span className="md:hidden">Test.</span>
             </TabsTrigger>
             <TabsTrigger
               value="posts"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
+              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
             >
-              <FileText className="h-4 w-4 mr-2" />
-              Posts
+              <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Posts</span>
+              <span className="sm:hidden">P.</span>
             </TabsTrigger>
             <TabsTrigger
               value="landing"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
+              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
             >
-              <Monitor className="h-4 w-4 mr-2" />
-              Landing
+              <Monitor className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden md:inline">Landing</span>
+              <span className="md:hidden">Land.</span>
             </TabsTrigger>
             <TabsTrigger
               value="social"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
+              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
             >
-              <Globe className="h-4 w-4 mr-2" />
-              Social
+              <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden md:inline">Social</span>
+              <span className="md:hidden">Soc.</span>
             </TabsTrigger>
             <TabsTrigger
               value="gamification"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
+              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
             >
-              <Trophy className="h-4 w-4 mr-2" />
-              Gamificación
+              <Trophy className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden lg:inline">Gamificación</span>
+              <span className="lg:hidden">Gam.</span>
             </TabsTrigger>
             <TabsTrigger
               value="user-management"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
+              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
             >
-              <User className="h-4 w-4 mr-2" />
-              Usuario
+              <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden md:inline">Usuario</span>
+              <span className="md:hidden">Usu.</span>
             </TabsTrigger>
           </TabsList>
+          </div>
 
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+          <TabsContent value="overview" className="space-y-4 sm:space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6">
               <AnimatedCounter
                 title="Total Eventos"
                 value={events.length}

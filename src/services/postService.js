@@ -5,12 +5,57 @@ import {
   API_URL_POSTS_BY_USER,
   API_URL_POST_COMMENTS,
   API_URL_POST_COMMENTS_BY_POST,
+  API_URL_POST_COMMENTS_CREATE,
+  API_URL_POST_COMMENTS_UPDATE,
+  API_URL_POST_COMMENTS_DELETE,
   API_URL_POST_LIKES_TOGGLE,
   API_URL_POST_LIKES_BY_POST,
+  API_URL_POST_REPLIES,
+  API_URL_POST_REPLIES_BY_COMMENT,
+  API_URL_POST_REPLIES_UPDATE,
+  API_URL_POST_REPLIES_DELETE,
   DASHBOARD_CONFIG,
+  BASE_URL,
   BASE_URL_IMAGE
 } from './config';
-import { getAuthToken } from './authService';
+import { getAuthToken, getCurrentUserId } from './authService';
+
+/**
+ * Procesa los datos del comentario para incluir URLs completas de imágenes
+ * @param {Object} comment - Datos del comentario
+ * @returns {Object} Comentario procesado con URLs completas
+ */
+const processCommentData = (comment) => {
+  if (!comment) return comment;
+
+  // Función helper para procesar URLs de imágenes
+  const processImageUrl = (imageUrl) => {
+    if (!imageUrl) return imageUrl;
+    // Si ya es una URL completa, devolverla tal como está
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+      return imageUrl;
+    }
+    // Si comienza con /, es una ruta absoluta del servidor
+    if (imageUrl.startsWith('/')) {
+      return `${BASE_URL_IMAGE}${imageUrl}`;
+    }
+    // Si es una ruta relativa, agregar la base URL con /
+    return `${BASE_URL_IMAGE}/${imageUrl}`;
+  };
+
+  return {
+    ...comment,
+    // Procesar imágenes del comentario (puede ser un array o string)
+    image: comment.image ? (Array.isArray(comment.image) ? comment.image.map(processImageUrl) : processImageUrl(comment.image)) : comment.image,
+    
+    // Procesar datos del usuario que hizo el comentario
+    user: comment.user ? {
+      ...comment.user,
+      profile_picture: comment.user.profile_picture ? processImageUrl(comment.user.profile_picture) : comment.user.profile_picture,
+      avatar: comment.user.avatar ? processImageUrl(comment.user.avatar) : comment.user.avatar,
+    } : comment.user,
+  };
+};
 
 /**
  * Procesa los datos del post para incluir URLs completas de imágenes
@@ -382,32 +427,267 @@ export const deleteComment = async (commentId) => {
 // Get post comments
 export const getPostComments = async (postId) => {
   try {
+    console.log('🔍 Fetching comments for post:', postId);
     const url = API_URL_POST_COMMENTS_BY_POST.replace(':postId', postId);
-    const response = await fetchWithAuth(url, {
-      method: 'GET',
-    });
-    const comments = response.data || response || [];
+    console.log('🔗 URL:', url);
     
-    // Procesar fotos de perfil en comentarios y manejar diferentes formatos de ID
-    return comments.map(comment => ({
-      ...comment,
-      comment_post_id: comment.comment_post_id || comment.comment_id || comment.id,
-      comment_id: comment.comment_post_id || comment.comment_id || comment.id,
-      user: comment.user ? {
-        ...comment.user,
-        profile_picture: comment.user.profile_picture ? 
-          (comment.user.profile_picture.startsWith('http') 
-            ? comment.user.profile_picture 
-            : `${BASE_URL_IMAGE}/${comment.user.profile_picture}`) : null,
-        avatar: comment.user.avatar ? 
-          (comment.user.avatar.startsWith('http') 
-            ? comment.user.avatar 
-            : `${BASE_URL_IMAGE}/${comment.user.avatar}`) : null,
-      } : null,
-    }));
+    const response = await fetchWithAuth(url);
+    console.log('📦 Raw response:', response);
+    
+    // Intentar múltiples formatos de respuesta
+    let comments = [];
+    if (Array.isArray(response)) {
+      comments = response;
+    } else if (response && response.data) {
+      comments = Array.isArray(response.data) ? response.data : [];
+    } else if (response && Array.isArray(response.comments)) {
+      comments = response.comments;
+    }
+    
+    console.log('📋 Comments array:', comments);
+    
+    if (!comments || comments.length === 0) {
+      console.log('⚠️ No comments found, returning empty array');
+      return [];
+    }
+    
+    // Procesar comentarios y manejar diferentes formatos de ID
+    const processedComments = comments.map(comment => {
+      const processed = processCommentData(comment);
+      return {
+        ...processed,
+        comment_post_id: processed.comment_post_id || processed.comment_id || processed.id,
+        comment_id: processed.comment_post_id || processed.comment_id || processed.id,
+        id: processed.comment_post_id || processed.comment_id || processed.id,
+      };
+    });
+    
+    console.log('✅ Processed comments:', processedComments);
+    return processedComments;
   } catch (error) {
-    console.error('Error getting post comments:', error);
+    console.error('❌ Error getting post comments:', error);
     return [];
+  }
+};
+
+// Create post comment
+export const createPostComment = async (postId, { text, images = [] }) => {
+  try {
+    const formData = new FormData();
+    formData.append('text', text);
+    formData.append('post_id', postId);
+    images.forEach(img => formData.append('images', img));
+
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    const response = await fetch(API_URL_POST_COMMENTS_CREATE, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Error al comentar');
+    }
+
+    const result = await response.json();
+    return { data: processCommentData(result.data || result) };
+  } catch (error) {
+    console.error('Error creating post comment:', error);
+    throw error;
+  }
+};
+
+// Get comment replies
+export const getCommentReplies = async (commentPostId) => {
+  try {
+    const url = API_URL_POST_REPLIES_BY_COMMENT.replace(':comment_post_id', commentPostId);
+    const response = await fetchWithAuth(url);
+    const replies = response.data || response || [];
+    console.log('📨 Replies obtenidas del backend:', replies);
+    return replies.map(processCommentData);
+  } catch (error) {
+    console.error('Error getting comment replies:', error);
+    return [];
+  }
+};
+
+// Create comment reply
+export const createCommentReply = async ({ postId, commentId, text, images = [] }) => {
+  try {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    // Obtener user_id del usuario actual
+    const userId = getCurrentUserId();
+    if (!userId) {
+      throw new Error('No se pudo obtener el ID del usuario');
+    }
+
+    // Si hay imágenes, usar FormData, sino usar JSON
+    let body;
+    let headers = {
+      Authorization: `Bearer ${token}`,
+    };
+
+    if (images && images.length > 0) {
+      const formData = new FormData();
+      formData.append('comment_post_id', commentId);
+      formData.append('user_id', userId);
+      formData.append('content', text);
+      images.forEach(img => formData.append('images', img));
+      body = formData;
+    } else {
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify({
+        comment_post_id: commentId,
+        user_id: userId,
+        content: text
+      });
+    }
+
+    const response = await fetch(API_URL_POST_REPLIES, {
+      method: 'POST',
+      headers: headers,
+      body: body
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Error al crear la respuesta');
+    }
+
+    const result = await response.json();
+    return processCommentData(result.data || result);
+  } catch (error) {
+    console.error('Error creating comment reply:', error);
+    throw error;
+  }
+};
+
+// Update post comment
+export const updatePostComment = async (commentId, { text }) => {
+  try {
+    const formData = new FormData();
+    formData.append('text', text);
+
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    const url = API_URL_POST_COMMENTS_UPDATE.replace(':commentId', commentId);
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Error al editar');
+    }
+
+    const result = await response.json();
+    return processCommentData(result.data || result);
+  } catch (error) {
+    console.error('Error updating post comment:', error);
+    throw error;
+  }
+};
+
+// Delete post comment
+export const deletePostComment = async (commentId) => {
+  try {
+    const url = API_URL_POST_COMMENTS_DELETE.replace(':commentId', commentId);
+    await fetchWithAuth(url, { method: 'DELETE' });
+  } catch (error) {
+    console.error('Error deleting post comment:', error);
+    throw error;
+  }
+};
+
+// Update reply
+export const updatePostReply = async (replyId, { text }) => {
+  try {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    const url = API_URL_POST_REPLIES_UPDATE.replace(':reply_id', replyId);
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ content: text }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Error al editar la respuesta');
+    }
+
+    const result = await response.json();
+    return processCommentData(result.data || result);
+  } catch (error) {
+    console.error('Error updating post reply:', error);
+    throw error;
+  }
+};
+
+// Delete reply
+export const deletePostReply = async (replyId) => {
+  try {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    // Obtener user_id del usuario actual
+    const userId = getCurrentUserId();
+    if (!userId) {
+      throw new Error('No se pudo obtener el ID del usuario');
+    }
+
+    // Validar que el replyId existe y es válido
+    if (!replyId || replyId === 'undefined' || replyId === 'null') {
+      throw new Error('ID de respuesta inválido');
+    }
+
+    const url = API_URL_POST_REPLIES_DELETE.replace(':reply_id', String(replyId));
+    console.log('🗑️ URL de eliminación:', url);
+    console.log('🗑️ Reply ID:', replyId);
+    console.log('🗑️ User ID:', userId);
+    
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ user_id: userId }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('❌ Error del backend:', errorData);
+      throw new Error(errorData.message || errorData.error || `Error al eliminar la respuesta: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error deleting post reply:', error);
+    throw error;
   }
 };
 
@@ -471,27 +751,51 @@ export const getPostLikes = async (postId) => {
   }
 };
 
-// Create reply to comment (not implemented in backend yet)
-export const createReply = async (commentId, content) => {
+// Create reply to comment (legacy function - mantiene compatibilidad)
+export const createReply = async (commentId, replyData) => {
   try {
-    // This endpoint doesn't exist in the backend yet
-    console.warn('Reply functionality not implemented in backend yet');
-    return { message: 'Reply functionality not available' };
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    // Intentar crear reply usando el endpoint de comentarios con parent_comment_id
+    const response = await fetch(`${API_URL_POSTS}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        post_id: replyData.post_id,
+        content: replyData.content,
+        parent_comment_id: commentId, // Campo para indicar que es una respuesta
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    const reply = result.data || result;
+    
+    // Procesar datos del usuario en la respuesta
+    if (reply && reply.user) {
+      reply.user = {
+        ...reply.user,
+        profile_picture: reply.user.profile_picture ? 
+          `${BASE_URL_IMAGE}/${reply.user.profile_picture}` : null,
+        avatar: reply.user.avatar ? 
+          `${BASE_URL_IMAGE}/${reply.user.avatar}` : null,
+      };
+    }
+    
+    return reply;
   } catch (error) {
     console.error('Error creating reply:', error);
     throw error;
-  }
-};
-
-// Get comment replies (not implemented in backend yet)
-export const getCommentReplies = async (commentId) => {
-  try {
-    // This endpoint doesn't exist in the backend yet
-    console.warn('Reply functionality not implemented in backend yet');
-    return [];
-  } catch (error) {
-    console.error('Error getting replies:', error);
-    return [];
   }
 };
 

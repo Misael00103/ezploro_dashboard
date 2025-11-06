@@ -1,68 +1,50 @@
+// services/commentService.js
 import { fetchWithAuth } from './userService';
 import { 
-  API_URL_EVENT_COMMENTS, 
-  API_URL_COMMENTS_UPDATE, 
-  API_URL_COMMENTS_DELETE, 
-  API_URL_COMMENT_REPLIES, 
-  API_URL_COMMENT_REPLIES_CREATE,
   BASE_URL,
   BASE_URL_IMAGE
 } from './config';
 import { getAuthToken } from './authService';
 
 /**
- * Procesa los datos del comentario para incluir URLs completas de imágenes
- * @param {Object} comment - Datos del comentario
- * @returns {Object} Comentario procesado con URLs completas
+ * Procesa URLs de imágenes (perfil, comentarios, etc.)
  */
+const processImageUrl = (url) => {
+  if (!url) return url;
+  if (url.startsWith('http')) return url;
+  if (url.startsWith('/')) return `${BASE_URL_IMAGE}${url}`;
+  return `${BASE_URL_IMAGE}/${url}`;
+};
+
 const processCommentData = (comment) => {
   if (!comment) return comment;
 
-  // Función helper para procesar URLs de imágenes
-  const processImageUrl = (imageUrl) => {
-    if (!imageUrl) return imageUrl;
-    // Si ya es una URL completa, devolverla tal como está
-    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-      return imageUrl;
-    }
-    // Si comienza con /, es una ruta absoluta del servidor
-    if (imageUrl.startsWith('/')) {
-      return `${BASE_URL_IMAGE}${imageUrl}`;
-    }
-    // Si es una ruta relativa, agregar la base URL con /
-    return `${BASE_URL_IMAGE}/${imageUrl}`;
-  };
-
   return {
     ...comment,
-    // Procesar imágenes del comentario
-    image: comment.image ? comment.image.map(processImageUrl) : comment.image,
-    
-    // Procesar datos del usuario que hizo el comentario
+    id: comment.comment_id || comment.id,
+    createdAt: comment.created_at || comment.createdAt,
+    text: comment.text || comment.content,
+    image: Array.isArray(comment.image) 
+      ? comment.image.map(processImageUrl)
+      : (comment.image ? [processImageUrl(comment.image)] : []),
     user: comment.user ? {
       ...comment.user,
-      profile_picture: comment.user.profile_picture ? processImageUrl(comment.user.profile_picture) : comment.user.profile_picture,
-      avatar: comment.user.avatar ? processImageUrl(comment.user.avatar) : comment.user.avatar,
-    } : comment.user,
+      id: comment.user.user_id || comment.user.id,
+      display_name: comment.user.display_name || comment.user.name,
+      profile_picture: processImageUrl(comment.user.profile_picture || comment.user.avatar),
+    } : null,
+    replies: comment.replies || []
   };
 };
 
 /**
- * Obtiene los comentarios de un evento
- * @param {string} eventId - ID del evento
- * @returns {Promise<Array>} Lista de comentarios
+ * Obtiene comentarios raíz del evento
  */
 export const getEventComments = async (eventId) => {
   try {
-    // Usar la ruta correcta: /events/:event_id/comments
     const url = `${BASE_URL}/events/${eventId}/comments`;
-    const response = await fetchWithAuth(url, {
-      method: 'GET',
-    });
-    
+    const response = await fetchWithAuth(url, { method: 'GET' });
     const comments = response.data || response || [];
-    
-    // Procesar fotos de perfil en comentarios
     return comments.map(processCommentData);
   } catch (error) {
     console.error('Error getting event comments:', error);
@@ -71,97 +53,94 @@ export const getEventComments = async (eventId) => {
 };
 
 /**
- * Crea un comentario en un evento
- * @param {string} eventId - ID del evento
- * @param {Object} commentData - Datos del comentario
- * @returns {Promise<Object>} Comentario creado
+ * Crea comentario principal
  */
 export const createEventComment = async (eventId, commentData) => {
   try {
     const formData = new FormData();
     formData.append('text', commentData.text);
-    
-    if (commentData.images && commentData.images.length > 0) {
-      commentData.images.forEach((image) => {
-        formData.append('images', image);
-      });
-    }
+    commentData.images?.forEach(img => formData.append('images', img));
 
     const token = getAuthToken();
-    if (!token) {
-      throw new Error('No hay token de autenticación');
-    }
-
-    // Usar la ruta correcta: /events/:event_id/comments
     const url = `${BASE_URL}/events/${eventId}/comments`;
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
-    }
-
+    if (!response.ok) throw new Error('Error al crear comentario');
     const result = await response.json();
-    const comment = result.data || result;
-    
-    return processCommentData(comment);
+    return { data: processCommentData(result.data || result) };
   } catch (error) {
-    console.error('Error creating event comment:', error);
+    console.error('Error creating comment:', error);
     throw error;
   }
 };
 
 /**
- * Actualiza un comentario
- * @param {string} commentId - ID del comentario
- * @param {Object} commentData - Nuevos datos del comentario
- * @returns {Promise<Object>} Comentario actualizado
+ * Obtiene replies de un comentario
+ */
+export const getCommentReplies = async (eventId, commentId) => {
+  try {
+    const url = `${BASE_URL}/comments/${eventId}/replies/${commentId}`;
+    const response = await fetchWithAuth(url, { method: 'GET' });
+    const replies = response.data || response || [];
+    return replies.map(processCommentData);
+  } catch (error) {
+    console.error('Error getting replies:', error);
+    return [];
+  }
+};
+
+/**
+ * Crea una respuesta (reply)
+ */
+export const createCommentReply = async (replyData) => {
+  try {
+    const formData = new FormData();
+    formData.append('eventId', replyData.eventId);
+    formData.append('commentId', replyData.commentId);
+    formData.append('text', replyData.text);
+    replyData.images?.forEach(img => formData.append('images', img));
+
+    const token = getAuthToken();
+    const url = `${BASE_URL}/comments/reply`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData
+    });
+
+    if (!response.ok) throw new Error('Error al responder');
+    const result = await response.json();
+    return processCommentData(result.data || result);
+  } catch (error) {
+    console.error('Error creating reply:', error);
+    throw error;
+  }
+};
+
+/**
+ * Actualiza comentario
  */
 export const updateEventComment = async (commentId, commentData) => {
   try {
     const formData = new FormData();
     formData.append('text', commentData.text);
-    
-    if (commentData.images && commentData.images.length > 0) {
-      commentData.images.forEach((image) => {
-        formData.append('images', image);
-      });
-    }
-
-    if (commentData.clearImages) {
-      formData.append('clearImages', 'true');
-    }
+    if (commentData.clearImages) formData.append('clearImages', 'true');
 
     const token = getAuthToken();
-    if (!token) {
-      throw new Error('No hay token de autenticación');
-    }
-
-    // Usar la ruta correcta: /comments/:id
     const url = `${BASE_URL}/comments/${commentId}`;
     const response = await fetch(url, {
       method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
-    }
-
+    if (!response.ok) throw new Error('Error al actualizar');
     const result = await response.json();
-    const comment = result.data || result;
-    
-    return processCommentData(comment);
+    return processCommentData(result.data || result);
   } catch (error) {
     console.error('Error updating comment:', error);
     throw error;
@@ -169,98 +148,19 @@ export const updateEventComment = async (commentId, commentData) => {
 };
 
 /**
- * Elimina un comentario
- * @param {string} commentId - ID del comentario
- * @returns {Promise<Object>} Respuesta de la eliminación
+ * Elimina comentario
  */
 export const deleteEventComment = async (commentId) => {
   try {
-    // Usar la ruta correcta: /comments/:id
     const url = `${BASE_URL}/comments/${commentId}`;
-    const response = await fetchWithAuth(url, {
-      method: 'DELETE',
-    });
-    return response;
+    await fetchWithAuth(url, { method: 'DELETE' });
   } catch (error) {
     console.error('Error deleting comment:', error);
     throw error;
   }
 };
 
-/**
- * Obtiene las respuestas a un comentario
- * @param {string} eventId - ID del evento
- * @param {string} commentId - ID del comentario
- * @returns {Promise<Array>} Lista de respuestas
- */
-export const getCommentReplies = async (eventId, commentId) => {
-  try {
-    // Usar la ruta correcta: /comments/:eventId/replies/:commentId
-    const url = `${BASE_URL}/comments/${eventId}/replies/${commentId}`;
-    const response = await fetchWithAuth(url, {
-      method: 'GET',
-    });
-    
-    const replies = response.data || response || [];
-    
-    // Procesar fotos de perfil en respuestas
-    return replies.map(processCommentData);
-  } catch (error) {
-    console.error('Error getting comment replies:', error);
-    return [];
-  }
-};
-
-/**
- * Crea una respuesta a un comentario
- * @param {Object} replyData - Datos de la respuesta
- * @returns {Promise<Object>} Respuesta creada
- */
-export const createCommentReply = async (replyData) => {
-  try {
-    const formData = new FormData();
-    formData.append('userId', replyData.userId);
-    formData.append('commentId', replyData.commentId);
-    formData.append('eventId', replyData.eventId);
-    formData.append('text', replyData.text);
-    
-    if (replyData.images && replyData.images.length > 0) {
-      replyData.images.forEach((image) => {
-        formData.append('images', image);
-      });
-    }
-
-    const token = getAuthToken();
-    if (!token) {
-      throw new Error('No hay token de autenticación');
-    }
-
-    // Usar la ruta correcta: /comments/reply
-    const url = `${BASE_URL}/comments/reply`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    const reply = result.data || result;
-    
-    return processCommentData(reply);
-  } catch (error) {
-    console.error('Error creating comment reply:', error);
-    throw error;
-  }
-};
-
-// Alias para mantener compatibilidad
+// Compatibilidad
 export const updateComment = updateEventComment;
 export const deleteComment = deleteEventComment;
 export const createComment = createEventComment;
