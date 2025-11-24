@@ -126,6 +126,20 @@ export const updateUserProfile = async (userData) => {
 // Sube una imagen de perfil
 export const uploadProfilePicture = async (file) => {
   try {
+    // Validar que el archivo existe y es válido
+    if (!file) {
+      throw new Error('No se proporcionó ningún archivo');
+    }
+    
+    if (!(file instanceof File) && !(file instanceof Blob)) {
+      throw new Error('El archivo proporcionado no es válido');
+    }
+    
+    console.log('🔵 uploadProfilePicture - Iniciando subida de imagen');
+    console.log('🔵 uploadProfilePicture - Nombre del archivo:', file.name);
+    console.log('🔵 uploadProfilePicture - Tamaño:', file.size, 'bytes');
+    console.log('🔵 uploadProfilePicture - Tipo:', file.type);
+    
     const token = getAuthToken();
     if (!token) {
       throw new Error('No hay sesión activa');
@@ -135,23 +149,98 @@ export const uploadProfilePicture = async (file) => {
     formData.append('image', file);
     formData.append('type', 'profile');
 
-    const response = await fetch(API_URL_USERS_UPLOAD_IMAGE, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
-    });
+    console.log('🔵 uploadProfilePicture - URL:', API_URL_USERS_UPLOAD_IMAGE);
+    console.log('🔵 uploadProfilePicture - Token presente:', !!token);
 
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.message || 'Error al subir la imagen');
+    let response;
+    try {
+      response = await fetch(API_URL_USERS_UPLOAD_IMAGE, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // NO incluir Content-Type para FormData, el navegador lo hace automáticamente
+        },
+        body: formData,
+      });
+    } catch (fetchError) {
+      console.error('🔴 uploadProfilePicture - Error en fetch:', fetchError);
+      console.error('🔴 uploadProfilePicture - Error name:', fetchError.name);
+      console.error('🔴 uploadProfilePicture - Error message:', fetchError.message);
+      
+      // Errores de red
+      if (fetchError.name === 'TypeError' || fetchError.message.includes('fetch')) {
+        throw new Error('Error de conexión al subir la imagen. Verifica tu conexión a internet y que el servidor esté disponible.');
+      }
+      
+      // Errores de CORS
+      if (fetchError.message.includes('CORS') || fetchError.message.includes('cross-origin')) {
+        throw new Error('Error de CORS al subir la imagen. Verifica la configuración del servidor.');
+      }
+      
+      throw new Error(`Error al conectar con el servidor: ${fetchError.message}`);
     }
 
-    return data.url;
+    console.log('🔵 uploadProfilePicture - Response status:', response.status);
+    console.log('🔵 uploadProfilePicture - Response ok:', response.ok);
+
+    // Intentar parsear la respuesta como JSON
+    let data;
+    try {
+      const responseText = await response.text();
+      console.log('🔵 uploadProfilePicture - Response text:', responseText);
+      
+      if (!responseText || responseText.trim() === '') {
+        throw new Error('El servidor no devolvió ninguna respuesta');
+      }
+      
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('🔴 uploadProfilePicture - Error parseando JSON:', parseError);
+        console.error('🔴 uploadProfilePicture - Response text que no se pudo parsear:', responseText);
+        throw new Error(`El servidor devolvió una respuesta inválida: ${responseText.substring(0, 100)}`);
+      }
+    } catch (textError) {
+      console.error('🔴 uploadProfilePicture - Error leyendo respuesta:', textError);
+      throw new Error(`Error al leer la respuesta del servidor: ${textError.message}`);
+    }
+    
+    console.log('🔵 uploadProfilePicture - Response data:', data);
+    
+    if (!response.ok) {
+      console.error('🔴 uploadProfilePicture - Error response:', data);
+      const errorMessage = data.message || data.error || data.details || `Error HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(errorMessage);
+    }
+
+    // El backend puede devolver la URL en diferentes formatos
+    // Intentar extraer la URL de diferentes propiedades posibles
+    const imageUrl = data.url || data.data?.url || data.image_url || data.data?.image_url || data;
+    
+    if (!imageUrl) {
+      console.error('🔴 uploadProfilePicture - No se encontró URL en la respuesta:', data);
+      throw new Error('El servidor no devolvió la URL de la imagen');
+    }
+    
+    console.log('✅ uploadProfilePicture - URL extraída:', imageUrl);
+    
+    // Si es un objeto completo, devolverlo para que createOffer lo procese
+    if (typeof imageUrl === 'object' && imageUrl !== null) {
+      console.warn('⚠️ uploadProfilePicture - La respuesta es un objeto, devolviendo completo:', imageUrl);
+      return imageUrl;
+    }
+    
+    return imageUrl;
   } catch (error) {
-    console.error('Error en userService.uploadProfilePicture:', error);
-    throw error;
+    console.error('🔴 Error en userService.uploadProfilePicture:', error);
+    console.error('🔴 Error stack:', error.stack);
+    
+    // Re-lanzar el error con un mensaje más claro
+    if (error.message) {
+      throw error;
+    } else {
+      throw new Error(`Error al subir la imagen: ${error.toString()}`);
+    }
   }
 };
 

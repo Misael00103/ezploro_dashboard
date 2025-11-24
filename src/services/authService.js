@@ -6,6 +6,7 @@ import {
   API_URL_AUTH_REGISTER,
   DASHBOARD_CONFIG 
 } from './config';
+import { jwtDecode } from 'jwt-decode';
 
 const API_URL = BASE_URL;
 
@@ -41,11 +42,40 @@ export const login = async (email, password) => {
     localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_KEY, JSON.stringify(data.user));
     
     // Store user ID with multiple fallbacks
-    const userId = data.user.user_id || data.user.id;
+    let userId = data.user.user_id || data.user.id || data.user._id;
     if (userId) {
-      localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_ID_KEY, userId);
+      // Convertir a número para asegurar consistencia
+      const userIdNum = parseInt(userId, 10);
+      if (!isNaN(userIdNum) && userIdNum > 0) {
+        // Guardar como número en ambas claves
+        localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_ID_KEY, userIdNum.toString());
+        localStorage.setItem('userId', userIdNum.toString());
+        
+        // También actualizar el objeto user para que tenga userId como número
+        const updatedUser = { ...data.user, user_id: userIdNum };
+        localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_KEY, JSON.stringify(updatedUser));
+        
+        console.log('✅ Login - userId guardado como número:', userIdNum);
+      } else {
+        console.error('❌ Login - userId no es un número válido:', userId);
+      }
     } else {
-      console.warn('No user ID found in login response');
+      console.warn('⚠️ Login - No se encontró userId en la respuesta');
+      // Intentar obtener del token JWT como último recurso
+      try {
+        const decoded = jwtDecode(data.token);
+        const tokenUserId = decoded.user_id || decoded.id || decoded.sub;
+        if (tokenUserId) {
+          const userIdNum = parseInt(tokenUserId, 10);
+          if (!isNaN(userIdNum) && userIdNum > 0) {
+            localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_ID_KEY, userIdNum.toString());
+            localStorage.setItem('userId', userIdNum.toString());
+            console.log('✅ Login - userId obtenido del token JWT como número:', userIdNum);
+          }
+        }
+      } catch (e) {
+        console.error('Error decodificando token para obtener userId:', e);
+      }
     }
 
     // Almacenar timestamp de login para control de sesión
@@ -144,10 +174,82 @@ export const getCurrentUser = () => {
 
 /**
  * Obtiene el ID del usuario actual
- * @returns {string|null} ID del usuario o null si no hay sesión activa
+ * @returns {string|number|null} ID del usuario o null si no hay sesión activa
  */
 export const getCurrentUserId = () => {
-  return localStorage.getItem(DASHBOARD_CONFIG.AUTH.USER_ID_KEY);
+  // Intentar obtener de múltiples fuentes
+  let userId = localStorage.getItem(DASHBOARD_CONFIG.AUTH.USER_ID_KEY);
+  
+  // Si no está en la clave configurada, intentar con 'userId' (fallback)
+  if (!userId) {
+    userId = localStorage.getItem('userId');
+  }
+  
+  // Si aún no hay userId, intentar obtenerlo del objeto user
+  if (!userId) {
+    try {
+      const userStr = localStorage.getItem(DASHBOARD_CONFIG.AUTH.USER_KEY) || localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        userId = user.user_id || user.id || user._id;
+        // Si encontramos el userId, guardarlo para futuras consultas
+        if (userId) {
+          const userIdNum = parseInt(userId, 10);
+          if (!isNaN(userIdNum) && userIdNum > 0) {
+            localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_ID_KEY, userIdNum.toString());
+            localStorage.setItem('userId', userIdNum.toString());
+            
+            // Actualizar el objeto user para que tenga userId como número
+            user.user_id = userIdNum;
+            localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_KEY, JSON.stringify(user));
+            localStorage.setItem('user', JSON.stringify(user));
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error parseando user para obtener userId:', e);
+    }
+  }
+  
+  // Si aún no hay userId, intentar decodificar el token JWT
+  if (!userId) {
+    try {
+      const token = getAuthToken();
+      if (token) {
+        const decoded = jwtDecode(token);
+        userId = decoded.user_id || decoded.id || decoded.sub;
+        if (userId) {
+          const userIdNum = parseInt(userId, 10);
+          if (!isNaN(userIdNum) && userIdNum > 0) {
+            localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_ID_KEY, userIdNum.toString());
+            localStorage.setItem('userId', userIdNum.toString());
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error decodificando token para obtener userId:', e);
+    }
+  }
+  
+  // Validar que el userId sea válido y convertir a número
+  if (userId) {
+    const userIdNum = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+    if (isNaN(userIdNum) || userIdNum <= 0) {
+      console.warn('⚠️ getCurrentUserId - userId no es válido:', userId);
+      return null;
+    }
+    
+    // Auto-corrección: si está guardado como string, convertir a número
+    if (typeof userId === 'string' && userId !== userIdNum.toString()) {
+      console.log('🔧 Auto-corrigiendo userId de string a número:', userId, '->', userIdNum);
+      localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_ID_KEY, userIdNum.toString());
+      localStorage.setItem('userId', userIdNum.toString());
+    }
+    
+    return userIdNum;
+  }
+  
+  return null;
 };
 
 /**

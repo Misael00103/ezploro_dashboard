@@ -317,17 +317,20 @@ export const API_URL_POST_LIKES_COUNT = `${API_URL_POSTS}/:postId/likes/count` /
 export const API_URL_TOOLS = `${BASE_URL}/tools`
 
 // ==================== OFFERS ====================
-export const API_URL_OFFERS = `${BASE_URL}/offers`
-export const API_URL_OFFERS_CREATE = `${API_URL_OFFERS}`
-export const API_URL_OFFERS_LIST = `${API_URL_OFFERS}`
-export const API_URL_OFFERS_ACTIVE = `${API_URL_OFFERS}/active`
-export const API_URL_OFFERS_STATS = `${API_URL_OFFERS}/stats`
+// El router está montado en /api/offer y las rutas son /rewards/offers
+export const API_URL_OFFERS = `${BASE_URL}/offer/rewards/offers`
+export const API_URL_OFFERS_CREATE = `${API_URL_OFFERS}` // POST /api/offer/rewards/offers
+export const API_URL_OFFERS_LIST = `${API_URL_OFFERS}/all` // GET /api/offer/rewards/offers/all
+export const API_URL_OFFERS_ACTIVE = `${API_URL_OFFERS}` // GET /api/offer/rewards/offers (getAvailableOffers)
+export const API_URL_OFFERS_STATS = `${BASE_URL}/offer/rewards/stats` // GET /api/offer/rewards/stats
 export const API_URL_OFFERS_PROMO_VALIDATE = `${API_URL_OFFERS}/promo/:promo_code/validate`
 export const API_URL_OFFERS_PROMO_USE = `${API_URL_OFFERS}/promo/:promo_code/use`
 export const API_URL_OFFERS_BY_ID = `${API_URL_OFFERS}/:id`
-export const API_URL_OFFERS_UPDATE = `${API_URL_OFFERS}/:id`
-export const API_URL_OFFERS_DELETE = `${API_URL_OFFERS}/:id`
+export const API_URL_OFFERS_UPDATE = `${API_URL_OFFERS}/:offerId` // PUT /api/offer/rewards/offers/:offerId
+export const API_URL_OFFERS_DELETE = `${API_URL_OFFERS}/:offerId` // DELETE /api/offer/rewards/offers/:offerId
 export const API_URL_OFFERS_TOGGLE_STATUS = `${API_URL_OFFERS}/:id/toggle-status`
+export const API_URL_OFFERS_REDEEM = `${API_URL_OFFERS}/redeem/:offerId` // POST /api/offer/rewards/offers/redeem/:offerId
+export const API_URL_OFFERS_MY_REDEMPTIONS = `${BASE_URL}/offer/rewards/my-redemptions` // GET /api/offer/rewards/my-redemptions
 
 // Configuración adicional
 export const GOOGLE_MAPS_API_KEY = "AIzaSyAr4IpigO3ZN4_Qcv8ME59x5-KjjDVY0Wc"

@@ -12,13 +12,23 @@ import {
  */
 export const getClaimableActions = async (userId) => {
   try {
+    if (!userId) {
+      console.warn('⚠️ getClaimableActions - userId no proporcionado');
+      return [];
+    }
+    
     const url = API_URL_POINTS_ACTIONS.replace(':userId', userId);
+    console.log('🔵 getClaimableActions - URL:', url);
+    console.log('🔵 getClaimableActions - userId:', userId);
+    
     const data = await fetchWithAuth(url, {
       method: 'GET',
     });
     
+    console.log('🔵 getClaimableActions - Respuesta del backend:', data);
+    
     // El backend devuelve { total: number, actions: [...] } o similar
-    if (data.actions && Array.isArray(data.actions)) {
+    if (data && data.actions && Array.isArray(data.actions)) {
       return data.actions;
     }
     if (Array.isArray(data)) {
@@ -26,8 +36,9 @@ export const getClaimableActions = async (userId) => {
     }
     return [];
   } catch (error) {
-    console.error('Error en getClaimableActions:', error);
-    throw error;
+    console.error('🔴 Error en getClaimableActions:', error);
+    // No lanzar error, devolver array vacío
+    return [];
   }
 };
 
