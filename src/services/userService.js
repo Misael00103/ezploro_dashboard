@@ -118,29 +118,66 @@ export const getUserProfile = async () => {
 // Actualiza la configuración del usuario
 export const updateUserProfile = async (userData) => {
   try {
+    console.log('🔵 updateUserProfile - Iniciando actualización...');
+    
     const userId = getUserId();
+    console.log('🔵 updateUserProfile - userId obtenido:', userId);
+    
     if (!userId) {
+      console.error('❌ updateUserProfile - No se encontró userId');
       throw new Error('ID de usuario inválido. Por favor, inicia sesión nuevamente.');
     }
-    const url = API_URL_USERS_UPDATE.replace(':userId', userId);
+    
+    // Convertir userId a número para asegurar consistencia
+    const userIdNum = parseInt(userId, 10);
+    if (isNaN(userIdNum) || userIdNum <= 0) {
+      console.error('❌ updateUserProfile - userId no es un número válido:', userId);
+      throw new Error('ID de usuario inválido. Por favor, inicia sesión nuevamente.');
+    }
+    
+    const url = API_URL_USERS_UPDATE.replace(':userId', userIdNum.toString());
+    console.log('🔵 updateUserProfile - URL:', url);
+    console.log('🔵 updateUserProfile - Datos a enviar:', {
+      ...userData,
+      // Ocultar campos sensibles en el log
+      password: userData.password ? '[HIDDEN]' : undefined
+    });
+    
     const data = await fetchWithAuth(url, {
       method: 'PUT',
       body: JSON.stringify(userData),
     });
 
+    console.log('🔵 updateUserProfile - Respuesta del servidor:', {
+      hasData: !!data.data,
+      dataKeys: data.data ? Object.keys(data.data) : []
+    });
+
+    // El backend puede devolver los datos en data.data o directamente en data
+    const responseData = data.data || data;
+
     // Update localStorage with new user data usando configuración del dashboard
     const currentUser = JSON.parse(localStorage.getItem(DASHBOARD_CONFIG.AUTH.USER_KEY) || '{}');
-    localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_KEY, JSON.stringify({ ...currentUser, ...data.data }));
+    const updatedUser = { ...currentUser, ...responseData };
+    
+    localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_KEY, JSON.stringify(updatedUser));
+    localStorage.setItem('user', JSON.stringify(updatedUser)); // Fallback
     
     // Update user ID with fallbacks
-    const newUserId = data.data.user_id || data.data.id || data.data._id;
+    const newUserId = responseData.user_id || responseData.id || responseData._id;
     if (newUserId) {
-      localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_ID_KEY, newUserId);
+      const newUserIdNum = parseInt(newUserId, 10);
+      if (!isNaN(newUserIdNum) && newUserIdNum > 0) {
+        localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_ID_KEY, newUserIdNum.toString());
+        localStorage.setItem('userId', newUserIdNum.toString()); // Fallback
+      }
     }
 
-    return data.data;
+    console.log('✅ updateUserProfile - Perfil actualizado exitosamente');
+    return responseData;
   } catch (error) {
-    console.error('Error en userService.updateUserProfile:', error);
+    console.error('❌ Error en userService.updateUserProfile:', error);
+    console.error('❌ Error stack:', error.stack);
     throw error;
   }
 };
