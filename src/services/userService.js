@@ -74,21 +74,43 @@ export const fetchWithAuth = async (url, options = {}) => {
 // Obtiene la configuración completa del usuario actual
 export const getUserProfile = async () => {
   try {
+    console.log('🔵 getUserProfile - Iniciando petición a:', API_URL_USERS_ME);
+    
     const data = await fetchWithAuth(API_URL_USERS_ME, {
       method: 'GET',
     });
-    console.log('getUserProfile response:', data);
-    if (data.data) {
-      const userId = data.data.user_id || data.data.id || data.data._id;
+    
+    console.log('🔵 getUserProfile - Response data structure:', {
+      hasData: !!data.data,
+      hasUser: !!data,
+      dataKeys: Object.keys(data)
+    });
+    
+    // El backend puede devolver los datos en data.data o directamente en data
+    const userData = data.data || data;
+    
+    if (userData) {
+      const userId = userData.user_id || userData.id || userData._id;
       if (userId) {
-        localStorage.setItem('userId', userId);
-        localStorage.setItem('user', JSON.stringify(data.data));
+        const userIdNum = parseInt(userId, 10);
+        if (!isNaN(userIdNum) && userIdNum > 0) {
+          localStorage.setItem('userId', userIdNum.toString());
+          localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_ID_KEY, userIdNum.toString());
+          
+          // Asegurar que el objeto user tenga user_id como número
+          const updatedUser = { ...userData, user_id: userIdNum };
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+          localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_KEY, JSON.stringify(updatedUser));
+          
+          console.log('✅ getUserProfile - User data guardado, userId:', userIdNum);
+        }
       }
     }
-    return data.data;
-    console.log('getUserProfile data:', data);
+    
+    return userData;
   } catch (error) {
-    console.error('Error en userService.getUserProfile:', error);
+    console.error('❌ Error en userService.getUserProfile:', error);
+    console.error('❌ Error stack:', error.stack);
     throw error;
   }
 };

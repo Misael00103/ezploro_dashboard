@@ -107,23 +107,47 @@ const Dashboard = ({ onLogout }) => {
           try {
             const parsedUser = JSON.parse(cachedUser);
             setUser(parsedUser);
+            console.log('✅ Dashboard - Usuario cargado desde cache:', parsedUser);
           } catch (error) {
-            console.error('Error parsing cached user:', error);
+            console.error('❌ Error parsing cached user:', error);
           }
         }
         
-        // Fetch fresh user profile
-        const userData = await getUserProfile();
-        // Preserve online_status from cache if it exists
-        const finalUserData = cachedUser ? {
-          ...userData,
-          online_status: JSON.parse(cachedUser).online_status ?? userData.online_status
-        } : userData;
-        setUser(finalUserData);
-        localStorage.setItem('user', JSON.stringify(finalUserData));
-        localStorage.setItem('userId', finalUserData.user_id);
+        // Try to fetch fresh user profile, but don't fail if it errors
+        try {
+          console.log('🔵 Dashboard - Intentando obtener perfil de usuario...');
+          const userData = await getUserProfile();
+          
+          // Preserve online_status from cache if it exists
+          const finalUserData = cachedUser ? {
+            ...userData,
+            online_status: JSON.parse(cachedUser).online_status ?? userData.online_status
+          } : userData;
+          
+          setUser(finalUserData);
+          localStorage.setItem('user', JSON.stringify(finalUserData));
+          
+          if (finalUserData.user_id) {
+            localStorage.setItem('userId', finalUserData.user_id.toString());
+          }
+          
+          console.log('✅ Dashboard - Perfil de usuario actualizado:', finalUserData);
+        } catch (userError) {
+          console.error('⚠️ Dashboard - Error al obtener perfil (usando cache):', userError);
+          
+          // Si hay un error 500, es probable que sea un problema del backend
+          // Continuar con el usuario en cache si existe
+          if (!cachedUser) {
+            throw new Error('No se pudo cargar el perfil de usuario y no hay datos en cache');
+          }
+          
+          toast.error('No se pudo actualizar el perfil. Usando datos guardados.', {
+            duration: 3000,
+          });
+        }
 
         // Fetch dashboard data with error handling
+        console.log('🔵 Dashboard - Cargando datos del dashboard...');
         const [
           eventsData,
           contactsData,
@@ -156,18 +180,20 @@ const Dashboard = ({ onLogout }) => {
         if (statsData && statsData.appDownloads !== undefined) {
           setAppDownloads(statsData.appDownloads);
         } else {
-          // Si no hay datos en stats, usar un valor por defecto o consultar otro endpoint
-          // Por ahora usaremos un valor simulado que se puede actualizar desde el backend
           setAppDownloads(0);
         }
+        
+        console.log('✅ Dashboard - Datos cargados exitosamente');
       } catch (error) {
-        console.error('Error loading dashboard data:', error);
+        console.error('❌ Error loading dashboard data:', error);
         setError(error.message || 'Error al cargar los datos del panel');
+        
         if (
           error.message.includes('No autorizado') ||
           error.message.includes('No hay sesión activa') ||
           error.message.includes('ID de usuario inválido') ||
-          error.message.includes('Autenticación inválida')
+          error.message.includes('Autenticación inválida') ||
+          error.message.includes('no hay datos en cache')
         ) {
           toast.error('Sesión expirada o inválida. Por favor, inicia sesión nuevamente.');
           clearAuthData();

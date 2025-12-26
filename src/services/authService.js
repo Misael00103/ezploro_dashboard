@@ -18,6 +18,8 @@ const API_URL = BASE_URL;
  */
 export const login = async (email, password) => {
   try {
+    console.log('🔵 Login - Iniciando login con email:', email);
+    
     const response = await fetch(API_URL_AUTH_LOGIN, {
       method: 'POST',
       headers: {
@@ -26,23 +28,61 @@ export const login = async (email, password) => {
       body: JSON.stringify({ email, password }),
     });
 
+    console.log('🔵 Login - Response status:', response.status);
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      console.error('❌ Login - Error response:', errorData);
       throw new Error(errorData.message || 'Credenciales inválidas');
     }
     
     const data = await response.json();
+    console.log('🔵 Login - Response data structure:', {
+      hasData: !!data.data,
+      hasUser: !!data.user,
+      hasToken: !!data.token,
+      dataKeys: Object.keys(data)
+    });
 
-    if (!data.user || !data.token) {
-      throw new Error('No se recibió un token de autenticación');
+    // El backend puede devolver los datos en data.data o directamente en data
+    const responseData = data.data || data;
+    const token = responseData.token || data.token;
+    const user = responseData.user || data.user;
+
+    if (!user || !token) {
+      console.error('❌ Login - Respuesta incompleta:', { hasUser: !!user, hasToken: !!token });
+      throw new Error('No se recibió un token de autenticación válido');
     }
 
-    // Almacenar datos usando la configuración del dashboard
-    localStorage.setItem(DASHBOARD_CONFIG.AUTH.TOKEN_KEY, data.token);
-    localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_KEY, JSON.stringify(data.user));
+    console.log('🔵 Login - Token recibido (primeros 20 chars):', token.substring(0, 20));
+    console.log('🔵 Login - User data:', {
+      user_id: user.user_id,
+      email: user.email,
+      name: user.name
+    });
+
+    // Decodificar el token para verificar su contenido
+    try {
+      const decoded = jwtDecode(token);
+      console.log('🔑 Token decoded:', {
+        user_id: decoded.user_id,
+        id: decoded.id,
+        sub: decoded.sub,
+        email: decoded.email,
+        exp: decoded.exp,
+        isExpired: decoded.exp < Date.now() / 1000
+      });
+    } catch (e) {
+      console.error('❌ Error decodificando token:', e);
+    }
+
+    // Almacenar token
+    localStorage.setItem(DASHBOARD_CONFIG.AUTH.TOKEN_KEY, token);
+    localStorage.setItem('token', token); // Fallback
+    console.log('✅ Login - Token guardado');
     
     // Store user ID with multiple fallbacks
-    let userId = data.user.user_id || data.user.id || data.user._id;
+    let userId = user.user_id || user.id || user._id;
     if (userId) {
       // Convertir a número para asegurar consistencia
       const userIdNum = parseInt(userId, 10);
@@ -52,29 +92,37 @@ export const login = async (email, password) => {
         localStorage.setItem('userId', userIdNum.toString());
         
         // También actualizar el objeto user para que tenga userId como número
-        const updatedUser = { ...data.user, user_id: userIdNum };
+        const updatedUser = { ...user, user_id: userIdNum };
         localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_KEY, JSON.stringify(updatedUser));
+        localStorage.setItem('user', JSON.stringify(updatedUser)); // Fallback
         
         console.log('✅ Login - userId guardado como número:', userIdNum);
+        console.log('✅ Login - User object guardado');
       } else {
         console.error('❌ Login - userId no es un número válido:', userId);
       }
     } else {
-      console.warn('⚠️ Login - No se encontró userId en la respuesta');
+      console.warn('⚠️ Login - No se encontró userId en la respuesta del usuario');
       // Intentar obtener del token JWT como último recurso
       try {
-        const decoded = jwtDecode(data.token);
+        const decoded = jwtDecode(token);
         const tokenUserId = decoded.user_id || decoded.id || decoded.sub;
         if (tokenUserId) {
           const userIdNum = parseInt(tokenUserId, 10);
           if (!isNaN(userIdNum) && userIdNum > 0) {
             localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_ID_KEY, userIdNum.toString());
             localStorage.setItem('userId', userIdNum.toString());
+            
+            // Actualizar el objeto user con el userId del token
+            const updatedUser = { ...user, user_id: userIdNum };
+            localStorage.setItem(DASHBOARD_CONFIG.AUTH.USER_KEY, JSON.stringify(updatedUser));
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            
             console.log('✅ Login - userId obtenido del token JWT como número:', userIdNum);
           }
         }
       } catch (e) {
-        console.error('Error decodificando token para obtener userId:', e);
+        console.error('❌ Error decodificando token para obtener userId:', e);
       }
     }
 
@@ -82,13 +130,16 @@ export const login = async (email, password) => {
     localStorage.setItem('loginTimestamp', Date.now().toString());
     
     // Si hay refresh token, almacenarlo
-    if (data.refreshToken) {
-      localStorage.setItem(DASHBOARD_CONFIG.AUTH.REFRESH_TOKEN_KEY, data.refreshToken);
+    if (responseData.refreshToken || data.refreshToken) {
+      const refreshToken = responseData.refreshToken || data.refreshToken;
+      localStorage.setItem(DASHBOARD_CONFIG.AUTH.REFRESH_TOKEN_KEY, refreshToken);
+      console.log('✅ Login - Refresh token guardado');
     }
     
-    return data.user;
+    console.log('✅ Login - Proceso completado exitosamente');
+    return user;
   } catch (error) {
-    console.error('Error en authService.login:', error);
+    console.error('❌ Error en authService.login:', error);
     throw error;
   }
 };

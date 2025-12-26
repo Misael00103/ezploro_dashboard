@@ -11,8 +11,6 @@ import { debugAuthState } from '../services/authUtils';
 import ForgotPassword from './ForgotPassword';
 import { toast, Toaster } from 'react-hot-toast';
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://api-v3-backend-ezploro.apps.ezploro.com/api';
-
 const Login = ({ onLogin }) => {
   const navigate = useNavigate();
   const [credentials, setCredentials] = useState({
@@ -36,6 +34,7 @@ const Login = ({ onLogin }) => {
     e.preventDefault();
     if (!credentials.email || !credentials.password) {
       setError('Por favor ingresa email y contraseña');
+      toast.error('Por favor ingresa email y contraseña');
       return;
     }
 
@@ -43,47 +42,33 @@ const Login = ({ onLogin }) => {
     setError('');
 
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: credentials.email,
-          password: credentials.password
-        }),
-      });
-
-     /// if (!response.ok) {
-      //  throw new Error(data.message || 'Credenciales inválidas');
-     // }
+      console.log('🔵 Login - Iniciando proceso de login...');
       
-      const data = await response.json();
-      console.log(data);
-      if (!data.user || !data.token) {
-        throw new Error('No se recibió un token de autenticación');
-      }
+      // Usar el servicio de autenticación mejorado
+      const user = await login(credentials.email, credentials.password);
       
-      // Store user data and token
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      
-      // Store user ID with multiple fallbacks
-      const userId = data.user.user_id || data.user.id || data.user.id;
-      if (userId) {
-        localStorage.setItem('userId', userId);
-      } else {
-        console.warn('No user ID found in login response');
-      }
+      console.log('✅ Login - Usuario autenticado:', user);
       
       // Debug authentication state after login
       debugAuthState();
       
-      onLogin(data.user);
-      navigate('/dashboard');
+      toast.success('¡Bienvenido! Redirigiendo al dashboard...');
+      
+      // Llamar al callback onLogin
+      if (onLogin) {
+        onLogin(user);
+      }
+      
+      // Pequeño delay para que el usuario vea el mensaje de éxito
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 500);
+      
     } catch (err) {
-      setError(err.message || 'Error al iniciar sesión. Verifica tus credenciales.');
-      console.error('Login error:', err);
+      console.error('❌ Login error:', err);
+      const errorMessage = err.message || 'Error al iniciar sesión. Verifica tus credenciales.';
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
