@@ -19,7 +19,7 @@ export const getStats = async () => {
       topCategories: []
     };
   } catch (error) {
-    console.error('Error en getStats:', error);
+    console.warn('⚠️ getStats - Endpoint no disponible:', error.message);
     // Return default stats in case of error (including user ID errors)
     return {
       totalEvents: 0,

@@ -91,63 +91,131 @@ const UserManagementManager = () => {
     const loadUserProfile = async () => {
       try {
         setIsLoading(true);
+        
         // Try to get user from localStorage first
         const cachedUser = localStorage.getItem('user');
         if (cachedUser) {
           try {
             const parsedUser = JSON.parse(cachedUser);
             setUser(parsedUser);
+            console.log('✅ UserManagement - Usuario cargado desde cache:', parsedUser);
+            
+            // Populate form with cached data
+            setProfileForm(prev => ({
+              ...prev,
+              name: parsedUser.name || '',
+              email: parsedUser.email || '',
+              phone: parsedUser.phone || '',
+              bio: parsedUser.bio || '',
+              location: parsedUser.location || '',
+              website: parsedUser.website || '',
+              username: parsedUser.username || '',
+              lastname: parsedUser.lastname || '',
+              display_name: parsedUser.display_name || '',
+              profile_picture: parsedUser.profile_picture || '',
+              banner_image: parsedUser.banner_image || '',
+              online_status: parsedUser.online_status || false,
+            }));
+            
+            if (parsedUser.profile_picture) {
+              setImagePreview(parsedUser.profile_picture);
+            }
+            
+            setNotificationSettings({
+              emailNotifications: parsedUser.notifications_enabled ?? true,
+              pushNotifications: parsedUser.notifications_enabled ?? true,
+              eventReminders: parsedUser.notifications_enabled ?? true,
+              marketingEmails: false,
+              securityAlerts: true,
+              weeklyReports: true,
+              notifications_enabled: parsedUser.notifications_enabled ?? true,
+            });
+            
+            setDashboardPreferences({
+              theme: parsedUser.dark_mode ? 'dark' : 'light',
+              language: 'es',
+              timezone: 'Europe/Madrid',
+              dateFormat: 'dd/MM/yyyy',
+              defaultView: 'overview',
+              dark_mode: parsedUser.dark_mode ?? false,
+            });
           } catch (error) {
-            console.error('Error parsing cached user:', error);
+            console.error('❌ Error parsing cached user:', error);
           }
         }
         
-        const userData = await getUserProfile();
-        // Preserve online_status from cache if it exists
-        const finalUserData = cachedUser ? {
-          ...userData,
-          online_status: JSON.parse(cachedUser).online_status ?? userData.online_status
-        } : userData;
-        setUser(finalUserData);
-        localStorage.setItem('userId', finalUserData.user_id);
-        localStorage.setItem('user', JSON.stringify(finalUserData));
-        setProfileForm(prev => ({
-          ...prev,
-          name: userData.name || '',
-          email: userData.email || '',
-          phone: userData.phone || '',
-          bio: userData.bio || '',
-          location: userData.location || '',
-          website: userData.website || '',
-          username: userData.username || '',
-          lastname: userData.lastname || '',
-          display_name: userData.display_name || '',
-          profile_picture: userData.profile_picture || '',
-          banner_image: userData.banner_image || '',
-          online_status: finalUserData.online_status || false,
-        }));
-        if (userData.profile_picture) {
-          setImagePreview(userData.profile_picture);
+        // Try to fetch fresh user profile, but don't fail if it errors
+        try {
+          console.log('🔵 UserManagement - Intentando obtener perfil actualizado...');
+          const userData = await getUserProfile();
+          
+          // Preserve online_status from cache if it exists
+          const finalUserData = cachedUser ? {
+            ...userData,
+            online_status: JSON.parse(cachedUser).online_status ?? userData.online_status
+          } : userData;
+          
+          setUser(finalUserData);
+          localStorage.setItem('userId', finalUserData.user_id);
+          localStorage.setItem('user', JSON.stringify(finalUserData));
+          
+          setProfileForm(prev => ({
+            ...prev,
+            name: userData.name || '',
+            email: userData.email || '',
+            phone: userData.phone || '',
+            bio: userData.bio || '',
+            location: userData.location || '',
+            website: userData.website || '',
+            username: userData.username || '',
+            lastname: userData.lastname || '',
+            display_name: userData.display_name || '',
+            profile_picture: userData.profile_picture || '',
+            banner_image: userData.banner_image || '',
+            online_status: finalUserData.online_status || false,
+          }));
+          
+          if (userData.profile_picture) {
+            setImagePreview(userData.profile_picture);
+          }
+          
+          setNotificationSettings({
+            emailNotifications: userData.notifications_enabled ?? true,
+            pushNotifications: userData.notifications_enabled ?? true,
+            eventReminders: userData.notifications_enabled ?? true,
+            marketingEmails: false,
+            securityAlerts: true,
+            weeklyReports: true,
+            notifications_enabled: userData.notifications_enabled ?? true,
+          });
+          
+          setDashboardPreferences({
+            theme: userData.dark_mode ? 'dark' : 'light',
+            language: 'es',
+            timezone: 'Europe/Madrid',
+            dateFormat: 'dd/MM/yyyy',
+            defaultView: 'overview',
+            dark_mode: userData.dark_mode ?? false,
+          });
+          
+          console.log('✅ UserManagement - Perfil actualizado desde el servidor');
+        } catch (userError) {
+          console.error('⚠️ UserManagement - Error al obtener perfil (usando cache):', userError);
+          
+          // Si hay un error y no hay cache, mostrar error y redirigir
+          if (!cachedUser) {
+            toast.error('No se pudo cargar el perfil de usuario. Por favor, inicia sesión nuevamente.');
+            navigate('/login');
+            return;
+          }
+          
+          // Si hay cache, mostrar advertencia pero continuar
+          toast.error('No se pudo actualizar el perfil. Usando datos guardados.', {
+            duration: 3000,
+          });
         }
-        setNotificationSettings({
-          emailNotifications: userData.notifications_enabled ?? true,
-          pushNotifications: userData.notifications_enabled ?? true,
-          eventReminders: userData.notifications_enabled ?? true,
-          marketingEmails: false,
-          securityAlerts: true,
-          weeklyReports: true,
-          notifications_enabled: userData.notifications_enabled ?? true,
-        });
-        setDashboardPreferences({
-          theme: userData.dark_mode ? 'dark' : 'light',
-          language: 'es',
-          timezone: 'Europe/Madrid',
-          dateFormat: 'dd/MM/yyyy',
-          defaultView: 'overview',
-          dark_mode: userData.dark_mode ?? false,
-        });
       } catch (error) {
-        console.error('Error loading user profile:', error);
+        console.error('❌ Error loading user profile:', error);
         if (error.message.includes('No autorizado') || error.message.includes('No hay sesión activa')) {
           toast.error('Sesión expirada. Por favor, inicia sesión nuevamente.');
           navigate('/login');

@@ -157,15 +157,36 @@ const Dashboard = ({ onLogout }) => {
           landingData,
           statsData,
         ] = await Promise.allSettled([
-          getEvents(),
-          getContacts(),
-          getTestimonials(),
-          getPosts(),
-          getSocialMedia(),
-          getLandingPageContent(),
-          getStats(),
+          getEvents().catch(err => {
+            console.warn('⚠️ Error cargando eventos:', err.message);
+            return [];
+          }),
+          getContacts().catch(err => {
+            console.warn('⚠️ Error cargando contactos:', err.message);
+            return [];
+          }),
+          getTestimonials().catch(err => {
+            console.warn('⚠️ Error cargando testimonios:', err.message);
+            return [];
+          }),
+          getPosts().catch(err => {
+            console.warn('⚠️ Error cargando posts:', err.message);
+            return [];
+          }),
+          getSocialMedia().catch(err => {
+            console.warn('⚠️ Error cargando redes sociales:', err.message);
+            return [];
+          }),
+          getLandingPageContent().catch(err => {
+            console.warn('⚠️ Error cargando landing page:', err.message);
+            return {};
+          }),
+          getStats().catch(err => {
+            console.warn('⚠️ Error cargando estadísticas:', err.message);
+            return {};
+          }),
         ]).then(results => results.map(result => 
-          result.status === 'fulfilled' ? result.value : []
+          result.status === 'fulfilled' ? result.value : (result.reason || [])
         ));
 
         setEvents(eventsData);

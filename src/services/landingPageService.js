@@ -3,17 +3,16 @@ import { fetchWithAuth } from './userService';
 
 export const getLandingPageContent = async () => {
   try {
+    console.log('🔵 getLandingPageContent - Iniciando petición...');
     const response = await fetchWithAuth(API_URL_LANDING_PAGE, {
       method: 'GET',
     });
-    return response.data || {};
+    console.log('✅ getLandingPageContent - Respuesta recibida');
+    return response.data || response || {};
   } catch (error) {
-    console.error('Error en getLandingPageContent:', error);
-    // Return empty object if server returns 400 or user ID errors
-    if (error.message.includes('400') || error.message.includes('ID de usuario inválido')) {
-      return {};
-    }
-    throw error;
+    console.error('❌ Error en getLandingPageContent:', error);
+    // Return empty object for any error to prevent dashboard from breaking
+    return {};
   }
 };
 

@@ -24,16 +24,17 @@ export const getContacts = async (params = {}) => {
     if (params.offset) queryParams.append('offset', params.offset);
     
     const url = queryParams.toString() ? `${API_URL_CONTACTS}?${queryParams}` : API_URL_CONTACTS;
-    console.log('Fetching contacts from:', url);
+    console.log('🔵 Fetching contacts from:', url);
     const response = await fetchWithAuth(url, {
       method: 'GET',
     });
-    console.log('Contacts API response:', response);
+    console.log('✅ Contacts API response:', response);
     const contacts = response.data || response || [];
-    console.log('Processed contacts:', contacts);
+    console.log('✅ Processed contacts:', contacts);
     return contacts;
   } catch (error) {
-    console.error('Error getting contacts:', error);
+    console.error('❌ Error getting contacts:', error);
+    // Return empty array instead of throwing to prevent dashboard from breaking
     return [];
   }
 };
