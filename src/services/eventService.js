@@ -432,6 +432,53 @@ export const deleteEvent = async (eventId) => {
 };
 
 /**
+ * Elimina todos los eventos
+ * @returns {Promise<Object>} Respuesta de la eliminación
+ */
+export const deleteAllEvents = async () => {
+  try {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay sesión activa');
+    }
+
+    const url = `${API_URL_EVENTS}/all`;
+    console.log('🔴 deleteAllEvents - URL:', url);
+    console.log('🔴 deleteAllEvents - Token:', token ? 'Presente' : 'Ausente');
+    
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    console.log('🔴 deleteAllEvents - Response status:', response.status);
+    console.log('🔴 deleteAllEvents - Response ok:', response.ok);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('🔴 deleteAllEvents - Error data:', errorData);
+      
+      // Verificar si es un error de permisos
+      if (response.status === 403) {
+        throw new Error('No tienes permisos para eliminar todos los eventos. Se requiere rol de administrador.');
+      }
+      
+      throw new Error(errorData.message || `Error al eliminar todos los eventos: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('🟢 deleteAllEvents - Success:', data);
+    return data;
+  } catch (error) {
+    console.error('🔴 Error en deleteAllEvents:', error);
+    throw error;
+  }
+};
+
+/**
  * Obtiene eventos de esta semana
  * @returns {Promise<Array>} Lista de eventos de esta semana
  */

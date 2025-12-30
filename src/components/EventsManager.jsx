@@ -23,7 +23,7 @@ import {
   X
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
-import { createEvent, updateEvent, deleteEvent } from '../services/eventService';
+import { createEvent, updateEvent, deleteEvent, deleteAllEvents } from '../services/eventService';
 import { getAuthToken } from '../services/authService';
 import { getCurrentUserId } from '../services/userService';
 import { searchPlaces as searchPlacesAPI, getPlaceDetails, reverseGeocode } from '../services/placesService';
@@ -696,6 +696,99 @@ const EventsManager = ({ events, updateEvents }) => {
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (!events || events.length === 0) {
+      toast({
+        title: "No hay eventos",
+        description: "No hay eventos para eliminar",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Primera confirmación
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar TODOS los eventos (${events.length} eventos)? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    // Segunda confirmación
+    if (!window.confirm('⚠️ ÚLTIMA ADVERTENCIA: Esto eliminará permanentemente todos los eventos. ¿Continuar?')) {
+      return;
+    }
+
+    try {
+      // Intentar eliminar todos de una vez
+      await deleteAllEvents();
+      
+      // Recargar la lista completa de eventos desde el servidor
+      try {
+        const { getEvents } = await import('../services/eventService');
+        const updatedEventsList = await getEvents();
+        updateEvents(updatedEventsList);
+      } catch (fetchError) {
+        console.error('Error al recargar eventos:', fetchError);
+        // Si falla la recarga, limpiar la lista local
+        updateEvents([]);
+      }
+    
+      toast({
+        title: "Eventos eliminados",
+        description: "Todos los eventos se han eliminado exitosamente",
+      });
+    } catch (error) {
+      console.error('Error al eliminar todos los eventos:', error);
+      
+      // Si falla la eliminación masiva por cualquier razón, intentar eliminar uno por uno
+      toast({
+        title: "Eliminando eventos...",
+        description: "Eliminando eventos uno por uno. Esto puede tomar un momento.",
+      });
+      
+      await deleteEventsOneByOne();
+    }
+  };
+
+  const deleteEventsOneByOne = async () => {
+    let deletedCount = 0;
+    let failedCount = 0;
+    
+    for (const event of events) {
+      try {
+        const eventId = event.id || event.event_id || event.eventId;
+        if (eventId) {
+          await deleteEvent(eventId);
+          deletedCount++;
+        }
+      } catch (error) {
+        console.error(`Error al eliminar evento ${event.id}:`, error);
+        failedCount++;
+      }
+    }
+    
+    // Recargar la lista
+    try {
+      const { getEvents } = await import('../services/eventService');
+      const updatedEventsList = await getEvents();
+      updateEvents(updatedEventsList);
+    } catch (fetchError) {
+      console.error('Error al recargar eventos:', fetchError);
+      updateEvents([]);
+    }
+    
+    if (failedCount === 0) {
+      toast({
+        title: "Eventos eliminados",
+        description: `Se eliminaron ${deletedCount} eventos exitosamente`,
+      });
+    } else {
+      toast({
+        title: "Eliminación parcial",
+        description: `Se eliminaron ${deletedCount} eventos. ${failedCount} eventos no pudieron ser eliminados.`,
+        variant: "destructive"
+      });
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'upcoming':
@@ -727,70 +820,79 @@ const EventsManager = ({ events, updateEvents }) => {
           <h2 className="text-xl sm:text-2xl font-bold text-white">Gestión de Eventos</h2>
           <p className="text-sm sm:text-base text-purple-300 mt-1">Administra todos los eventos de la plataforma</p>
         </div>
-        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-          <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800">
-              <Plus className="h-4 w-4 mr-2" />
-              Crear Evento
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="bg-black/90 border-purple-500/30 text-white max-w-md max-h-[90vh] overflow-hidden flex flex-col">
-            <DialogHeader className="flex-shrink-0">
-              <DialogTitle className="text-white">Crear Nuevo Evento</DialogTitle>
-              <DialogDescription className="text-purple-300">
-                Completa la información para crear un nuevo evento
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex-1 overflow-y-auto pr-2 -mr-2 custom-scrollbar">
-              <form onSubmit={handleCreate} className="space-y-4 pb-4">
-              <div className="space-y-2">
-                <Label htmlFor="title" className="text-purple-200">Título *</Label>
-                <Input
-                  id="title"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleInputChange}
-                  className="bg-black/50 border-purple-500/30 text-white"
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="resume" className="text-purple-200">Resumen</Label>
-                <Textarea
-                  id="resume"
-                  name="resume"
-                  value={formData.resume}
-                  onChange={handleInputChange}
-                  className="bg-black/50 border-purple-500/30 text-white"
-                  rows={2}
-                  placeholder="Breve descripción del evento..."
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="description" className="text-purple-200">Descripción *</Label>
-                <Textarea
-                  id="description"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  className="bg-black/50 border-purple-500/30 text-white"
-                  rows={3}
-                  required
-                />
-              </div>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button 
+            onClick={handleDeleteAll}
+            className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800"
+            disabled={!events || events.length === 0}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Eliminar Todos
+          </Button>
+          <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+            <DialogTrigger asChild>
+              <Button className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800">
+                <Plus className="h-4 w-4 mr-2" />
+                Crear Evento
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-black/90 border-purple-500/30 text-white max-w-md max-h-[90vh] overflow-hidden flex flex-col">
+              <DialogHeader className="flex-shrink-0">
+                <DialogTitle className="text-white">Crear Nuevo Evento</DialogTitle>
+                <DialogDescription className="text-purple-300">
+                  Completa la información para crear un nuevo evento
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex-1 overflow-y-auto pr-2 -mr-2 custom-scrollbar">
+                <form onSubmit={handleCreate} className="space-y-4 pb-4">
+                <div className="space-y-2">
+                  <Label htmlFor="title" className="text-purple-200">Título *</Label>
+                  <Input
+                    id="title"
+                    name="title"
+                    value={formData.title}
+                    onChange={handleInputChange}
+                    className="bg-black/50 border-purple-500/30 text-white"
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="resume" className="text-purple-200">Resumen</Label>
+                  <Textarea
+                    id="resume"
+                    name="resume"
+                    value={formData.resume}
+                    onChange={handleInputChange}
+                    className="bg-black/50 border-purple-500/30 text-white"
+                    rows={2}
+                    placeholder="Breve descripción del evento..."
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="description" className="text-purple-200">Descripción *</Label>
+                  <Textarea
+                    id="description"
+                    name="description"
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    className="bg-black/50 border-purple-500/30 text-white"
+                    rows={3}
+                    required
+                  />
+                </div>
 
-              <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                  <Label htmlFor="date_time" className="text-purple-200">Fecha y Hora Inicio *</Label>
-                <Input
-                  id="date_time"
-                  name="date_time"
-                  type="datetime-local"
-                  value={formData.date_time}
-                  onChange={handleInputChange}
-                  className="bg-black/50 border-purple-500/30 text-white"
+                <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label htmlFor="date_time" className="text-purple-200">Fecha y Hora Inicio *</Label>
+                  <Input
+                    id="date_time"
+                    name="date_time"
+                    type="datetime-local"
+                    value={formData.date_time}
+                    onChange={handleInputChange}
+                    className="bg-black/50 border-purple-500/30 text-white"
                   required
                 />
                 </div>
@@ -1070,22 +1172,23 @@ const EventsManager = ({ events, updateEvents }) => {
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="text-purple-300 hover:bg-purple-900/50"
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
-                >
-                  Crear Evento
-                </Button>
+                    onClick={() => setIsCreateModalOpen(false)}
+                    className="text-purple-300 hover:bg-purple-900/50"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+                  >
+                    Crear Evento
+                  </Button>
+                </div>
+              </form>
               </div>
-            </form>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Filters */}
