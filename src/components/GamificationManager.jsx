@@ -198,6 +198,13 @@ const GamificationManager = () => {
     loadInitialData();
   }, []);
 
+  // Cargar rankings automáticamente cuando se abre la pestaña de rankings
+  useEffect(() => {
+    if (activeTab === 'rankings') {
+      loadRealRankings();
+    }
+  }, [activeTab]);
+
   const loadUserData = async (userId) => {
     try {
       if (!userId) {
@@ -483,30 +490,42 @@ const GamificationManager = () => {
       console.log('🔵 loadOffers - Total de ofertas:', offers.length);
       
       // Mapear ofertas del backend al formato de recompensas
-      const mappedRewards = offers.map(offer => ({
-        id: offer.offer_id,
-        offer_id: offer.offer_id,
-        name: offer.title,
-        title: offer.title,
-        description: offer.description || '',
-        points_required: offer.discount_percentage || offer.discount_amount || 0,
-        category: offer.category || offer.offer_type || 'discounts',
-        times_redeemed: offer.current_uses || 0,
-        is_active: offer.is_active !== undefined ? offer.is_active : true,
-        discount_percentage: offer.discount_percentage,
-        discount_amount: offer.discount_amount,
-        original_price: offer.original_price,
-        final_price: offer.final_price,
-        start_date: offer.start_date,
-        end_date: offer.end_date,
-        image_url: offer.image_url,
-        terms_conditions: offer.terms_conditions,
-        max_uses: offer.max_uses,
-        promo_code: offer.promo_code,
-        target_audience: offer.target_audience,
-        offer_type: offer.offer_type,
-        organizer_id: offer.organizer_id
-      }));
+      const mappedRewards = offers.map(offer => {
+        // Obtener el ID de la oferta (puede ser offer_id, id, o _id)
+        const offerId = offer.offer_id || offer.id || offer._id;
+        console.log('🔵 loadOffers - Mapeando oferta:', { 
+          offer_id: offer.offer_id, 
+          id: offer.id, 
+          _id: offer._id,
+          offerId_final: offerId,
+          title: offer.title 
+        });
+        
+        return {
+          id: offerId,
+          offer_id: offerId,
+          name: offer.title,
+          title: offer.title,
+          description: offer.description || '',
+          points_required: offer.discount_percentage || offer.discount_amount || 0,
+          category: offer.category || offer.offer_type || 'discounts',
+          times_redeemed: offer.current_uses || 0,
+          is_active: offer.is_active !== undefined ? offer.is_active : true,
+          discount_percentage: offer.discount_percentage,
+          discount_amount: offer.discount_amount,
+          original_price: offer.original_price,
+          final_price: offer.final_price,
+          start_date: offer.start_date,
+          end_date: offer.end_date,
+          image_url: offer.image_url,
+          terms_conditions: offer.terms_conditions,
+          max_uses: offer.max_uses,
+          promo_code: offer.promo_code,
+          target_audience: offer.target_audience,
+          offer_type: offer.offer_type,
+          organizer_id: offer.organizer_id
+        };
+      });
       
       console.log('🔵 loadOffers - Ofertas mapeadas:', mappedRewards);
       console.log('🔵 loadOffers - Ofertas activas:', mappedRewards.filter(r => r.is_active).length);
@@ -623,15 +642,32 @@ const GamificationManager = () => {
   };
 
   const handleDeleteOffer = async (rewardId) => {
+    console.log('🔵 handleDeleteOffer - rewardId recibido:', rewardId);
+    console.log('🔵 handleDeleteOffer - rewards disponibles:', rewards.map(r => ({ id: r.id, offer_id: r.offer_id, title: r.title })));
+    
     if (!window.confirm('¿Estás seguro de que deseas eliminar esta oferta?')) {
       return;
     }
 
     try {
       const reward = rewards.find(r => r.id === rewardId || r.offer_id === rewardId);
-      if (!reward) return;
+      console.log('🔵 handleDeleteOffer - reward encontrado:', reward);
+      
+      if (!reward) {
+        console.error('🔴 handleDeleteOffer - No se encontró la oferta con ID:', rewardId);
+        toast.error('No se encontró la oferta');
+        return;
+      }
 
       const offerId = reward.offer_id || reward.id;
+      console.log('🔵 handleDeleteOffer - offerId a eliminar:', offerId);
+      
+      if (!offerId) {
+        console.error('🔴 handleDeleteOffer - offerId es undefined');
+        toast.error('ID de oferta inválido');
+        return;
+      }
+      
       await deleteOffer(offerId);
       toast.success('Oferta eliminada exitosamente');
       loadOffers();
@@ -654,6 +690,18 @@ const GamificationManager = () => {
       if (!organizerId) {
         toast.error('No se pudo obtener el ID del organizador. Por favor, inicia sesión nuevamente.');
         return;
+      }
+
+      // Validar precios en el frontend antes de enviar
+      const originalPrice = offerFormData.original_price ? Number(offerFormData.original_price) : null;
+      const finalPrice = offerFormData.final_price ? Number(offerFormData.final_price) : null;
+      
+      if (originalPrice !== null && finalPrice !== null) {
+        console.log('🔵 handleCreateOffer - Validando precios:', { originalPrice, finalPrice });
+        if (finalPrice > originalPrice) {
+          toast.error(`El precio final (${finalPrice}) no puede ser mayor al precio original (${originalPrice})`);
+          return;
+        }
       }
 
       const offerData = {

@@ -20,15 +20,16 @@ import {
   CheckCircle,
   Clock,
   Download,
+  TrendingUp,
 } from 'lucide-react';
 import { AnimatedCounter } from './AnimatedCounter';
 import { toast, Toaster } from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import EventsManager from './EventsManager';
 import ContactsManager from './ContactsManager';
 import TestimonialsManager from './TestimonialsManager';
 import PostsManager from './PostsManager';
-import LandingPageManager from './LandingPageManager';
 import SocialMediaManager from './SocialMediaManager';
 import GamificationManager from './GamificationManager';
 import UserManagementManager from './UserManagementManager';
@@ -46,7 +47,6 @@ import {
 } from '../services/testimonialService';
 import { getAllPosts as getPosts } from '../services/postService';
 import { getSocialMedia } from '../services/socialMediaService';
-import { getLandingPageContent } from '../services/landingPageService';
 import { getStats } from '../services/statsService';
 import { getUserProfile } from '../services/userService';
 import { debugAuthState, validateAuth, clearAuthData } from '../services/authUtils';
@@ -60,11 +60,55 @@ const Dashboard = ({ onLogout }) => {
   const [testimonials, setTestimonials] = useState([]);
   const [posts, setPosts] = useState([]);
   const [socialMedia, setSocialMedia] = useState([]);
-  const [landingContent, setLandingContent] = useState({});
   const [stats, setStats] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [appDownloads, setAppDownloads] = useState(0); // Contador de descargas de app
+
+  // Función helper para transformar datos de redes sociales del backend al formato del frontend
+  const transformSocialMediaData = (networks) => {
+    if (!Array.isArray(networks) || networks.length === 0) {
+      return [];
+    }
+
+    return networks.map(network => ({
+      id: network.id || network.social_network_id,
+      platform: network.plataforma || network.platform,
+      name: network.nombre_usuario || network.name,
+      url: network.url,
+      icon: network.icono || network.icon,
+      followers: network.cantidad_seguidores || network.followers || 0,
+      is_active: network.activa !== undefined ? network.activa : (network.is_active !== undefined ? network.is_active : true),
+    }));
+  };
+
+  // Función para calcular proyección de seguidores
+  const calculateFollowersProjection = () => {
+    const totalFollowers = Array.isArray(socialMedia) 
+      ? socialMedia.reduce((sum, social) => sum + (social.followers || 0), 0)
+      : 0;
+    const monthlyGrowthRate = 0.15; // 15% de crecimiento mensual estimado
+    
+    const months = ['Actual', 'Mes 1', 'Mes 2', 'Mes 3', 'Mes 4', 'Mes 5', 'Mes 6'];
+    return months.map((month, index) => ({
+      month,
+      seguidores: Math.round(totalFollowers * Math.pow(1 + monthlyGrowthRate, index)),
+      proyeccion: index === 0 ? null : Math.round(totalFollowers * Math.pow(1 + monthlyGrowthRate, index))
+    }));
+  };
+
+  // Función para calcular proyección de eventos
+  const calculateEventsProjection = () => {
+    const currentEvents = Array.isArray(events) ? events.length : 0;
+    const monthlyGrowthRate = 0.20; // 20% de crecimiento mensual estimado
+    
+    const months = ['Actual', 'Mes 1', 'Mes 2', 'Mes 3', 'Mes 4', 'Mes 5', 'Mes 6'];
+    return months.map((month, index) => ({
+      month,
+      eventos: Math.round(currentEvents * Math.pow(1 + monthlyGrowthRate, index)),
+      proyeccion: index === 0 ? null : Math.round(currentEvents * Math.pow(1 + monthlyGrowthRate, index))
+    }));
+  };
 
   // Listen for user data changes in localStorage
   useEffect(() => {
@@ -148,15 +192,7 @@ const Dashboard = ({ onLogout }) => {
 
         // Fetch dashboard data with error handling
         console.log('🔵 Dashboard - Cargando datos del dashboard...');
-        const [
-          eventsData,
-          contactsData,
-          testimonialsData,
-          postsData,
-          socialMediaData,
-          landingData,
-          statsData,
-        ] = await Promise.allSettled([
+        const results = await Promise.allSettled([
           getEvents().catch(err => {
             console.warn('⚠️ Error cargando eventos:', err.message);
             return [];
@@ -177,24 +213,44 @@ const Dashboard = ({ onLogout }) => {
             console.warn('⚠️ Error cargando redes sociales:', err.message);
             return [];
           }),
-          getLandingPageContent().catch(err => {
-            console.warn('⚠️ Error cargando landing page:', err.message);
-            return {};
-          }),
           getStats().catch(err => {
             console.warn('⚠️ Error cargando estadísticas:', err.message);
             return {};
           }),
-        ]).then(results => results.map(result => 
-          result.status === 'fulfilled' ? result.value : (result.reason || [])
-        ));
+        ]);
+
+        console.log('🔵 Dashboard - Resultados de Promise.allSettled:', results);
+
+        const [
+          eventsData,
+          contactsData,
+          testimonialsData,
+          postsData,
+          socialMediaData,
+          statsData,
+        ] = results.map((result, index) => {
+          const labels = ['eventos', 'contactos', 'testimonios', 'posts', 'socialMedia', 'stats'];
+          if (result.status === 'fulfilled') {
+            console.log(`✅ ${labels[index]} cargado:`, result.value);
+            return result.value;
+          } else {
+            console.error(`❌ Error en ${labels[index]}:`, result.reason);
+            return index === 5 ? {} : []; // stats es objeto, los demás son arrays
+          }
+        });
+
+        console.log('🔵 Dashboard - socialMediaData extraído:', socialMediaData);
+        console.log('🔵 Dashboard - Tipo de socialMediaData:', typeof socialMediaData, Array.isArray(socialMediaData));
+
+        // Transformar datos de redes sociales al formato correcto
+        const transformedSocialMedia = transformSocialMediaData(socialMediaData);
+        console.log('🔵 Dashboard - socialMedia transformado:', transformedSocialMedia);
 
         setEvents(eventsData);
         setContacts(contactsData);
         setTestimonials(testimonialsData);
         setPosts(postsData);
-        setSocialMedia(socialMediaData);
-        setLandingContent(landingData);
+        setSocialMedia(transformedSocialMedia);
         setStats(statsData);
         
         // Cargar descargas de app desde stats o usar valor por defecto
@@ -453,14 +509,6 @@ const Dashboard = ({ onLogout }) => {
               <span className="sm:hidden">P.</span>
             </TabsTrigger>
             <TabsTrigger
-              value="landing"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
-            >
-              <Monitor className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span className="hidden md:inline">Landing</span>
-              <span className="md:hidden">Land.</span>
-            </TabsTrigger>
-            <TabsTrigger
               value="social"
               className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
             >
@@ -581,6 +629,117 @@ const Dashboard = ({ onLogout }) => {
               />
             </div>
 
+            {/* Gráficas de Proyección */}
+            <div className="grid gap-6 md:grid-cols-2 mt-6">
+              {/* Proyección de Seguidores */}
+              <Card className="bg-black/40 border-purple-500/30">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-purple-400" />
+                    Proyección de Seguidores
+                  </CardTitle>
+                  <CardDescription className="text-purple-300">
+                    Crecimiento estimado en los próximos 6 meses
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={calculateFollowersProjection()}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#4c1d95" />
+                      <XAxis 
+                        dataKey="month" 
+                        stroke="#a78bfa"
+                        style={{ fontSize: '12px' }}
+                      />
+                      <YAxis 
+                        stroke="#a78bfa"
+                        style={{ fontSize: '12px' }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#1a0b2e', 
+                          border: '1px solid #7c3aed',
+                          borderRadius: '8px',
+                          color: '#fff'
+                        }}
+                      />
+                      <Legend 
+                        wrapperStyle={{ color: '#a78bfa' }}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="seguidores" 
+                        stroke="#8b5cf6" 
+                        strokeWidth={3}
+                        dot={{ fill: '#8b5cf6', r: 5 }}
+                        activeDot={{ r: 7 }}
+                        name="Seguidores"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <div className="mt-4 p-3 bg-purple-900/20 rounded-lg border border-purple-500/30">
+                    <p className="text-sm text-purple-300">
+                      📈 Proyección basada en un crecimiento del 15% mensual
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Proyección de Eventos */}
+              <Card className="bg-black/40 border-purple-500/30">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <Calendar className="h-5 w-5 text-purple-400" />
+                    Proyección de Eventos
+                  </CardTitle>
+                  <CardDescription className="text-purple-300">
+                    Crecimiento estimado en los próximos 6 meses
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={calculateEventsProjection()}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#4c1d95" />
+                      <XAxis 
+                        dataKey="month" 
+                        stroke="#a78bfa"
+                        style={{ fontSize: '12px' }}
+                      />
+                      <YAxis 
+                        stroke="#a78bfa"
+                        style={{ fontSize: '12px' }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#1a0b2e', 
+                          border: '1px solid #7c3aed',
+                          borderRadius: '8px',
+                          color: '#fff'
+                        }}
+                      />
+                      <Legend 
+                        wrapperStyle={{ color: '#a78bfa' }}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="eventos" 
+                        stroke="#10b981" 
+                        strokeWidth={3}
+                        dot={{ fill: '#10b981', r: 5 }}
+                        activeDot={{ r: 7 }}
+                        name="Eventos"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <div className="mt-4 p-3 bg-green-900/20 rounded-lg border border-green-500/30">
+                    <p className="text-sm text-green-300">
+                      📈 Proyección basada en un crecimiento del 20% mensual
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
             <div className="grid gap-6 md:grid-cols-2">
               <Card className="bg-black/40 border-purple-500/30">
                 <CardHeader>
@@ -622,26 +781,34 @@ const Dashboard = ({ onLogout }) => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {socialMedia.filter(s => s.is_active).map((social, index) => (
-                      <div key={social.id || index} className="flex items-center justify-between">
-                        <span className="text-purple-200">
-                          {typeof social.platform === 'string' ? social.platform : 'Red Social'}
-                        </span>
-                        <Badge className="bg-green-900/50 text-green-200 border-green-600/30">
-                          {social.followers ? `${(social.followers / 1000).toFixed(1)}k` : 'Activa'}
-                        </Badge>
+                    {Array.isArray(socialMedia) && socialMedia.length > 0 ? (
+                      <>
+                        {socialMedia.filter(s => s.is_active).map((social, index) => (
+                          <div key={social.id || index} className="flex items-center justify-between">
+                            <span className="text-purple-200">
+                              {social.platform || 'Red Social'}
+                            </span>
+                            <Badge className="bg-green-900/50 text-green-200 border-green-600/30">
+                              {social.followers ? `${(social.followers / 1000).toFixed(1)}k` : 'Activa'}
+                            </Badge>
+                          </div>
+                        ))}
+                        {socialMedia.filter(s => !s.is_active).slice(0, 2).map((social, index) => (
+                          <div key={social.id || `inactive-${index}`} className="flex items-center justify-between">
+                            <span className="text-purple-200 opacity-60">
+                              {social.platform || 'Red Social'}
+                            </span>
+                            <Badge className="bg-red-900/50 text-red-200 border-red-600/30">
+                              Inactiva
+                            </Badge>
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      <div className="text-center py-4 text-purple-300">
+                        <p>No hay redes sociales configuradas</p>
                       </div>
-                    ))}
-                    {socialMedia.filter(s => !s.is_active).slice(0, 2).map((social, index) => (
-                      <div key={social.id || `inactive-${index}`} className="flex items-center justify-between">
-                        <span className="text-purple-200 opacity-60">
-                          {typeof social.platform === 'string' ? social.platform : 'Red Social'}
-                        </span>
-                        <Badge className="bg-red-900/50 text-red-200 border-red-600/30">
-                          Inactiva
-                        </Badge>
-                      </div>
-                    ))}
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -662,10 +829,6 @@ const Dashboard = ({ onLogout }) => {
 
           <TabsContent value="posts">
             <PostsManager posts={posts} setPosts={setPosts} />
-          </TabsContent>
-
-          <TabsContent value="landing">
-            <LandingPageManager landingContent={landingContent} setLandingContent={setLandingContent} />
           </TabsContent>
 
           <TabsContent value="social">

@@ -229,7 +229,7 @@ export const API_URL_PASSWORD_CHANGE = `${BASE_URL}/auth/change-password`
 // ==================== RANKINGS ====================
 export const API_URL_RANKINGS = `${BASE_URL}/ranking`
 export const API_URL_RANKINGS_USUARIOS_MAS_SUSCRITOS = `${API_URL_RANKINGS}/usuarios-mas-suscritos`
-export const API_URL_RANKINGS_USUARIOS_MAS_PUNTOS = `${API_URL_RANKINGS}/usuarios-mas-puntos`
+export const API_URL_RANKINGS_USUARIOS_MAS_PUNTOS = `${API_URL_RANKINGS}/points-rank`
 export const API_URL_RANKINGS_USUARIOS_MAS_LIKES_DADOS = `${API_URL_RANKINGS}/usuarios-mas-likes-dados`
 export const API_URL_RANKINGS_USUARIOS_MAS_COMENTARIOS = `${API_URL_RANKINGS}/usuarios-mas-comentarios`
 export const API_URL_RANKINGS_USUARIOS_MAS_EVENTOS_CREADOS = `${API_URL_RANKINGS}/usuarios-mas-eventos-creados`

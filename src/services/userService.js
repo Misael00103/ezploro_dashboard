@@ -52,6 +52,7 @@ export const fetchWithAuth = async (url, options = {}) => {
       statusText: response.statusText,
       errorData
     });
+    console.error('🔴 fetchWithAuth - Error message:', errorData.error || errorData.message || errorData.details);
     
     if (response.status === 401) {
       // Sesión expirada, limpiar localStorage y redirigir
@@ -65,7 +66,7 @@ export const fetchWithAuth = async (url, options = {}) => {
       throw new Error('Acceso denegado: No tienes permisos para realizar esta acción.');
     }
     
-    throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
+    throw new Error(errorData.error || errorData.message || errorData.details || `Error HTTP! status: ${response.status}`);
   }
   
   return response.json();

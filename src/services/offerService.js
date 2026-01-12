@@ -68,9 +68,10 @@ export const getOffers = async (filters = {}) => {
       }
     });
 
+    // Use the /all endpoint for admin to get all offers with offer_id
     const url = params.toString() 
-      ? `${API_URL_OFFERS}?${params.toString()}`
-      : API_URL_OFFERS;
+      ? `${API_URL_OFFERS_LIST}?${params.toString()}`
+      : API_URL_OFFERS_LIST;
 
     console.log('🔵 getOffers - URL:', url);
     console.log('🔵 getOffers - Token presente:', !!token);
@@ -237,6 +238,61 @@ export const getOfferById = async (offerId) => {
 };
 
 /**
+ * Subir imagen de oferta
+ * @param {File} imageFile - Archivo de imagen
+ * @returns {Promise<string>} URL de la imagen subida
+ */
+export const uploadOfferImage = async (imageFile) => {
+  try {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay sesión activa');
+    }
+
+    const formData = new FormData();
+    formData.append('image', imageFile);
+
+    console.log('🔵 uploadOfferImage - Subiendo imagen de oferta...');
+    console.log('🔵 uploadOfferImage - Archivo:', imageFile.name, imageFile.size, 'bytes');
+
+    // Primero intentar con el endpoint de ofertas si existe
+    let response = await fetch(`${BASE_URL}/offer/upload-image`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    // Si no existe ese endpoint, usar el genérico
+    if (!response.ok && response.status === 404) {
+      console.log('🔵 uploadOfferImage - Endpoint de ofertas no disponible, usando endpoint genérico');
+      response = await fetch(`${BASE_URL}/upload/image`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+    }
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Error al subir imagen: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ uploadOfferImage - Imagen subida:', data);
+    
+    // Retornar la URL de la imagen
+    return data.url || data.image_url || data.secure_url || data.data?.url;
+  } catch (error) {
+    console.error('🔴 Error en uploadOfferImage:', error);
+    throw error;
+  }
+};
+
+/**
  * Crear una nueva oferta
  * @param {Object} offerData - Datos de la oferta
  * @param {File} imageFile - Archivo de imagen opcional
@@ -251,90 +307,62 @@ export const createOffer = async (offerData, imageFile = null) => {
 
     const url = API_URL_OFFERS_CREATE;
     console.log('🔵 createOffer - URL completa:', url);
-    console.log('🔵 createOffer - BASE_URL:', BASE_URL);
-    console.log('🔵 createOffer - Tiene imagen archivo:', !!imageFile, 'Tiene image_url:', !!offerData.image_url);
-    console.log('🔵 createOffer - Datos a enviar:', {
-      ...offerData,
-      imageFile: imageFile ? `File: ${imageFile.name} (${imageFile.size} bytes)` : null
-    });
+    console.log('🔵 createOffer - Tiene imagen archivo:', !!imageFile);
 
-    // Si hay imagen, primero subirla para obtener la URL
-    let finalOfferData = { ...offerData };
+    if (!imageFile && !offerData.image_url) {
+      throw new Error('Debes proporcionar una imagen');
+    }
+
+    // El backend espera multipart/form-data con el archivo y los datos
+    const formData = new FormData();
     
+    // Agregar la imagen si existe
     if (imageFile) {
-      console.log('🔵 createOffer - Hay imagen, subiendo primero...');
-      console.log('🔵 createOffer - Tipo de archivo:', imageFile.constructor.name);
-      console.log('🔵 createOffer - Nombre del archivo:', imageFile.name);
-      console.log('🔵 createOffer - Tamaño del archivo:', imageFile.size, 'bytes');
-      console.log('🔵 createOffer - Tipo MIME:', imageFile.type);
-      try {
-        // Subir imagen usando el servicio de upload
-        const uploadResult = await uploadProfilePicture(imageFile);
-        console.log('🔵 createOffer - Resultado completo de uploadProfilePicture:', uploadResult);
-        console.log('🔵 createOffer - Tipo de resultado:', typeof uploadResult);
-        
-        // El backend puede devolver { url: "..." } o directamente la URL como string
-        let imageUrl;
-        if (typeof uploadResult === 'string') {
-          imageUrl = uploadResult;
-        } else if (uploadResult && uploadResult.url) {
-          imageUrl = uploadResult.url;
-        } else if (uploadResult && uploadResult.data && uploadResult.data.url) {
-          imageUrl = uploadResult.data.url;
-        } else if (uploadResult && uploadResult.image_url) {
-          imageUrl = uploadResult.image_url;
-        } else {
-          console.warn('⚠️ createOffer - Formato de respuesta inesperado de uploadProfilePicture:', uploadResult);
-          imageUrl = uploadResult;
-        }
-        
-        console.log('✅ createOffer - Imagen subida, URL obtenida:', imageUrl);
-        finalOfferData.image_url = imageUrl;
-      } catch (uploadError) {
-        console.error('🔴 createOffer - Error al subir imagen:', uploadError);
-        console.error('🔴 createOffer - Error stack:', uploadError.stack);
-        console.error('🔴 createOffer - Error name:', uploadError.name);
-        console.error('🔴 createOffer - Error message:', uploadError.message);
-        
-        // Proporcionar mensajes de error más específicos
-        let errorMessage = 'Error al subir la imagen';
-        
-        if (uploadError.message) {
-          errorMessage = uploadError.message;
-        } else if (uploadError.name === 'TypeError') {
-          errorMessage = 'Error de conexión al subir la imagen. Verifica tu conexión a internet.';
-        } else if (uploadError.message && uploadError.message.includes('fetch')) {
-          errorMessage = 'No se pudo conectar con el servidor para subir la imagen.';
-        } else {
-          errorMessage = `Error al subir la imagen: ${uploadError.toString()}`;
-        }
-        
-        throw new Error(errorMessage);
+      formData.append('image', imageFile);
+      console.log('🔵 createOffer - Imagen agregada al FormData:', imageFile.name);
+    }
+    
+    // Agregar todos los campos del offerData al FormData
+    // Limpiar y validar datos antes de enviar
+    Object.keys(offerData).forEach(key => {
+      const value = offerData[key];
+      
+      // Saltar campos vacíos, null, undefined, o image_url
+      if (value === null || value === undefined || value === '' || key === 'image_url') {
+        return;
       }
-    } else if (offerData.image_url && offerData.image_url.trim()) {
-      // Si no hay archivo pero hay URL, usar la URL directamente
-      console.log('🔵 createOffer - Usando image_url del formulario:', offerData.image_url);
-      finalOfferData.image_url = offerData.image_url.trim();
+      
+      // Para campos numéricos, asegurarse de que sean números válidos
+      const numericFields = ['discount_percentage', 'discount_amount', 'original_price', 'final_price', 
+                             'points_required', 'max_uses', 'stock_available', 'organizer_id'];
+      
+      if (numericFields.includes(key)) {
+        const numValue = Number(value);
+        if (!isNaN(numValue)) {
+          formData.append(key, numValue);
+        }
+      } else {
+        formData.append(key, value);
+      }
+    });
+    
+    // Log para debug
+    console.log('🔵 createOffer - Campos enviados en FormData:');
+    for (let [key, value] of formData.entries()) {
+      if (key !== 'image') {
+        console.log(`  ${key}: ${value} (${typeof value})`);
+      }
     }
     
-    // Validar que image_url esté presente si se subió una imagen
-    if (imageFile && !finalOfferData.image_url) {
-      console.error('🔴 createOffer - ERROR: Se intentó subir una imagen pero no se obtuvo la URL');
-      throw new Error('Error al obtener la URL de la imagen subida. Por favor, intenta nuevamente.');
-    }
-    
-    // Siempre enviar JSON (el backend espera JSON)
-    console.log('🔵 createOffer - Enviando JSON a:', url);
-    console.log('🔵 createOffer - Datos finales:', JSON.stringify(finalOfferData, null, 2));
-    console.log('🔵 createOffer - image_url en datos finales:', finalOfferData.image_url);
+    console.log('🔵 createOffer - Enviando FormData con imagen');
     
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
+        // NO incluir Content-Type, el browser lo establece automáticamente con boundary
       },
-      body: JSON.stringify(finalOfferData),
+      body: formData,
     });
     
     console.log('🔵 createOffer - Response status:', response.status);
@@ -342,10 +370,6 @@ export const createOffer = async (offerData, imageFile = null) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('🔴 createOffer - Error text:', errorText);
-      
-      if (errorText.includes('Cannot POST') || errorText.includes('<!DOCTYPE html>') || response.status === 404) {
-        throw new Error(`El endpoint POST no está disponible (404). Verifica que la ruta POST esté definida en rewards.routes.js y que el servidor esté reiniciado.`);
-      }
       
       let errorData;
       try {
@@ -358,7 +382,9 @@ export const createOffer = async (offerData, imageFile = null) => {
       throw new Error(errorMessage);
     }
     
-    return await response.json();
+    const result = await response.json();
+    console.log('✅ createOffer - Oferta creada exitosamente:', result);
+    return result;
   } catch (error) {
     console.error('🔴 Error en createOffer:', error);
     throw error;
@@ -379,83 +405,79 @@ export const updateOffer = async (offerId, offerData, imageFile = null) => {
       throw new Error('No hay sesión activa');
     }
 
-    const url = API_URL_OFFERS_UPDATE.replace(':id', offerId);
+    const url = API_URL_OFFERS_UPDATE.replace(':offerId', offerId);
     console.log('🔵 updateOffer - URL:', url);
-    console.log('🔵 updateOffer - Tiene imagen archivo:', !!imageFile, 'Tiene image_url:', !!offerData.image_url);
+    console.log('🔵 updateOffer - Tiene imagen archivo:', !!imageFile);
 
-    // Si hay imagen nueva (archivo o URL diferente), usar FormData
-    if (imageFile || (offerData.image_url && offerData.image_url !== offerData.original_image_url)) {
-      const formData = new FormData();
-      
-      // Agregar todos los campos de texto
-      Object.keys(offerData).forEach(key => {
-        if (key !== 'image_url' && key !== 'original_image_url' && offerData[key] !== null && offerData[key] !== undefined && offerData[key] !== '') {
-          const value = offerData[key];
-          if (typeof value === 'boolean') {
-            formData.append(key, value.toString());
-          } else if (typeof value === 'object' && !(value instanceof File)) {
-            formData.append(key, JSON.stringify(value));
-          } else if (typeof value === 'number') {
-            formData.append(key, value.toString());
-          } else {
-            formData.append(key, value);
-          }
-        }
-      });
-
-      // Agregar imagen: archivo local tiene prioridad sobre URL
-      if (imageFile) {
-        console.log('🔵 updateOffer - Agregando archivo de imagen al FormData');
-        formData.append('image', imageFile);
-      } else if (offerData.image_url && (offerData.image_url.startsWith('http://') || offerData.image_url.startsWith('https://'))) {
-        // Si es URL nueva, intentar descargarla y convertirla a archivo
-        console.log('🔵 updateOffer - Descargando imagen desde URL:', offerData.image_url);
-        try {
-          const response = await fetch(offerData.image_url);
-          const blob = await response.blob();
-          const fileName = offerData.image_url.split('/').pop() || 'offer-image.jpg';
-          formData.append('image', blob, fileName);
-          console.log('✅ updateOffer - Imagen descargada y agregada al FormData');
-        } catch (error) {
-          console.warn('⚠️ updateOffer - No se pudo descargar la imagen desde la URL, enviando URL como string:', error);
-          formData.append('image_url', offerData.image_url);
-        }
-      }
-
-      console.log('🔵 updateOffer - Enviando FormData');
-
-      const response = await fetch(url, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          // No incluir Content-Type para FormData
-        },
-        body: formData,
-      });
-
-      console.log('🔵 updateOffer - Response status:', response.status, 'ok:', response.ok);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorData;
-        try {
-          errorData = JSON.parse(errorText);
-        } catch {
-          errorData = { message: errorText || `Error HTTP! status: ${response.status}` };
-        }
-        console.error('🔴 updateOffer - Error response:', errorData);
-        throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
-      }
-
-      return await response.json();
-    } else {
-      // Si no hay imagen nueva, usar JSON normal
-      console.log('🔵 updateOffer - Enviando JSON sin imagen nueva');
-      return await fetchWithAuth(url, {
-        method: 'PUT',
-        body: JSON.stringify(offerData),
-      });
+    // El backend espera multipart/form-data con el archivo y los datos
+    const formData = new FormData();
+    
+    // Agregar la imagen si existe
+    if (imageFile) {
+      formData.append('image', imageFile);
+      console.log('🔵 updateOffer - Nueva imagen agregada al FormData:', imageFile.name);
     }
+    
+    // Agregar todos los campos del offerData al FormData
+    // Limpiar y validar datos antes de enviar
+    Object.keys(offerData).forEach(key => {
+      const value = offerData[key];
+      
+      // Saltar campos vacíos, null, undefined, original_image_url
+      if (value === null || value === undefined || value === '' || key === 'original_image_url') {
+        return;
+      }
+      
+      // Para campos numéricos, asegurarse de que sean números válidos
+      const numericFields = ['discount_percentage', 'discount_amount', 'original_price', 'final_price', 
+                             'points_required', 'max_uses', 'stock_available', 'organizer_id'];
+      
+      if (numericFields.includes(key)) {
+        const numValue = Number(value);
+        if (!isNaN(numValue)) {
+          formData.append(key, numValue);
+        }
+      } else {
+        formData.append(key, value);
+      }
+    });
+    
+    // Log para debug
+    console.log('🔵 updateOffer - Campos enviados en FormData:');
+    for (let [key, value] of formData.entries()) {
+      if (key !== 'image') {
+        console.log(`  ${key}: ${value} (${typeof value})`);
+      }
+    }
+
+    console.log('🔵 updateOffer - Enviando FormData');
+
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        // NO incluir Content-Type, el browser lo establece automáticamente con boundary
+      },
+      body: formData,
+    });
+
+    console.log('🔵 updateOffer - Response status:', response.status, 'ok:', response.ok);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { message: errorText || `Error HTTP! status: ${response.status}` };
+      }
+      console.error('🔴 updateOffer - Error response:', errorData);
+      throw new Error(errorData.error || errorData.message || errorData.details || `Error HTTP! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ updateOffer - Oferta actualizada exitosamente:', result);
+    return result;
   } catch (error) {
     console.error('🔴 Error en updateOffer:', error);
     throw error;
@@ -469,7 +491,9 @@ export const updateOffer = async (offerId, offerData, imageFile = null) => {
  */
 export const deleteOffer = async (offerId) => {
   try {
-    const url = API_URL_OFFERS_DELETE.replace(':id', offerId);
+    const url = API_URL_OFFERS_DELETE.replace(':offerId', offerId);
+    console.log('🔵 deleteOffer - URL:', url);
+    console.log('🔵 deleteOffer - offerId:', offerId);
     return await fetchWithAuth(url, {
       method: 'DELETE',
     });

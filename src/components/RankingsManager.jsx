@@ -3,7 +3,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import {
   Trophy,
@@ -22,57 +21,51 @@ import {
   getRankingUsuariosMasPuntos,
   getRankingUsuariosMasLikesDados,
   getRankingUsuariosMasComentarios,
-  getRankingUsuariosMasEventosCreados,
-  getRankingEventosMasSuscritos,
-  getRankingEventosMasLikes
+  getRankingUsuariosMasEventosCreados
 } from '../services/rankingService';
 
 const RankingsManager = () => {
-  const [activeTab, setActiveTab] = useState('users');
   const [limit, setLimit] = useState(10);
   const [rankings, setRankings] = useState({
     usuariosMasSuscritos: [],
     usuariosMasPuntos: [],
     usuariosMasLikesDados: [],
     usuariosMasComentarios: [],
-    usuariosMasEventosCreados: [],
-    eventosMasSuscritos: [],
-    eventosMasLikes: []
+    usuariosMasEventosCreados: []
   });
   const [isLoading, setIsLoading] = useState(false);
 
   const loadRankings = async () => {
     try {
       setIsLoading(true);
+      console.log('🔵 RankingsManager - Cargando rankings con limit:', limit);
+      
       const [
         usuariosMasSuscritos,
         usuariosMasPuntos,
         usuariosMasLikesDados,
         usuariosMasComentarios,
-        usuariosMasEventosCreados,
-        eventosMasSuscritos,
-        eventosMasLikes
+        usuariosMasEventosCreados
       ] = await Promise.allSettled([
         getRankingUsuariosMasSuscritos(limit),
         getRankingUsuariosMasPuntos(limit),
         getRankingUsuariosMasLikesDados(limit),
         getRankingUsuariosMasComentarios(limit),
-        getRankingUsuariosMasEventosCreados(limit),
-        getRankingEventosMasSuscritos(limit),
-        getRankingEventosMasLikes(limit)
+        getRankingUsuariosMasEventosCreados(limit)
       ]);
 
-      setRankings({
+      const newRankings = {
         usuariosMasSuscritos: usuariosMasSuscritos.status === 'fulfilled' ? usuariosMasSuscritos.value : [],
         usuariosMasPuntos: usuariosMasPuntos.status === 'fulfilled' ? usuariosMasPuntos.value : [],
         usuariosMasLikesDados: usuariosMasLikesDados.status === 'fulfilled' ? usuariosMasLikesDados.value : [],
         usuariosMasComentarios: usuariosMasComentarios.status === 'fulfilled' ? usuariosMasComentarios.value : [],
-        usuariosMasEventosCreados: usuariosMasEventosCreados.status === 'fulfilled' ? usuariosMasEventosCreados.value : [],
-        eventosMasSuscritos: eventosMasSuscritos.status === 'fulfilled' ? eventosMasSuscritos.value : [],
-        eventosMasLikes: eventosMasLikes.status === 'fulfilled' ? eventosMasLikes.value : []
-      });
+        usuariosMasEventosCreados: usuariosMasEventosCreados.status === 'fulfilled' ? usuariosMasEventosCreados.value : []
+      };
+      
+      console.log('🔵 RankingsManager - Nuevo estado de rankings:', newRankings);
+      setRankings(newRankings);
     } catch (error) {
-      console.error('Error loading rankings:', error);
+      console.error('🔴 Error loading rankings:', error);
       toast.error('Error al cargar los rankings');
     } finally {
       setIsLoading(false);
@@ -155,61 +148,13 @@ const RankingsManager = () => {
     </Card>
   );
 
-  const EventRankingCard = ({ events, title, icon, countLabel }) => (
-    <Card className="bg-black/40 border-purple-500/30">
-      <CardHeader>
-        <CardTitle className="text-white flex items-center gap-2">
-          {icon}
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {events.map((event, index) => (
-            <div key={event.event_id} className="flex items-center justify-between p-3 rounded-lg bg-black/30">
-              <div className="flex items-center gap-3">
-                <Badge className={getRankColor(index + 1)}>
-                  {getRankIcon(index + 1)}
-                  #{index + 1}
-                </Badge>
-                <div className="flex-1">
-                  <p className="font-medium text-white">{event.title}</p>
-                  {event.organizer && (
-                    <div className="flex items-center gap-2 mt-1">
-                      <img 
-                        src={event.organizer.profile_picture || event.organizer.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(event.organizer.display_name || event.organizer.username || 'User')}&background=7c3aed&color=fff&size=20`} 
-                        alt={event.organizer.display_name || event.organizer.username}
-                        className="w-5 h-5 rounded-full object-cover"
-                      />
-                      <p className="text-sm text-purple-300">
-                        Por: {event.organizer.display_name || event.organizer.username}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <Badge variant="secondary" className="bg-purple-900/50 text-purple-200">
-                {event.count} {countLabel}
-              </Badge>
-            </div>
-          ))}
-          {events.length === 0 && (
-            <div className="text-center py-8 text-purple-300">
-              No hay datos disponibles
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-white">Rankings y Estadísticas</h2>
-          <p className="text-purple-300">Descubre los usuarios y eventos más destacados</p>
+          <p className="text-purple-300">Descubre los usuarios más destacados</p>
         </div>
         <div className="flex items-center gap-4">
           <Select value={limit.toString()} onValueChange={(value) => setLimit(parseInt(value))}>
@@ -233,77 +178,39 @@ const RankingsManager = () => {
         </div>
       </div>
 
-      {/* Rankings Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 bg-black/30 border border-purple-500/30">
-          <TabsTrigger
-            value="users"
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
-          >
-            <Users className="h-4 w-4 mr-2" />
-            Rankings de Usuarios
-          </TabsTrigger>
-          <TabsTrigger
-            value="events"
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
-          >
-            <Calendar className="h-4 w-4 mr-2" />
-            Rankings de Eventos
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="users" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <UserRankingCard
-              users={rankings.usuariosMasSuscritos}
-              title="Usuarios Más Seguidos"
-              icon={<Users className="h-5 w-5 text-purple-400" />}
-              countLabel="seguidores"
-            />
-            <UserRankingCard
-              users={rankings.usuariosMasPuntos}
-              title="Usuarios con Más Puntos"
-              icon={<Star className="h-5 w-5 text-purple-400" />}
-              countLabel="puntos"
-            />
-            <UserRankingCard
-              users={rankings.usuariosMasLikesDados}
-              title="Usuarios Más Activos (Likes)"
-              icon={<Heart className="h-5 w-5 text-purple-400" />}
-              countLabel="likes dados"
-            />
-            <UserRankingCard
-              users={rankings.usuariosMasComentarios}
-              title="Usuarios Más Comentaristas"
-              icon={<MessageCircle className="h-5 w-5 text-purple-400" />}
-              countLabel="comentarios"
-            />
-            <UserRankingCard
-              users={rankings.usuariosMasEventosCreados}
-              title="Organizadores Más Activos"
-              icon={<Calendar className="h-5 w-5 text-purple-400" />}
-              countLabel="eventos creados"
-            />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="events" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <EventRankingCard
-              events={rankings.eventosMasSuscritos}
-              title="Eventos Más Populares"
-              icon={<Users className="h-5 w-5 text-purple-400" />}
-              countLabel="suscriptores"
-            />
-            <EventRankingCard
-              events={rankings.eventosMasLikes}
-              title="Eventos Más Queridos"
-              icon={<Heart className="h-5 w-5 text-purple-400" />}
-              countLabel="likes"
-            />
-          </div>
-        </TabsContent>
-      </Tabs>
+      {/* Rankings */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <UserRankingCard
+          users={rankings.usuariosMasSuscritos}
+          title="Usuarios Más Seguidos"
+          icon={<Users className="h-5 w-5 text-purple-400" />}
+          countLabel="seguidores"
+        />
+        <UserRankingCard
+          users={rankings.usuariosMasPuntos}
+          title="Usuarios con Más Puntos"
+          icon={<Star className="h-5 w-5 text-purple-400" />}
+          countLabel="puntos"
+        />
+        <UserRankingCard
+          users={rankings.usuariosMasLikesDados}
+          title="Usuarios Más Activos (Likes)"
+          icon={<Heart className="h-5 w-5 text-purple-400" />}
+          countLabel="likes dados"
+        />
+        <UserRankingCard
+          users={rankings.usuariosMasComentarios}
+          title="Usuarios Más Comentaristas"
+          icon={<MessageCircle className="h-5 w-5 text-purple-400" />}
+          countLabel="comentarios"
+        />
+        <UserRankingCard
+          users={rankings.usuariosMasEventosCreados}
+          title="Organizadores Más Activos"
+          icon={<Calendar className="h-5 w-5 text-purple-400" />}
+          countLabel="eventos creados"
+        />
+      </div>
     </div>
   );
 };

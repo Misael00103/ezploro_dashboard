@@ -14,6 +14,7 @@ const useCountUp = (end, duration = 2000, startOnMount = true) => {
     setIsAnimating(true);
     let startTime = null;
     const startValue = 0;
+    let animationFrameId = null;
     
     const animate = (currentTime) => {
       if (!startTime) startTime = currentTime;
@@ -26,21 +27,29 @@ const useCountUp = (end, duration = 2000, startOnMount = true) => {
       setCount(currentCount);
       
       if (progress < 1) {
-        requestAnimationFrame(animate);
+        animationFrameId = requestAnimationFrame(animate);
       } else {
         setCount(end);
         setIsAnimating(false);
       }
     };
     
-    requestAnimationFrame(animate);
+    animationFrameId = requestAnimationFrame(animate);
+    
+    // Cleanup function para cancelar la animación si el componente se desmonta
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
   }, [end, duration, startOnMount]);
 
-  const restart = () => {
+  const restart = useCallback(() => {
     setCount(0);
     setIsAnimating(true);
     let startTime = null;
     const startValue = 0;
+    let animationFrameId = null;
     
     const animate = (currentTime) => {
       if (!startTime) startTime = currentTime;
@@ -52,15 +61,21 @@ const useCountUp = (end, duration = 2000, startOnMount = true) => {
       setCount(currentCount);
       
       if (progress < 1) {
-        requestAnimationFrame(animate);
+        animationFrameId = requestAnimationFrame(animate);
       } else {
         setCount(end);
         setIsAnimating(false);
       }
     };
     
-    requestAnimationFrame(animate);
-  };
+    animationFrameId = requestAnimationFrame(animate);
+    
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [end, duration]);
 
   return [count, isAnimating, restart];
 };

@@ -16,16 +16,10 @@ export const getRankingUsuariosMasSuscritos = async (limit = 10) => {
     const response = await fetchWithAuth(url, {
       method: 'GET',
     });
-    const data = response.data || response || [];
-    // Transform backend response to match frontend expectations
-    return data.map((item, index) => ({
-      user_id: item.user_id,
-      username: item.user?.username,
-      display_name: item.user?.display_name,
-      profile_picture: item.user?.profile_picture,
-      count: parseInt(item.total_suscripciones || 0),
-      rank: index + 1
-    }));
+    // El backend retorna { success, message, data }
+    const data = response.data || [];
+    // El backend ya retorna el formato correcto
+    return data;
   } catch (error) {
     console.error('Error getting usuarios mas suscritos ranking:', error);
     return [];
@@ -36,21 +30,23 @@ export const getRankingUsuariosMasSuscritos = async (limit = 10) => {
 export const getRankingUsuariosMasPuntos = async (limit = 10) => {
   try {
     const url = `${API_URL_RANKINGS_USUARIOS_MAS_PUNTOS}?limit=${limit}`;
+    console.log('🔵 getRankingUsuariosMasPuntos - URL:', url);
+    
     const response = await fetchWithAuth(url, {
       method: 'GET',
     });
-    const data = response.data || response || [];
-    // Transform backend response to match frontend expectations
-    return data.map((item, index) => ({
-      user_id: item.user_id,
-      username: item.user?.username,
-      display_name: item.user?.display_name,
-      profile_picture: item.user?.profile_picture,
-      count: parseInt(item.total_points || 0),
-      rank: index + 1
-    }));
+    
+    console.log('🔵 getRankingUsuariosMasPuntos - Respuesta completa:', response);
+    
+    // El backend retorna { success, message, data }
+    const data = response.data || [];
+    console.log('🔵 getRankingUsuariosMasPuntos - Data extraída:', data);
+    
+    // El backend ya retorna el formato correcto
+    return data;
   } catch (error) {
-    console.error('Error getting usuarios mas puntos ranking:', error);
+    console.error('🔴 Error getting usuarios mas puntos ranking:', error);
+    console.error('🔴 Error stack:', error.stack);
     return [];
   }
 };
@@ -62,16 +58,10 @@ export const getRankingUsuariosMasLikesDados = async (limit = 10) => {
     const response = await fetchWithAuth(url, {
       method: 'GET',
     });
-    const data = response.data || response || [];
-    // Transform backend response to match frontend expectations
-    return data.map((item, index) => ({
-      user_id: item.user_id,
-      username: item.user?.username,
-      display_name: item.user?.display_name,
-      profile_picture: item.user?.profile_picture,
-      count: parseInt(item.total_likes_dados || 0),
-      rank: index + 1
-    }));
+    // El backend retorna { success, message, data }
+    const data = response.data || [];
+    // El backend ya retorna el formato correcto
+    return data;
   } catch (error) {
     console.error('Error getting usuarios mas likes dados ranking:', error);
     return [];
@@ -85,16 +75,10 @@ export const getRankingUsuariosMasComentarios = async (limit = 10) => {
     const response = await fetchWithAuth(url, {
       method: 'GET',
     });
-    const data = response.data || response || [];
-    // Transform backend response to match frontend expectations
-    return data.map((item, index) => ({
-      user_id: item.user_id,
-      username: item.user?.username,
-      display_name: item.user?.display_name,
-      profile_picture: item.user?.profile_picture,
-      count: parseInt(item.total_comentarios || 0),
-      rank: index + 1
-    }));
+    // El backend retorna { success, message, data }
+    const data = response.data || [];
+    // El backend ya retorna el formato correcto
+    return data;
   } catch (error) {
     console.error('Error getting usuarios mas comentarios ranking:', error);
     return [];
@@ -108,19 +92,12 @@ export const getRankingUsuariosMasEventosCreados = async (limit = 10) => {
     const response = await fetchWithAuth(url, {
       method: 'GET',
     });
-    const data = response.data || response || [];
-    // Transform backend response to match frontend expectations
-    return data.map((item, index) => ({
-      user_id: item.organizer_id,
-      username: item.organizer?.username,
-      display_name: item.organizer?.display_name,
-      profile_picture: item.organizer?.profile_picture,
-      count: parseInt(item.total_eventos_creados || 0),
-      rank: index + 1
-    }));
+    // El backend retorna { success, message, data }
+    const data = response.data || [];
+    // El backend ya retorna el formato correcto
+    return data;
   } catch (error) {
     console.error('Error getting usuarios mas eventos creados ranking:', error);
-    // Return empty array on any error (including 500)
     return [];
   }
 };
@@ -129,20 +106,44 @@ export const getRankingUsuariosMasEventosCreados = async (limit = 10) => {
 export const getRankingEventosMasSuscritos = async (limit = 10) => {
   try {
     const url = `${API_URL_RANKINGS_EVENTOS_MAS_SUSCRITOS}?limit=${limit}`;
+    console.log('🔵 getRankingEventosMasSuscritos - URL:', url);
+    
     const response = await fetchWithAuth(url, {
       method: 'GET',
     });
-    const data = response.data || response || [];
-    // Transform backend response to match frontend expectations
-    return data.map((item, index) => ({
-      event_id: item.event_id,
-      title: item.event?.title,
-      cover_image: item.event?.cover_image,
-      count: parseInt(item.total_suscriptores || 0),
-      rank: index + 1
-    }));
+    
+    console.log('🔵 getRankingEventosMasSuscritos - Respuesta completa:', response);
+    console.log('🔵 getRankingEventosMasSuscritos - Tipo de response:', typeof response);
+    console.log('🔵 getRankingEventosMasSuscritos - Keys de response:', Object.keys(response));
+    
+    // El backend retorna { success, message, data }
+    // Pero también puede retornar directamente el array
+    let data = [];
+    
+    if (Array.isArray(response)) {
+      console.log('🔵 getRankingEventosMasSuscritos - Response es array directo');
+      data = response;
+    } else if (response.data && Array.isArray(response.data)) {
+      console.log('🔵 getRankingEventosMasSuscritos - Response.data es array');
+      data = response.data;
+    } else if (response.success && response.data) {
+      console.log('🔵 getRankingEventosMasSuscritos - Response tiene success y data');
+      data = Array.isArray(response.data) ? response.data : [];
+    } else {
+      console.warn('⚠️ getRankingEventosMasSuscritos - Estructura de respuesta desconocida');
+    }
+    
+    console.log('🔵 getRankingEventosMasSuscritos - Data extraída:', data);
+    console.log('🔵 getRankingEventosMasSuscritos - Cantidad de eventos:', data.length);
+    
+    if (data.length > 0) {
+      console.log('🔵 getRankingEventosMasSuscritos - Primer evento:', data[0]);
+    }
+    
+    return data;
   } catch (error) {
-    console.error('Error getting eventos mas suscritos ranking:', error);
+    console.error('🔴 Error getting eventos mas suscritos ranking:', error);
+    console.error('🔴 Error stack:', error.stack);
     return [];
   }
 };
@@ -151,20 +152,44 @@ export const getRankingEventosMasSuscritos = async (limit = 10) => {
 export const getRankingEventosMasLikes = async (limit = 10) => {
   try {
     const url = `${API_URL_RANKINGS_EVENTOS_MAS_LIKES}?limit=${limit}`;
+    console.log('🔵 getRankingEventosMasLikes - URL:', url);
+    
     const response = await fetchWithAuth(url, {
       method: 'GET',
     });
-    const data = response.data || response || [];
-    // Transform backend response to match frontend expectations
-    return data.map((item, index) => ({
-      event_id: item.event_id,
-      title: item.event?.title,
-      cover_image: item.event?.cover_image,
-      count: parseInt(item.total_likes || 0),
-      rank: index + 1
-    }));
+    
+    console.log('🔵 getRankingEventosMasLikes - Respuesta completa:', response);
+    console.log('🔵 getRankingEventosMasLikes - Tipo de response:', typeof response);
+    console.log('🔵 getRankingEventosMasLikes - Keys de response:', Object.keys(response));
+    
+    // El backend retorna { success, message, data }
+    // Pero también puede retornar directamente el array
+    let data = [];
+    
+    if (Array.isArray(response)) {
+      console.log('🔵 getRankingEventosMasLikes - Response es array directo');
+      data = response;
+    } else if (response.data && Array.isArray(response.data)) {
+      console.log('🔵 getRankingEventosMasLikes - Response.data es array');
+      data = response.data;
+    } else if (response.success && response.data) {
+      console.log('🔵 getRankingEventosMasLikes - Response tiene success y data');
+      data = Array.isArray(response.data) ? response.data : [];
+    } else {
+      console.warn('⚠️ getRankingEventosMasLikes - Estructura de respuesta desconocida');
+    }
+    
+    console.log('🔵 getRankingEventosMasLikes - Data extraída:', data);
+    console.log('🔵 getRankingEventosMasLikes - Cantidad de eventos:', data.length);
+    
+    if (data.length > 0) {
+      console.log('🔵 getRankingEventosMasLikes - Primer evento:', data[0]);
+    }
+    
+    return data;
   } catch (error) {
-    console.error('Error getting eventos mas likes ranking:', error);
+    console.error('🔴 Error getting eventos mas likes ranking:', error);
+    console.error('🔴 Error stack:', error.stack);
     return [];
   }
 };
