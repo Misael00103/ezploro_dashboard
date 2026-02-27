@@ -501,6 +501,7 @@ const EventsManager = ({ events, updateEvents }) => {
   };
 
   const handleEdit = (event) => {
+    console.log('🔵 handleEdit - Evento recibido:', event);
     setSelectedEvent(event);
     
     // Preparar fecha para el input datetime-local
@@ -515,13 +516,43 @@ const EventsManager = ({ events, updateEvents }) => {
       return `${year}-${month}-${day}T${hours}:${minutes}`;
     };
 
+    // Extraer ubicación correctamente
+    let locationText = '';
+    let coordinates = null;
+    
+    if (typeof event.location === 'string') {
+      // Si location es un string, usarlo directamente
+      locationText = event.location;
+    } else if (event.location && typeof event.location === 'object') {
+      // Si location es un objeto con coordenadas
+      if (event.location.coordinates && Array.isArray(event.location.coordinates)) {
+        coordinates = {
+          lat: event.location.coordinates[1],
+          lng: event.location.coordinates[0]
+        };
+      }
+      // Intentar obtener el texto de la ubicación de otros campos
+      locationText = event.address || event.city || event.state || '';
+    }
+    
+    // Si no hay locationText pero hay address, usar address
+    if (!locationText && event.address) {
+      locationText = event.address;
+      if (event.city) locationText += `, ${event.city}`;
+      if (event.state) locationText += `, ${event.state}`;
+      if (event.country) locationText += `, ${event.country}`;
+    }
+    
+    console.log('🔵 handleEdit - Location extraída:', locationText);
+    console.log('🔵 handleEdit - Coordinates:', coordinates);
+
     setFormData({
       title: event.title || '',
       description: event.description || '',
       resume: event.resume || '',
       date_time: formatDateTimeLocal(event.date_time),
       end_date_time: formatDateTimeLocal(event.end_date_time),
-      location: typeof event.location === 'string' ? event.location : '',
+      location: locationText,
       category: event.category || '',
       subcategory: event.subcategory || '',
       price: event.price || 0,
@@ -542,12 +573,9 @@ const EventsManager = ({ events, updateEvents }) => {
         : []
     });
 
-    // Si hay coordenadas en el evento, establecerlas
-    if (event.location && typeof event.location === 'object' && event.location.coordinates) {
-      setSelectedCoordinates({
-        lat: event.location.coordinates[1],
-        lng: event.location.coordinates[0]
-      });
+    // Establecer coordenadas si existen
+    if (coordinates) {
+      setSelectedCoordinates(coordinates);
     } else if (event.latitude && event.longitude) {
       setSelectedCoordinates({
         lat: event.latitude,
@@ -571,11 +599,24 @@ const EventsManager = ({ events, updateEvents }) => {
     }
 
     try {
-      const eventId = selectedEvent.id || selectedEvent.event_id || selectedEvent.eventId;
+      // Obtener el ID del evento de múltiples posibles campos
+      const eventId = selectedEvent.event_id || selectedEvent.id || selectedEvent.eventId || selectedEvent._id;
+      
+      console.log('🔵 handleUpdate - selectedEvent:', selectedEvent);
+      console.log('🔵 handleUpdate - eventId extraído:', eventId);
+      
       if (!eventId) {
+        console.error('🔴 handleUpdate - No se encontró ID en el evento:', {
+          event_id: selectedEvent.event_id,
+          id: selectedEvent.id,
+          eventId: selectedEvent.eventId,
+          _id: selectedEvent._id,
+          keys: Object.keys(selectedEvent)
+        });
+        
         toast({
           title: "Error",
-          description: "No se pudo obtener el ID del evento",
+          description: "No se pudo obtener el ID del evento. Verifica la consola para más detalles.",
           variant: "destructive"
         });
         return;
@@ -618,7 +659,8 @@ const EventsManager = ({ events, updateEvents }) => {
         };
       }
 
-      const updatedEvent = await updateEvent(eventId, eventData);
+      console.log('🔵 handleUpdate - Llamando a updateEvent con eventData:', eventData);
+      const updatedEvent = await updateEvent(eventData);
       
       // Recargar la lista completa de eventos desde el servidor para evitar problemas de sincronización
       try {
