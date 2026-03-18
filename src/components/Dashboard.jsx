@@ -418,7 +418,7 @@ const Dashboard = ({ onLogout }) => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16 py-2">
             <div className="flex items-center space-x-2 min-w-0 flex-1">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 rounded-lg flex items-center justify-center flex-shrink-0">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 lg:w-16 lg:h-16 rounded-lg flex items-center justify-center flex-shrink-0">
                 <img 
                   src={require('../img/logoezploro.png')} 
                   alt="Ezploro Logo" 

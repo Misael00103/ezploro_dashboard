@@ -312,46 +312,31 @@ export const changePassword = async (currentPassword, newPassword) => {
       throw new Error('No hay sesión activa');
     }
 
-    // Try multiple field name combinations that the backend might expect
-    const payloadOptions = [
-      { currentPassword, newPassword },
-      { current_password: currentPassword, new_password: newPassword },
-      { oldPassword: currentPassword, newPassword },
-      { old_password: currentPassword, new_password: newPassword }
-    ];
+    console.log('🔵 Cambiando contraseña en:', API_URL_PASSWORD_CHANGE);
 
-    for (let i = 0; i < payloadOptions.length; i++) {
-      const payload = payloadOptions[i];
-      console.log(`Attempt ${i + 1}: Sending password change with fields:`, Object.keys(payload));
-      console.log(`Payload values check:`, {
-        field1: Object.values(payload)[0] ? '[HIDDEN]' : 'EMPTY',
-        field2: Object.values(payload)[1] ? '[HIDDEN]' : 'EMPTY'
-      });
+    const response = await fetch(API_URL_PASSWORD_CHANGE, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        currentPassword,
+        newPassword
+      }),
+    });
 
-      const response = await fetch(API_URL_PASSWORD_CHANGE, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        console.log(`Success with payload format ${i + 1}:`, Object.keys(payload));
-        return response.json();
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.log(`Attempt ${i + 1} failed:`, errorData);
-        
-        // If this is the last attempt, throw the error
-        if (i === payloadOptions.length - 1) {
-          throw new Error(errorData.error || errorData.message || `Error HTTP! status: ${response.status}`);
-        }
-      }
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('❌ Error al cambiar contraseña:', errorData);
+      throw new Error(errorData.error || errorData.message || `Error al cambiar contraseña: ${response.status}`);
     }
+
+    const data = await response.json();
+    console.log('✅ Contraseña cambiada exitosamente');
+    return data;
   } catch (error) {
-    console.error('Error en changePassword:', error);
+    console.error('🔴 Error en changePassword:', error);
     throw error;
   }
 };
