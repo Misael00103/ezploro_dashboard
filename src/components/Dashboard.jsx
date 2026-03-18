@@ -65,7 +65,7 @@ const Dashboard = ({ onLogout }) => {
   const [error, setError] = useState(null);
   const [appDownloads, setAppDownloads] = useState(0); // Contador de descargas de app
 
-  // Función helper para transformar datos de redes sociales del backend al formato del frontend
+  // Función helper para transformar datos de redes so ciales del backend al formato del frontend
   const transformSocialMediaData = (networks) => {
     if (!Array.isArray(networks) || networks.length === 0) {
       return [];
