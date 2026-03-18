@@ -22,6 +22,11 @@ import {
   updateNotificationSettings,
   updateDashboardPreferences,
 } from '../services/userService';
+import {
+  getEzploroInfo,
+  updateEzploroInfo,
+  patchEzploroInfo,
+} from '../services/ezploroInfoService';
 
 const UserManagementManager = () => {
   const navigate = useNavigate();
@@ -84,6 +89,19 @@ const UserManagementManager = () => {
     dateFormat: 'dd/MM/yyyy',
     defaultView: 'overview',
     dark_mode: false,
+  });
+
+  const [ezploroInfo, setEzploroInfo] = useState({
+    correo: '',
+    telefono: '',
+    direccion: '',
+    instagram: '',
+    x: '',
+    facebook: '',
+    biografia: '',
+    google_play_link: '',
+    app_store_link: '',
+    tiktok: '',
   });
 
   // Load user profile on component mount
@@ -213,6 +231,29 @@ const UserManagementManager = () => {
           toast.error('No se pudo actualizar el perfil. Usando datos guardados.', {
             duration: 3000,
           });
+        }
+
+        // Cargar información de Ezploro
+        try {
+          console.log('🔵 UserManagement - Cargando información de Ezploro...');
+          const ezploroData = await getEzploroInfo();
+          console.log('✅ UserManagement - Información de Ezploro cargada:', ezploroData);
+          
+          setEzploroInfo({
+            correo: ezploroData.correo || '',
+            telefono: ezploroData.telefono || '',
+            direccion: ezploroData.direccion || '',
+            instagram: ezploroData.instagram || '',
+            x: ezploroData.x || '',
+            facebook: ezploroData.facebook || '',
+            biografia: ezploroData.biografia || '',
+            google_play_link: ezploroData.google_play_link || '',
+            app_store_link: ezploroData.app_store_link || '',
+            tiktok: ezploroData.tiktok || '',
+          });
+        } catch (ezploroError) {
+          console.error('⚠️ UserManagement - Error al cargar información de Ezploro:', ezploroError);
+          // No es crítico, continuar sin esta información
         }
       } catch (error) {
         console.error('❌ Error loading user profile:', error);
@@ -422,6 +463,24 @@ const UserManagementManager = () => {
     }
   };
 
+  // Handler for saving Ezploro info
+  const handleSaveEzploroInfo = async (e) => {
+    e.preventDefault();
+    try {
+      setIsSaving(true);
+      
+      console.log('🔵 Guardando información de Ezploro:', ezploroInfo);
+      await patchEzploroInfo(ezploroInfo);
+      
+      toast.success('Información de Ezploro actualizada exitosamente');
+    } catch (error) {
+      console.error('Error saving Ezploro info:', error);
+      toast.error(error.message || 'Error al guardar la información de Ezploro');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Handler for toggling online_status
   const handleOnlineStatusChange = async (checked) => {
     try {
@@ -561,6 +620,13 @@ const UserManagementManager = () => {
                   >
                     <Settings className="mr-2 h-4 w-4" />
                     Preferencias
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="ezploro-info"
+                    className="w-full justify-start data-[state=active]:bg-muted"
+                  >
+                    <User className="mr-2 h-4 w-4" />
+                    Info Ezploro
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -1156,6 +1222,165 @@ const UserManagementManager = () => {
                       )}
                     </Button>
                   </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Ezploro Info Tab */}
+            <TabsContent value="ezploro-info" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Información de Ezploro</CardTitle>
+                  <CardDescription>
+                    Gestiona la información de contacto y redes sociales de Ezploro
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleSaveEzploroInfo} className="space-y-6">
+                    <div className="space-y-4">
+                      <h3 className="font-medium">Información de Contacto</h3>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="ezploro-correo">Correo Electrónico</Label>
+                          <Input
+                            id="ezploro-correo"
+                            type="email"
+                            value={ezploroInfo.correo}
+                            onChange={(e) => setEzploroInfo({ ...ezploroInfo, correo: e.target.value })}
+                            placeholder="contacto@ezploro.com"
+                            disabled={isSaving}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="ezploro-telefono">Teléfono</Label>
+                          <Input
+                            id="ezploro-telefono"
+                            type="tel"
+                            value={ezploroInfo.telefono}
+                            onChange={(e) => setEzploroInfo({ ...ezploroInfo, telefono: e.target.value })}
+                            placeholder="+1 (555) 123-4567"
+                            disabled={isSaving}
+                          />
+                        </div>
+
+                        <div className="space-y-2 md:col-span-2">
+                          <Label htmlFor="ezploro-direccion">Dirección</Label>
+                          <Input
+                            id="ezploro-direccion"
+                            value={ezploroInfo.direccion}
+                            onChange={(e) => setEzploroInfo({ ...ezploroInfo, direccion: e.target.value })}
+                            placeholder="Calle Principal 123, Ciudad"
+                            disabled={isSaving}
+                          />
+                        </div>
+
+                        <div className="space-y-2 md:col-span-2">
+                          <Label htmlFor="ezploro-biografia">Biografía</Label>
+                          <Textarea
+                            id="ezploro-biografia"
+                            value={ezploroInfo.biografia}
+                            onChange={(e) => setEzploroInfo({ ...ezploroInfo, biografia: e.target.value })}
+                            placeholder="Descripción de Ezploro..."
+                            rows={4}
+                            disabled={isSaving}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 pt-4 border-t">
+                      <h3 className="font-medium">Redes Sociales</h3>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="ezploro-instagram">Instagram</Label>
+                          <Input
+                            id="ezploro-instagram"
+                            value={ezploroInfo.instagram}
+                            onChange={(e) => setEzploroInfo({ ...ezploroInfo, instagram: e.target.value })}
+                            placeholder="@ezploro"
+                            disabled={isSaving}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="ezploro-facebook">Facebook</Label>
+                          <Input
+                            id="ezploro-facebook"
+                            value={ezploroInfo.facebook}
+                            onChange={(e) => setEzploroInfo({ ...ezploroInfo, facebook: e.target.value })}
+                            placeholder="facebook.com/ezploro"
+                            disabled={isSaving}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="ezploro-x">X (Twitter)</Label>
+                          <Input
+                            id="ezploro-x"
+                            value={ezploroInfo.x}
+                            onChange={(e) => setEzploroInfo({ ...ezploroInfo, x: e.target.value })}
+                            placeholder="@ezploro"
+                            disabled={isSaving}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="ezploro-tiktok">TikTok</Label>
+                          <Input
+                            id="ezploro-tiktok"
+                            value={ezploroInfo.tiktok}
+                            onChange={(e) => setEzploroInfo({ ...ezploroInfo, tiktok: e.target.value })}
+                            placeholder="@ezploro"
+                            disabled={isSaving}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 pt-4 border-t">
+                      <h3 className="font-medium">Enlaces de Aplicaciones</h3>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="ezploro-google-play">Google Play</Label>
+                          <Input
+                            id="ezploro-google-play"
+                            value={ezploroInfo.google_play_link}
+                            onChange={(e) => setEzploroInfo({ ...ezploroInfo, google_play_link: e.target.value })}
+                            placeholder="https://play.google.com/store/apps/..."
+                            disabled={isSaving}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="ezploro-app-store">App Store</Label>
+                          <Input
+                            id="ezploro-app-store"
+                            value={ezploroInfo.app_store_link}
+                            onChange={(e) => setEzploroInfo({ ...ezploroInfo, app_store_link: e.target.value })}
+                            placeholder="https://apps.apple.com/app/..."
+                            disabled={isSaving}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-4 border-t">
+                      <Button type="submit" disabled={isSaving}>
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Guardando...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="mr-2 h-4 w-4" />
+                            Guardar información
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </form>
                 </CardContent>
               </Card>
             </TabsContent>

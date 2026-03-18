@@ -53,7 +53,12 @@ const EventsManager = ({ events, updateEvents }) => {
     state: '',
     country: 'República Dominicana',
     online: false,
-    faqs: []
+    faqs: [],
+    isRecurring: false,
+    recurrenceType: 'daily',
+    recurrenceInterval: 1,
+    recurrenceEndDate: '',
+    recurrenceCount: null
   });
   const [locationSuggestions, setLocationSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -202,7 +207,12 @@ const EventsManager = ({ events, updateEvents }) => {
       state: '',
       country: 'República Dominicana',
       online: false,
-      faqs: []
+      faqs: [],
+      isRecurring: false,
+      recurrenceType: 'daily',
+      recurrenceInterval: 1,
+      recurrenceEndDate: '',
+      recurrenceCount: null
     });
     setLocationSuggestions([]);
     setShowSuggestions(false);
@@ -418,7 +428,33 @@ const EventsManager = ({ events, updateEvents }) => {
   const handleCreate = async (e) => {
     e.preventDefault();
     
-    if (!formData.title || !formData.description || !formData.date_time || !formData.location || !formData.category) {
+    // Validación diferente para eventos online vs presenciales
+    const requiredFields = ['title', 'description', 'date_time', 'category'];
+    const missingFields = requiredFields.filter(field => !formData[field]);
+    
+    if (formData.online) {
+      // Para eventos online, requerir video_url
+      if (!formData.video_url) {
+        toast({
+          title: "Error",
+          description: "Por favor ingresa el link del evento online",
+          variant: "destructive"
+        });
+        return;
+      }
+    } else {
+      // Para eventos presenciales, requerir location
+      if (!formData.location) {
+        toast({
+          title: "Error",
+          description: "Por favor ingresa la ubicación del evento",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+    
+    if (missingFields.length > 0) {
       toast({
         title: "Error",
         description: "Por favor completa todos los campos requeridos",
@@ -446,22 +482,28 @@ const EventsManager = ({ events, updateEvents }) => {
         organizer_id: userId,
         date_time: formData.date_time,
         end_date_time: formData.end_date_time || formData.date_time,
-        location: formData.location,
+        location: formData.online ? 'Evento Online' : formData.location,
         online: formData.online || false,
         category: formData.category,
         subcategory: formData.subcategory || '',
         price: formData.price || 0,
-        video_url: formData.video_url || '',
-        address: formData.address || '',
-        city: formData.city || '',
-        state: formData.state || '',
-        country: formData.country || 'República Dominicana',
+        video_url: formData.online ? formData.video_url : (formData.video_url || ''),
+        address: formData.online ? '' : (formData.address || ''),
+        city: formData.online ? '' : (formData.city || ''),
+        state: formData.online ? '' : (formData.state || ''),
+        country: formData.online ? '' : (formData.country || 'República Dominicana'),
         faqs: formData.faqs.filter(faq => faq.question.trim() && faq.answer.trim()), // Solo enviar FAQs completas
         cover_image: formData.cover_image,
+        // Campos de eventos recurrentes
+        isRecurring: formData.isRecurring || false,
+        recurrenceType: formData.isRecurring ? formData.recurrenceType : null,
+        recurrenceInterval: formData.isRecurring ? formData.recurrenceInterval : null,
+        recurrenceEndDate: formData.isRecurring && formData.recurrenceEndDate ? formData.recurrenceEndDate : null,
+        recurrenceCount: formData.isRecurring && formData.recurrenceCount ? formData.recurrenceCount : null,
       };
 
-      // Si hay coordenadas, agregarlas
-      if (selectedCoordinates) {
+      // Si hay coordenadas (solo para eventos presenciales), agregarlas
+      if (!formData.online && selectedCoordinates) {
         eventData.latitude = selectedCoordinates.lat;
         eventData.longitude = selectedCoordinates.lng;
         eventData.location = {
@@ -472,20 +514,30 @@ const EventsManager = ({ events, updateEvents }) => {
 
       const newEvent = await createEvent(eventData);
       
-      // Recargar la lista completa de eventos desde el servidor para evitar duplicados
+      console.log('🔵 Evento creado:', newEvent);
+      console.log('🔵 Es recurrente:', formData.isRecurring);
+      
+      // Recargar la lista completa de eventos desde el servidor
       try {
         const { getEvents } = await import('../services/eventService');
         const updatedEventsList = await getEvents();
+        console.log('✅ Lista de eventos recargada, total:', updatedEventsList.length);
         updateEvents(updatedEventsList);
       } catch (fetchError) {
-        console.error('Error al recargar eventos:', fetchError);
-        // Si falla la recarga, agregar solo el nuevo evento si no existe ya
-        updateEvents(newEvent);
+        console.error('❌ Error al recargar eventos:', fetchError);
+        // Si falla la recarga, recargar desde el componente padre
+        toast({
+          title: "Advertencia",
+          description: "Evento creado pero necesitas recargar la página para verlo",
+          variant: "default"
+        });
       }
     
     toast({
       title: "Evento creado",
-      description: "El evento se ha creado exitosamente",
+      description: formData.isRecurring 
+        ? "El evento recurrente y sus instancias se han creado exitosamente" 
+        : "El evento se ha creado exitosamente",
     });
 
     setIsCreateModalOpen(false);
@@ -980,7 +1032,24 @@ const EventsManager = ({ events, updateEvents }) => {
                 </div>
               </div>
 
-              {!formData.online && (
+              {formData.online ? (
+                <div className="space-y-2">
+                  <Label htmlFor="video_url" className="text-purple-200">Link del Evento Online *</Label>
+                  <Input
+                    id="video_url"
+                    name="video_url"
+                    type="url"
+                    value={formData.video_url}
+                    onChange={handleInputChange}
+                    className="bg-black/50 border-purple-500/30 text-white"
+                    placeholder="https://zoom.us/j/123456789 o https://meet.google.com/..."
+                    required={formData.online}
+                  />
+                  <p className="text-xs text-purple-400">
+                    Ingresa el enlace de Zoom, Google Meet, Teams u otra plataforma
+                  </p>
+                </div>
+              ) : (
                 <>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -1030,6 +1099,72 @@ const EventsManager = ({ events, updateEvents }) => {
                       required={!formData.online}
                     />
                   </div>
+                  
+                  <div className="space-y-2 relative">
+                    <div className="flex justify-between items-center">
+                      <Label htmlFor="location" className="text-purple-200">Ubicación *</Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={getCurrentLocation}
+                        className="text-xs text-purple-300 border-purple-500/30 hover:bg-purple-900/50"
+                      >
+                        <MapPin className="h-3 w-3 mr-1" />
+                        Usar mi ubicación
+                      </Button>
+                    </div>
+                    <Input
+                      id="location"
+                      name="location"
+                      value={formData.location}
+                      onChange={handleLocationInputChange}
+                      onFocus={() => {
+                        if (formData.location && formData.location.length >= 3 && locationSuggestions.length > 0) {
+                          setShowSuggestions(true);
+                        }
+                      }}
+                      className="bg-black/50 border-purple-500/30 text-white"
+                      placeholder="Buscar ubicación o dirección..."
+                      required={!formData.online}
+                      autoComplete="off"
+                    />
+                    {showSuggestions && locationSuggestions.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-black border border-purple-500/30 rounded-md shadow-lg max-h-60 overflow-y-auto custom-scrollbar">
+                        {locationSuggestions.map((suggestion) => (
+                          <div
+                            key={suggestion.place_id}
+                            className="px-3 py-2 hover:bg-purple-900/50 cursor-pointer text-white text-sm border-b border-purple-500/20 last:border-b-0"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                            }}
+                            onClick={() => handleLocationSelect(suggestion)}
+                          >
+                            <div className="flex items-center space-x-2">
+                              <MapPin className="h-3 w-3 text-purple-400 flex-shrink-0" />
+                              <span className="truncate">{suggestion.description}</span>
+                            </div>
+                          </div>
+                        ))}
+                        <div className="px-3 py-2 border-t border-purple-500/30">
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => setShowSuggestions(false)}
+                            className="text-xs text-purple-400 hover:text-purple-300 flex items-center space-x-1"
+                          >
+                            <X className="h-3 w-3" />
+                            <span>Cerrar</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {selectedCoordinates && (
+                      <p className="text-xs text-purple-400">
+                        Coordenadas: {Number(selectedCoordinates.lat).toFixed(4)}, {Number(selectedCoordinates.lng).toFixed(4)}
+                      </p>
+                    )}
+                  </div>
                 </>
               )}
 
@@ -1047,74 +1182,6 @@ const EventsManager = ({ events, updateEvents }) => {
                 </div>
                 {formData.cover_image && (
                   <p className="text-sm text-purple-300">Archivo: {formData.cover_image.name}</p>
-                )}
-              </div>
-
-              <div className="space-y-2 relative">
-                <div className="flex justify-between items-center">
-                <Label htmlFor="location" className="text-purple-200">Ubicación *</Label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={getCurrentLocation}
-                    className="text-xs text-purple-300 border-purple-500/30 hover:bg-purple-900/50"
-                  >
-                    <MapPin className="h-3 w-3 mr-1" />
-                    Usar mi ubicación
-                  </Button>
-                </div>
-                <Input
-                  id="location"
-                  name="location"
-                  value={formData.location}
-                  onChange={handleLocationInputChange}
-                  onFocus={() => {
-                    // Si hay texto y sugerencias, mostrar desplegable al hacer focus
-                    if (formData.location && formData.location.length >= 3 && locationSuggestions.length > 0) {
-                      setShowSuggestions(true);
-                    }
-                  }}
-                  className="bg-black/50 border-purple-500/30 text-white"
-                  placeholder="Buscar ubicación o dirección..."
-                  required
-                  autoComplete="off"
-                />
-                {showSuggestions && locationSuggestions.length > 0 && (
-                  <div className="absolute z-50 w-full mt-1 bg-black border border-purple-500/30 rounded-md shadow-lg max-h-60 overflow-y-auto custom-scrollbar">
-                    {locationSuggestions.map((suggestion) => (
-                      <div
-                        key={suggestion.place_id}
-                        className="px-3 py-2 hover:bg-purple-900/50 cursor-pointer text-white text-sm border-b border-purple-500/20 last:border-b-0"
-                        onMouseDown={(e) => {
-                          // Prevenir que el blur del input cierre el desplegable antes del click
-                          e.preventDefault();
-                        }}
-                        onClick={() => handleLocationSelect(suggestion)}
-                      >
-                        <div className="flex items-center space-x-2">
-                          <MapPin className="h-3 w-3 text-purple-400 flex-shrink-0" />
-                          <span className="truncate">{suggestion.description}</span>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="px-3 py-2 border-t border-purple-500/30">
-                      <button
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => setShowSuggestions(false)}
-                        className="text-xs text-purple-400 hover:text-purple-300 flex items-center space-x-1"
-                      >
-                        <X className="h-3 w-3" />
-                        <span>Cerrar</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {selectedCoordinates && (
-                  <p className="text-xs text-purple-400">
-                    Coordenadas: {Number(selectedCoordinates.lat).toFixed(4)}, {Number(selectedCoordinates.lng).toFixed(4)}
-                  </p>
                 )}
               </div>
 
@@ -1208,6 +1275,97 @@ const EventsManager = ({ events, updateEvents }) => {
                     </p>
                   )}
                 </div>
+              </div>
+
+              {/* Recurring Events Section */}
+              <div className="space-y-3 pt-4 border-t border-purple-500/30">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="isRecurring"
+                    name="isRecurring"
+                    checked={formData.isRecurring}
+                    onChange={(e) => setFormData({ ...formData, isRecurring: e.target.checked })}
+                    className="w-4 h-4 text-purple-600 bg-black border-purple-500 rounded focus:ring-purple-500"
+                  />
+                  <Label htmlFor="isRecurring" className="text-purple-200 cursor-pointer">Evento Recurrente</Label>
+                </div>
+
+                {formData.isRecurring && (
+                  <div className="space-y-4 pl-6 border-l-2 border-purple-500/30">
+                    <div className="space-y-2">
+                      <Label htmlFor="recurrenceType" className="text-purple-200">Tipo de Recurrencia *</Label>
+                      <Select 
+                        value={formData.recurrenceType} 
+                        onValueChange={(value) => setFormData({ ...formData, recurrenceType: value })}
+                      >
+                        <SelectTrigger className="bg-black/50 border-purple-500/30 text-white">
+                          <SelectValue placeholder="Selecciona frecuencia" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-black border-purple-500/30">
+                          <SelectItem value="daily" className="text-white hover:bg-purple-900/50">Diario</SelectItem>
+                          <SelectItem value="weekly" className="text-white hover:bg-purple-900/50">Semanal</SelectItem>
+                          <SelectItem value="monthly" className="text-white hover:bg-purple-900/50">Mensual</SelectItem>
+                          <SelectItem value="yearly" className="text-white hover:bg-purple-900/50">Anual</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="recurrenceInterval" className="text-purple-200">
+                        Intervalo (cada cuántos {formData.recurrenceType === 'daily' ? 'días' : formData.recurrenceType === 'weekly' ? 'semanas' : formData.recurrenceType === 'monthly' ? 'meses' : 'años'}) *
+                      </Label>
+                      <Input
+                        id="recurrenceInterval"
+                        name="recurrenceInterval"
+                        type="number"
+                        min="1"
+                        value={formData.recurrenceInterval}
+                        onChange={(e) => setFormData({ ...formData, recurrenceInterval: parseInt(e.target.value) || 1 })}
+                        className="bg-black/50 border-purple-500/30 text-white"
+                        placeholder="1"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-purple-200">Finalización</Label>
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="recurrenceEndDate" className="text-purple-300 text-sm">Fecha de Fin</Label>
+                          <Input
+                            id="recurrenceEndDate"
+                            name="recurrenceEndDate"
+                            type="date"
+                            value={formData.recurrenceEndDate}
+                            onChange={(e) => setFormData({ ...formData, recurrenceEndDate: e.target.value, recurrenceCount: null })}
+                            className="bg-black/50 border-purple-500/30 text-white"
+                          />
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <span className="text-purple-300 text-sm">o</span>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="recurrenceCount" className="text-purple-300 text-sm">Número de Ocurrencias</Label>
+                          <Input
+                            id="recurrenceCount"
+                            name="recurrenceCount"
+                            type="number"
+                            min="1"
+                            value={formData.recurrenceCount || ''}
+                            onChange={(e) => setFormData({ ...formData, recurrenceCount: e.target.value ? parseInt(e.target.value) : null, recurrenceEndDate: '' })}
+                            className="bg-black/50 border-purple-500/30 text-white"
+                            placeholder="Ej: 10 eventos"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-purple-400 mt-2">
+                        Especifica una fecha de fin o un número de ocurrencias (no ambos)
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end space-x-2 pt-4 border-t border-purple-500/30">
@@ -1307,6 +1465,11 @@ const EventsManager = ({ events, updateEvents }) => {
                   <Badge variant="secondary" className="bg-purple-900/50 text-purple-200 text-xs sm:text-sm px-2 py-0.5">
                     {event.category}
                   </Badge>
+                  {event.isRecurring && (
+                    <Badge variant="secondary" className="bg-blue-900/50 text-blue-200 text-xs sm:text-sm px-2 py-0.5">
+                      🔄 Recurrente
+                    </Badge>
+                  )}
                 </div>
               </div>
             )}

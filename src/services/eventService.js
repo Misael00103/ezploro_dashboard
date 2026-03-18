@@ -221,6 +221,19 @@ export const createEvent = async (eventData) => {
       formData.append('faqs', JSON.stringify(eventData.faqs));
     }
     
+    // Campos de eventos recurrentes
+    if (eventData.isRecurring) {
+      formData.append('isRecurring', 'true');
+      formData.append('recurrenceType', eventData.recurrenceType || 'daily');
+      formData.append('recurrenceInterval', eventData.recurrenceInterval || 1);
+      if (eventData.recurrenceEndDate) {
+        formData.append('recurrenceEndDate', formatDateTime(eventData.recurrenceEndDate));
+      }
+      if (eventData.recurrenceCount) {
+        formData.append('recurrenceCount', eventData.recurrenceCount);
+      }
+    }
+    
     // Imagen de portada
     if (eventData.coverImageFile) {
       // Si es un archivo File
