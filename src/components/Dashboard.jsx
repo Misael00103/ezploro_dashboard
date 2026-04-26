@@ -25,7 +25,7 @@ import {
 import { AnimatedCounter } from './AnimatedCounter';
 import { toast, Toaster } from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 import EventsManager from './EventsManager';
 import ContactsManager from './ContactsManager';
 import TestimonialsManager from './TestimonialsManager';
@@ -33,6 +33,7 @@ import PostsManager from './PostsManager';
 import SocialMediaManager from './SocialMediaManager';
 import GamificationManager from './GamificationManager';
 import UserManagementManager from './UserManagementManager';
+import BroadcastNotificationButton from './BroadcastNotificationButton';
 import {
   getEvents,
   updateEvents,
@@ -50,7 +51,8 @@ import { getSocialMedia } from '../services/socialMediaService';
 import { getStats } from '../services/statsService';
 import { getUserProfile } from '../services/userService';
 import { debugAuthState, validateAuth, clearAuthData } from '../services/authUtils';
- 
+import { startScheduler } from '../services/notificationService';
+import { getRankingEventosMasSuscritos, getRankingEventosMasLikes } from '../services/rankingService';
 const Dashboard = ({ onLogout }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
@@ -63,9 +65,26 @@ const Dashboard = ({ onLogout }) => {
   const [stats, setStats] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [appDownloads, setAppDownloads] = useState(0); // Contador de descargas de app
+  const [appDownloads, setAppDownloads] = useState(0);
+  const [topEventsBySubs, setTopEventsBySubs] = useState([]);
+  const [topEventsByLikes, setTopEventsByLikes] = useState([]);
 
-  // Función helper para transformar datos de redes so ciales del backend al formato del frontend
+  // Agrupar eventos por mes usando fechas reales
+  const getEventsByMonth = () => {
+    if (!Array.isArray(events) || events.length === 0) return [];
+    const counts = {};
+    events.forEach((e) => {
+      const d = new Date(e.created_at || e.date_time || e.date);
+      if (isNaN(d)) return;
+      const key = d.toLocaleString('es-ES', { month: 'short', year: '2-digit' });
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([mes, eventos]) => ({ mes, eventos }))
+      .slice(-8);
+  };
+
+  // Función helper para transformar datos de redes sociales del backend al formato del frontend
   const transformSocialMediaData = (networks) => {
     if (!Array.isArray(networks) || networks.length === 0) {
       return [];
@@ -82,33 +101,10 @@ const Dashboard = ({ onLogout }) => {
     }));
   };
 
-  // Función para calcular proyección de seguidores
-  const calculateFollowersProjection = () => {
-    const totalFollowers = Array.isArray(socialMedia) 
-      ? socialMedia.reduce((sum, social) => sum + (social.followers || 0), 0)
-      : 0;
-    const monthlyGrowthRate = 0.15; // 15% de crecimiento mensual estimado
-    
-    const months = ['Actual', 'Mes 1', 'Mes 2', 'Mes 3', 'Mes 4', 'Mes 5', 'Mes 6'];
-    return months.map((month, index) => ({
-      month,
-      seguidores: Math.round(totalFollowers * Math.pow(1 + monthlyGrowthRate, index)),
-      proyeccion: index === 0 ? null : Math.round(totalFollowers * Math.pow(1 + monthlyGrowthRate, index))
-    }));
-  };
 
-  // Función para calcular proyección de eventos
-  const calculateEventsProjection = () => {
-    const currentEvents = Array.isArray(events) ? events.length : 0;
-    const monthlyGrowthRate = 0.20; // 20% de crecimiento mensual estimado
-    
-    const months = ['Actual', 'Mes 1', 'Mes 2', 'Mes 3', 'Mes 4', 'Mes 5', 'Mes 6'];
-    return months.map((month, index) => ({
-      month,
-      eventos: Math.round(currentEvents * Math.pow(1 + monthlyGrowthRate, index)),
-      proyeccion: index === 0 ? null : Math.round(currentEvents * Math.pow(1 + monthlyGrowthRate, index))
-    }));
-  };
+  useEffect(() => {
+    startScheduler();
+  }, []);
 
   // Listen for user data changes in localStorage
   useEffect(() => {
@@ -252,13 +248,32 @@ const Dashboard = ({ onLogout }) => {
         setPosts(postsData);
         setSocialMedia(transformedSocialMedia);
         setStats(statsData);
-        
-        // Cargar descargas de app desde stats o usar valor por defecto
-        if (statsData && statsData.appDownloads !== undefined) {
-          setAppDownloads(statsData.appDownloads);
-        } else {
-          setAppDownloads(0);
-        }
+        if (statsData?.appDownloads !== undefined) setAppDownloads(statsData.appDownloads);
+
+        // Top eventos por likes (campo real disponible en el backend)
+        const byLikes = [...eventsData]
+          .filter((e) => e.title)
+          .sort((a, b) => Number(b.likes || b.likes_count || 0) - Number(a.likes || a.likes_count || 0))
+          .slice(0, 8);
+        setTopEventsBySubs(byLikes.map((e) => ({
+          nombre: (e.title || 'Evento').slice(0, 22),
+          likes: Number(e.likes || e.likes_count || 0),
+          interesados: Number(e.interested_count || 0),
+          asistentes: Number(e.attendees_count || 0),
+        })));
+
+        // Eventos por categoría (datos reales siempre disponibles)
+        const catCounts = {};
+        eventsData.forEach((e) => {
+          const cat = e.category || 'Sin categoría';
+          catCounts[cat] = (catCounts[cat] || 0) + 1;
+        });
+        setTopEventsByLikes(
+          Object.entries(catCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 8)
+            .map(([categoria, total]) => ({ categoria, total }))
+        );
         
         console.log('✅ Dashboard - Datos cargados exitosamente');
       } catch (error) {
@@ -536,6 +551,9 @@ const Dashboard = ({ onLogout }) => {
           </div>
 
           <TabsContent value="overview" className="space-y-4 sm:space-y-6">
+            <div className="flex justify-end">
+              <BroadcastNotificationButton />
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6">
               <AnimatedCounter
                 title="Total Eventos"
@@ -629,113 +647,67 @@ const Dashboard = ({ onLogout }) => {
               />
             </div>
 
-            {/* Gráficas de Proyección */}
+            {/* Gráficas con datos reales */}
             <div className="grid gap-6 md:grid-cols-2 mt-6">
-              {/* Proyección de Seguidores */}
+              {/* Eventos creados por mes — LineChart */}
               <Card className="bg-black/40 border-purple-500/30">
                 <CardHeader>
                   <CardTitle className="text-white flex items-center gap-2">
                     <TrendingUp className="h-5 w-5 text-purple-400" />
-                    Proyección de Seguidores
+                    Eventos creados por mes
                   </CardTitle>
                   <CardDescription className="text-purple-300">
-                    Crecimiento estimado en los próximos 6 meses
+                    Actividad real de los últimos meses
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={calculateFollowersProjection()}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#4c1d95" />
-                      <XAxis 
-                        dataKey="month" 
-                        stroke="#a78bfa"
-                        style={{ fontSize: '12px' }}
-                      />
-                      <YAxis 
-                        stroke="#a78bfa"
-                        style={{ fontSize: '12px' }}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: '#1a0b2e', 
-                          border: '1px solid #7c3aed',
-                          borderRadius: '8px',
-                          color: '#fff'
-                        }}
-                      />
-                      <Legend 
-                        wrapperStyle={{ color: '#a78bfa' }}
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="seguidores" 
-                        stroke="#8b5cf6" 
-                        strokeWidth={3}
-                        dot={{ fill: '#8b5cf6', r: 5 }}
-                        activeDot={{ r: 7 }}
-                        name="Seguidores"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                  <div className="mt-4 p-3 bg-purple-900/20 rounded-lg border border-purple-500/30">
-                    <p className="text-sm text-purple-300">
-                      📈 Proyección basada en un crecimiento del 15% mensual
-                    </p>
-                  </div>
+                  {getEventsByMonth().length > 0 ? (
+                    <ResponsiveContainer width="100%" height={280}>
+                      <LineChart data={getEventsByMonth()}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#4c1d95" />
+                        <XAxis dataKey="mes" stroke="#a78bfa" style={{ fontSize: '11px' }} />
+                        <YAxis stroke="#a78bfa" style={{ fontSize: '11px' }} allowDecimals={false} />
+                        <Tooltip contentStyle={{ backgroundColor: '#1a0b2e', border: '1px solid #7c3aed', borderRadius: '8px', color: '#fff' }} />
+                        <Line type="monotone" dataKey="eventos" stroke="#8b5cf6" strokeWidth={3} dot={{ fill: '#8b5cf6', r: 4 }} activeDot={{ r: 6 }} name="Eventos" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-[280px] text-purple-400 text-sm">Sin datos suficientes</div>
+                  )}
+                  <p className="text-xs text-purple-400 mt-2">Total: {events.length} eventos registrados</p>
                 </CardContent>
               </Card>
 
-              {/* Proyección de Eventos */}
+              {/* Top eventos por categoría — BarChart horizontal */}
               <Card className="bg-black/40 border-purple-500/30">
                 <CardHeader>
                   <CardTitle className="text-white flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-purple-400" />
-                    Proyección de Eventos
+                    <BarChart3 className="h-5 w-5 text-green-400" />
+                    Eventos por categoría
                   </CardTitle>
                   <CardDescription className="text-purple-300">
-                    Crecimiento estimado en los próximos 6 meses
+                    Distribución real de eventos por categoría
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={calculateEventsProjection()}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#4c1d95" />
-                      <XAxis 
-                        dataKey="month" 
-                        stroke="#a78bfa"
-                        style={{ fontSize: '12px' }}
-                      />
-                      <YAxis 
-                        stroke="#a78bfa"
-                        style={{ fontSize: '12px' }}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: '#1a0b2e', 
-                          border: '1px solid #7c3aed',
-                          borderRadius: '8px',
-                          color: '#fff'
-                        }}
-                      />
-                      <Legend 
-                        wrapperStyle={{ color: '#a78bfa' }}
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="eventos" 
-                        stroke="#10b981" 
-                        strokeWidth={3}
-                        dot={{ fill: '#10b981', r: 5 }}
-                        activeDot={{ r: 7 }}
-                        name="Eventos"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                  <div className="mt-4 p-3 bg-green-900/20 rounded-lg border border-green-500/30">
-                    <p className="text-sm text-green-300">
-                      📈 Proyección basada en un crecimiento del 20% mensual
-                    </p>
-                  </div>
+                  {topEventsByLikes.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={280}>
+                      <BarChart data={topEventsByLikes} layout="vertical" margin={{ left: 8, right: 24 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#4c1d95" horizontal={false} />
+                        <XAxis type="number" stroke="#a78bfa" style={{ fontSize: '11px' }} allowDecimals={false} />
+                        <YAxis type="category" dataKey="categoria" stroke="#a78bfa" style={{ fontSize: '10px' }} width={110} />
+                        <Tooltip contentStyle={{ backgroundColor: '#1a0b2e', border: '1px solid #7c3aed', borderRadius: '8px', color: '#fff' }} />
+                        <Bar dataKey="total" name="Eventos" radius={[0, 4, 4, 0]}>
+                          {topEventsByLikes.map((_, i) => (
+                            <Cell key={i} fill={`hsl(${260 + i * 15}, 70%, ${55 + i * 2}%)`} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-[280px] text-purple-400 text-sm">Sin datos de categorías</div>
+                  )}
+                  <p className="text-xs text-purple-400 mt-2">{topEventsByLikes.length} categorías activas</p>
                 </CardContent>
               </Card>
             </div>
