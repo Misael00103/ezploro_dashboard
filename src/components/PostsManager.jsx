@@ -50,7 +50,7 @@ const CommentItem = ({ comment, postId, currentUserId, depth = 0, onCommentChang
       setLoading(false);
     }
   };
-
+ 
   const handleReply = async () => {
     if (!replyText.trim()) return;
     setLoading(true);
