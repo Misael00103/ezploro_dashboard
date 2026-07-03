@@ -2,7 +2,7 @@
 
 // Configuración de la API
 // Base URL for the entire API (modificado para conectar al backend en la nube, con /api prefix)
-const REACT_APP_API_URL = process.env.REACT_APP_API_URL || "https://api-v5-backend-ezploro.apps.ezploro.com/api";
+const REACT_APP_API_URL = process.env.REACT_APP_API_URL || "https://api-v3-backend-ezploro.apps.ezploro.com/api";
 export const BASE_URL = REACT_APP_API_URL;
 
 // Configuración del Dashboard
