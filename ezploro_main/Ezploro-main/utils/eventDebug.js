@@ -50,7 +50,7 @@ export const testEventCreationAPI = async () => {
       return false;
     }
     
-    const testUrl = 'https://api-v3-backend-ezploro.apps.ezploro.com/api/events';
+    const testUrl = 'https://api-v5-backend-ezploro.apps.ezploro.com/api/events';
     
     // Test with a simple GET request first
     const response = await fetch(testUrl, {

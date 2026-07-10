@@ -5,7 +5,7 @@ import { REACT_APP_API_URL } from "@env"
 // Base URL for the entire API (modificado para conectar al backend en la nube, con /api prefix)
 //export const BASE_URL = REACT_APP_API_URL || "https://api-backend-ezploro.apps.ezploro.com/api"
 // export const BASE_URL = REACT_APP_API_URL || "https://api-v2-backend-ezploro.apps.ezploro.com/api"
-export const BASE_URL = REACT_APP_API_URL || "https://api-v3-backend-ezploro.apps.ezploro.com/api"
+export const BASE_URL = REACT_APP_API_URL || "https://api-v5-backend-ezploro.apps.ezploro.com/api"
 // Function to ensure proper URL format
 const normalizeUrl = (url) => {
   if (!url || typeof url !== 'string') return url

@@ -51,7 +51,7 @@ export const testTokenWithBackend = async () => {
     }
     
     // Test con una ruta simple del backend
-    const testUrl = 'https://api-v3-backend-ezploro.apps.ezploro.com/api/users/me';
+    const testUrl = 'https://api-v5-backend-ezploro.apps.ezploro.com/api/users/me';
     
     console.log('🔍 TEST: Testing token with backend...');
     console.log('🔍 TEST: Token preview:', token.substring(0, 30) + '...');
