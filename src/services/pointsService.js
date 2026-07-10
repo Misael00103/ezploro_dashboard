@@ -11,35 +11,8 @@ import {
  * Obtener acciones reclamables de un usuario
  */
 export const getClaimableActions = async (userId) => {
-  try {
-    if (!userId) {
-      console.warn('⚠️ getClaimableActions - userId no proporcionado');
-      return [];
-    }
-    
-    const url = API_URL_POINTS_ACTIONS.replace(':userId', userId);
-    console.log('🔵 getClaimableActions - URL:', url);
-    console.log('🔵 getClaimableActions - userId:', userId);
-    
-    const data = await fetchWithAuth(url, {
-      method: 'GET',
-    });
-    
-    console.log('🔵 getClaimableActions - Respuesta del backend:', data);
-    
-    // El backend devuelve { total: number, actions: [...] } o similar
-    if (data && data.actions && Array.isArray(data.actions)) {
-      return data.actions;
-    }
-    if (Array.isArray(data)) {
-      return data;
-    }
-    return [];
-  } catch (error) {
-    console.error('🔴 Error en getClaimableActions:', error);
-    // No lanzar error, devolver array vacío
-    return [];
-  }
+  // El backend no contiene rutas en /api/points/actions, por lo que retornamos un array vacío directamente para evitar errores 403/Forbidden en la consola
+  return [];
 };
 
 /**

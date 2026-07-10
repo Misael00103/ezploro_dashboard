@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Maximize2, Minimize2, X } from 'lucide-react';
 
 /**
@@ -198,15 +199,13 @@ export const AnimatedCounter = ({
       </div>
 
       {/* Modal grande */}
-      {isModalOpen && (
+      {isModalOpen && createPortal(
         <div 
-          className={`fixed z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm transition-all duration-300 ${
-            isFullscreen ? 'inset-0' : 'inset-0'
-          }`}
+          className={`fixed z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm transition-all duration-300 inset-0`}
           onClick={!isFullscreen ? handleClose : undefined}
         >
           <div 
-            className={`bg-black/95 border border-purple-500/30 rounded-lg shadow-2xl transition-all duration-300 ${
+            className={`bg-zinc-950 border border-purple-500/30 rounded-lg shadow-2xl transition-all duration-300 ${
               isFullscreen 
                 ? 'w-full h-full rounded-none border-none p-12' 
                 : 'p-8 max-w-2xl w-full mx-4'
@@ -228,7 +227,7 @@ export const AnimatedCounter = ({
               <div className="flex items-center space-x-2">
                 <button
                   onClick={toggleFullscreen}
-                  className={`${colors.icon} hover:text-white transition-colors ${isFullscreen ? 'p-2' : 'p-2'}`}
+                  className={`${colors.icon} hover:text-white transition-colors p-2`}
                   title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
                 >
                   {isFullscreen ? (
@@ -239,7 +238,7 @@ export const AnimatedCounter = ({
                 </button>
                 <button
                   onClick={handleClose}
-                  className={`${colors.icon} hover:text-white transition-colors ${isFullscreen ? 'p-2' : 'p-2'}`}
+                  className={`${colors.icon} hover:text-white transition-colors p-2`}
                   title="Cerrar"
                 >
                   <X className={isFullscreen ? 'h-8 w-8' : 'h-6 w-6'} />
@@ -258,7 +257,8 @@ export const AnimatedCounter = ({
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

@@ -355,5 +355,7 @@ export const API_URL_SOCIAL_NETWORKS_COUNT = `${API_URL_SOCIAL_NETWORKS}/count/:
 
 // ==================== MISSING API URLS ====================
 export const API_URL_CONTACTS = `${BASE_URL}/contact`
+export const API_URL_CONTACTS_REPLY = `${BASE_URL}/contact/messages`
+export const API_URL_CONTACTS_LIST = `${BASE_URL}/contact-us/messages`
 export const API_URL_SOCIAL_MEDIA = `${BASE_URL}/social-media` // Mantener por compatibilidad
 export const API_URL_LANDING_PAGE = `${BASE_URL}/landing-page`

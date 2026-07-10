@@ -6,7 +6,6 @@ import { Textarea } from './ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Badge } from './ui/badge';
 import {
-  Heart,
   MessageCircle,
   Send,
   Image as ImageIcon,
@@ -25,7 +24,6 @@ import {
   getCommentReplies,
   createCommentReply 
 } from '../services/commentService';
-import { togglePostLike } from '../services/postService';
 
 const EventCommentsManager = ({ eventId, onClose }) => {
   const [comments, setComments] = useState([]);
@@ -88,17 +86,6 @@ const EventCommentsManager = ({ eventId, onClose }) => {
       return;
     }
     setNewImages(files);
-  };
-
-  const handleLikeComment = async (commentId) => {
-    try {
-      await togglePostLike(commentId);
-      toast.success('Like actualizado');
-      loadComments(); // Reload to get updated like count
-    } catch (error) {
-      console.error('Error toggling like:', error);
-      toast.error('Error al dar like');
-    }
   };
 
   const handleReply = async (commentId) => {
@@ -294,16 +281,6 @@ const EventCommentsManager = ({ eventId, onClose }) => {
                     
                     {/* Comment Actions */}
                     <div className="flex items-center gap-4">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleLikeComment(comment.id)}
-                        className="text-purple-300 hover:text-red-400"
-                      >
-                        <Heart className="h-4 w-4 mr-1" />
-                        Like
-                      </Button>
-                      
                       <Button
                         variant="ghost"
                         size="sm"

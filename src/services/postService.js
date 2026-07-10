@@ -244,64 +244,17 @@ export const getAllPosts = async () => {
     });
     const posts = response.data || response || [];
     
-    // Obtener ID del usuario actual para verificar likes
-    let currentUserId = null;
-    try {
-      const userData = localStorage.getItem('user');
-      if (userData) {
-        const user = JSON.parse(userData);
-        currentUserId = user.user_id || user.id;
-      }
-    } catch (e) {
-      console.error('Error getting current user ID:', e);
-    }
-    
-    // Add additional metadata for dashboard
-    const postsWithMetadata = await Promise.all(posts.map(async (post) => {
-      try {
-        const postId = post.post_id || post.id;
-        if (!postId) return post;
-
-        // Get likes count
-        const likesUrl = API_URL_POST_LIKES_BY_POST.replace(':postId', postId);
-        const likesResponse = await fetchWithAuth(likesUrl, {
-          method: 'GET',
-        });
-        const likesData = likesResponse.data || likesResponse || [];
-        
-        // Get comments count
-        const commentsUrl = API_URL_POST_COMMENTS_BY_POST.replace(':postId', postId);
-        const commentsResponse = await fetchWithAuth(commentsUrl, {
-          method: 'GET',
-        });
-        const commentsData = commentsResponse.data || commentsResponse || [];
-        
-        // Verificar si el usuario actual ha dado like
-        let user_liked = false;
-        if (currentUserId && Array.isArray(likesData)) {
-          user_liked = likesData.some(like => 
-            String(like.user_id || like.user?.user_id) === String(currentUserId)
-          );
-        }
-        
-        return {
-          ...post,
-          likes_count: Array.isArray(likesData) ? likesData.length : (typeof likesData === 'object' && likesData.likes ? likesData.likes : 0),
-          comments_count: Array.isArray(commentsData) ? commentsData.length : (typeof commentsData === 'object' && commentsData.comments_count ? commentsData.comments_count : 0),
-          user_liked: user_liked,
-          created_at_formatted: post.created_at ? new Date(post.created_at).toLocaleDateString() : '',
-        };
-      } catch (error) {
-        console.error(`Error processing post ${post.post_id || post.id}:`, error);
-        return {
-          ...post,
-          likes_count: 0,
-          comments_count: 0,
-          user_liked: false,
-          created_at_formatted: post.created_at ? new Date(post.created_at).toLocaleDateString() : '',
-        };
-      }
-    }));
+    // Add additional metadata for dashboard using properties already returned by the backend
+    const postsWithMetadata = posts.map((post) => {
+      const commentsArray = Array.isArray(post.comments) ? post.comments : [];
+      return {
+        ...post,
+        likes_count: post.likes_count !== undefined ? post.likes_count : (post.likes || 0),
+        comments_count: post.comments_count !== undefined ? post.comments_count : commentsArray.length,
+        user_liked: !!post.user_liked,
+        created_at_formatted: post.created_at ? new Date(post.created_at).toLocaleDateString() : '',
+      };
+    });
     
     return postsWithMetadata;
   } catch (error) {

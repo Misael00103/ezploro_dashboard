@@ -21,11 +21,15 @@ import {
   Clock,
   Download,
   TrendingUp,
+  Menu,
+  ChevronLeft,
+  ChevronRight,
+  AlertCircle,
 } from 'lucide-react';
 import { AnimatedCounter } from './AnimatedCounter';
 import { toast, Toaster } from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, AreaChart, Area } from 'recharts';
 import EventsManager from './EventsManager';
 import ContactsManager from './ContactsManager';
 import TestimonialsManager from './TestimonialsManager';
@@ -49,7 +53,7 @@ import {
 import { getAllPosts as getPosts } from '../services/postService';
 import { getSocialMedia } from '../services/socialMediaService';
 import { getStats } from '../services/statsService';
-import { getUserProfile } from '../services/userService';
+import { getUserProfile, getAllUsers } from '../services/userService';
 import { debugAuthState, validateAuth, clearAuthData } from '../services/authUtils';
 import { startScheduler } from '../services/notificationService';
 import { getRankingEventosMasSuscritos, getRankingEventosMasLikes } from '../services/rankingService';
@@ -66,8 +70,31 @@ const Dashboard = ({ onLogout }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [appDownloads, setAppDownloads] = useState(0);
+  const [usersList, setUsersList] = useState([]);
   const [topEventsBySubs, setTopEventsBySubs] = useState([]);
   const [topEventsByLikes, setTopEventsByLikes] = useState([]);
+
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('sidebarCollapsed') === 'true';
+  });
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', isSidebarCollapsed.toString());
+  }, [isSidebarCollapsed]);
+
+  const navItems = [
+    { id: 'overview', label: 'Resumen', icon: BarChart3 },
+    { id: 'contacts', label: 'Contactos', icon: MessageCircle, badge: contacts.filter(c => c.status !== 'responded' && c.status !== 'resolved').length },
+    { id: 'events', label: 'Eventos', icon: Calendar },
+    { id: 'testimonials', label: 'Testimonios', icon: Star },
+    { id: 'posts', label: 'Posts', icon: FileText },
+    { id: 'social', label: 'Redes Sociales', icon: Globe },
+    ...(user?.role === 'admin' || user?.role === 'moderator' ? [
+      { id: 'gamification', label: 'Gamificación', icon: Trophy },
+      { id: 'user-management', label: 'Usuarios', icon: User }
+    ] : [])
+  ];
 
   // Agrupar eventos por mes usando fechas reales
   const getEventsByMonth = () => {
@@ -213,6 +240,10 @@ const Dashboard = ({ onLogout }) => {
             console.warn('⚠️ Error cargando estadísticas:', err.message);
             return {};
           }),
+          getAllUsers().catch(err => {
+            console.warn('⚠️ Error cargando todos los usuarios:', err.message);
+            return [];
+          }),
         ]);
 
         console.log('🔵 Dashboard - Resultados de Promise.allSettled:', results);
@@ -224,8 +255,9 @@ const Dashboard = ({ onLogout }) => {
           postsData,
           socialMediaData,
           statsData,
+          usersData,
         ] = results.map((result, index) => {
-          const labels = ['eventos', 'contactos', 'testimonios', 'posts', 'socialMedia', 'stats'];
+          const labels = ['eventos', 'contactos', 'testimonios', 'posts', 'socialMedia', 'stats', 'users'];
           if (result.status === 'fulfilled') {
             console.log(`✅ ${labels[index]} cargado:`, result.value);
             return result.value;
@@ -248,7 +280,13 @@ const Dashboard = ({ onLogout }) => {
         setPosts(postsData);
         setSocialMedia(transformedSocialMedia);
         setStats(statsData);
-        if (statsData?.appDownloads !== undefined) setAppDownloads(statsData.appDownloads);
+        setUsersList(usersData || []);
+
+        if (usersData && usersData.length > 0) {
+          setAppDownloads(usersData.length);
+        } else if (statsData?.appDownloads !== undefined) {
+          setAppDownloads(statsData.appDownloads);
+        }
 
         // Top eventos por likes (campo real disponible en el backend)
         const byLikes = [...eventsData]
@@ -360,12 +398,19 @@ const Dashboard = ({ onLogout }) => {
     }
   };
 
-  const handleUpdateContacts = async (contactId, status) => {
+  const handleUpdateContacts = async (contactIdOrContacts, status) => {
+    if (Array.isArray(contactIdOrContacts)) {
+      setContacts(contactIdOrContacts);
+      return;
+    }
+
     try {
-      const updatedContact = await updateContactStatus(contactId, status);
+      await updateContactStatus(contactIdOrContacts, status);
       setContacts((prev) =>
         prev.map((contact) =>
-          contact.contact_id === contactId ? { ...contact, status } : contact
+          contact.contact_us_id === contactIdOrContacts || contact.contact_id === contactIdOrContacts || contact.id === contactIdOrContacts
+            ? { ...contact, status }
+            : contact
         )
       );
       toast.success('Contacto actualizado correctamente');
@@ -401,154 +446,239 @@ const Dashboard = ({ onLogout }) => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-black via-purple-900/20 to-black">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+      <div className="flex flex-col items-center justify-center h-screen bg-[#09090b]">
+        <div className="relative flex flex-col items-center">
+          {/* Glowing background */}
+          <div className="absolute w-24 h-24 bg-violet-600/20 rounded-full blur-2xl animate-pulse" />
+          
+          {/* Logo container */}
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-zinc-950 border border-zinc-800/80 shadow-2xl relative z-10 animate-bounce duration-[2000ms] ease-in-out">
+            <img 
+              src={require('../img/logoezploro.png')} 
+              alt="Ezploro Logo" 
+              className="w-10 h-10 object-contain animate-pulse"
+            />
+          </div>
+          
+          <div className="mt-6 flex flex-col items-center z-10">
+            <p className="text-sm font-bold text-white tracking-widest uppercase">EZPLORO</p>
+            <p className="text-xs text-zinc-400 mt-1.5 flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin text-violet-400" />
+              Cargando panel de administración...
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-black via-purple-900/20 to-black">
-        <Card className="bg-black/40 border-purple-500/30">
-          <CardContent className="p-6 text-center">
-            <p className="text-red-400">{error}</p>
-            <Button
-              onClick={() => window.location.reload()}
-              className="mt-4 bg-purple-600 hover:bg-purple-700"
-            >
-              Reintentar
-            </Button>
-          </CardContent>
+      <div className="flex items-center justify-center h-screen bg-[#09090b]">
+        <Card className="w-96 glass-panel border-zinc-800/50 text-white text-center p-8 shadow-2xl animate-fade-in">
+          <div className="mx-auto w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mb-4">
+            <AlertCircle className="h-6 w-6 text-rose-400" />
+          </div>
+          <h2 className="text-lg font-bold text-white">Error de Carga</h2>
+          <p className="text-zinc-400 text-sm mt-2">{error}</p>
+          <Button 
+            onClick={() => window.location.reload()} 
+            className="mt-6 w-full bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 transition-all duration-200"
+          >
+            Reintentar
+          </Button>
         </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-purple-900/20 to-black">
+    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex overflow-hidden">
       <Toaster position="top-right" />
-      {/* Header */}
-      <header className="bg-black/50 backdrop-blur-sm border-b border-purple-500/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16 py-2">
-            <div className="flex items-center space-x-2 min-w-0 flex-1">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 lg:w-16 lg:h-16 rounded-lg flex items-center justify-center flex-shrink-0">
-                <img 
-                  src={require('../img/logoezploro.png')} 
-                  alt="Ezploro Logo" 
-                  className="w-full h-full object-contain"
-                />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h1 className="text-base sm:text-lg md:text-xl font-bold text-white truncate">Ezploro</h1>
-                <p className="text-xs sm:text-sm text-purple-300 hidden sm:block">Panel de Administración</p>
-              </div>
-            </div>
 
-            <div className="flex items-center space-x-2 sm:space-x-4 flex-shrink-0">
-              <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
+      {/* Desktop Sidebar */}
+      <aside className={`hidden md:flex flex-col bg-zinc-950 border-r border-zinc-800/60 transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'} shrink-0 z-30`}>
+        <div className="h-16 flex items-center px-6 border-b border-zinc-800/60 gap-3">
+          <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 flex items-center justify-center bg-violet-600/10 border border-violet-500/20">
+            <img 
+              src={require('../img/logoezploro.png')} 
+              alt="Ezploro Logo" 
+              className="w-6 h-6 object-contain"
+            />
+          </div>
+          {!isSidebarCollapsed && (
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-bold text-white tracking-wide">EZPLORO</span>
+              <span className="text-xs text-zinc-500 truncate">Administración</span>
+            </div>
+          )}
+        </div>
+
+        <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto custom-scrollbar">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative group ${
+                  isActive 
+                    ? 'bg-violet-600/10 text-violet-400 border border-violet-500/20' 
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40 border border-transparent'
+                }`}
+              >
+                <Icon className={`h-4.5 w-4.5 shrink-0 ${isActive ? 'text-violet-400' : 'text-zinc-400 group-hover:text-zinc-300'}`} />
+                {!isSidebarCollapsed && (
+                  <>
+                    <span className="truncate">{item.label}</span>
+                    {item.badge > 0 && (
+                      <span className="ml-auto bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                        {item.badge}
+                      </span>
+                    )}
+                  </>
+                )}
+                {isSidebarCollapsed && item.badge > 0 && (
+                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-amber-500 border border-zinc-950 rounded-full" />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+
+      {/* Mobile Drawer Navigation overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          onClick={() => setIsMobileMenuOpen(false)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 md:hidden"
+        />
+      )}
+
+      {/* Mobile Drawer */}
+      <aside className={`fixed top-0 bottom-0 left-0 w-64 bg-zinc-950 border-r border-zinc-800/60 z-50 flex flex-col transition-transform duration-300 transform md:hidden ${
+        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}>
+        <div className="h-16 flex items-center px-6 border-b border-zinc-800/60 gap-3 justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 flex items-center justify-center bg-violet-600/10 border border-violet-500/20">
+              <img 
+                src={require('../img/logoezploro.png')} 
+                alt="Ezploro Logo" 
+                className="w-6 h-6 object-contain"
+              />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold text-white">EZPLORO</span>
+              <span className="text-xs text-zinc-500 flex items-center gap-1.5">
+                Administración
+                <Badge variant={user?.online_status ? 'default' : 'secondary'} className="text-[10px] px-1 py-0 h-4 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full">
+                  {user?.online_status ? 'ON' : 'OFF'}
+                </Badge>
+              </span>
+            </div>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="text-zinc-400 hover:text-white"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+        </div>
+
+        <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  isActive 
+                    ? 'bg-violet-600/10 text-violet-400 border border-violet-500/20' 
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40 border border-transparent'
+                }`}
+              >
+                <Icon className="h-4.5 w-4.5 shrink-0" />
+                <span className="truncate">{item.label}</span>
+                {item.badge > 0 && (
+                  <span className="ml-auto bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto custom-scrollbar relative z-10">
+        {/* Top Header */}
+        <header className="bg-zinc-950/40 backdrop-blur-md border-b border-zinc-800/50 h-16 flex items-center justify-between px-6 sticky top-0 z-40 shrink-0">
+          <div className="flex items-center space-x-3">
+            {/* Mobile menu trigger */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="md:hidden text-zinc-400 hover:text-white"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            {/* Sidebar toggle button (desktop) */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="hidden md:flex text-zinc-400 hover:text-white"
+            >
+              {isSidebarCollapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
+            </Button>
+            <h1 className="text-lg font-semibold text-white capitalize hidden sm:block">
+              {navItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
+            </h1>
+          </div>
+
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3 bg-zinc-900/40 border border-zinc-800/50 rounded-full px-3 py-1.5">
+              <Avatar className="h-7 w-7 border border-violet-500/30">
                 <AvatarImage 
-                  src={user?.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.display_name || user?.name || 'User')}&background=7c3aed&color=fff&size=32`} 
-                  alt={user?.name}
+                  src={user?.profile_picture} 
                   onError={(e) => {
-                    e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.display_name || user?.name || 'User')}&background=7c3aed&color=fff&size=32`;
+                    e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=7c3aed&color=fff&size=32`;
                   }}
                 />
-                <AvatarFallback className="bg-purple-600 text-white text-xs">
-                  {(user?.name || 'U').charAt(0).toUpperCase()}
+                <AvatarFallback className="bg-violet-900/50 text-violet-200 text-xs">
+                  {user?.name?.substring(0, 2).toUpperCase() || 'AD'}
                 </AvatarFallback>
               </Avatar>
-              <span className="text-white font-medium hidden md:block text-sm lg:text-base truncate max-w-[120px] lg:max-w-none">
-                {user?.display_name || user?.name}
+              <span className="text-sm font-medium text-zinc-200 max-w-[120px] truncate hidden md:block">
+                {user?.name || 'Administrador'}
               </span>
-              <Badge variant={user?.online_status ? 'default' : 'secondary'} className="ml-2 hidden sm:inline-flex text-xs">
-                {user?.online_status ? 'En línea' : 'Desconectado'}
-              </Badge>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleLogout}
-                className="text-purple-300 hover:text-white hover:bg-purple-900/50 p-2"
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
             </div>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              className="text-zinc-400 hover:text-rose-400 hover:bg-rose-950/10 rounded-full p-2"
+            >
+              <LogOut className="h-5 w-5" />
+            </Button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-          <div className="w-full">
-            <TabsList className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-9 gap-2 sm:gap-2.5 bg-black/40 border border-purple-500/30 rounded-lg p-3 sm:p-4 md:p-5 [&>*]:w-full" style={{ display: 'grid', height: '100%' }}>
-            <TabsTrigger
-              value="overview"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
-            >
-              <BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Resumen</span>
-              <span className="sm:hidden">Res.</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="events"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
-            >
-              <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Eventos</span>
-              <span className="sm:hidden">Ev.</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="contacts"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
-            >
-              <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Contactos</span>
-              <span className="sm:hidden">Cont.</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="testimonials"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
-            >
-              <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span className="hidden md:inline">Testimonios</span>
-              <span className="md:hidden">Test.</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="posts"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
-            >
-              <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Posts</span>
-              <span className="sm:hidden">P.</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="social"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
-            >
-              <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span className="hidden md:inline">Social</span>
-              <span className="md:hidden">Soc.</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="gamification"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
-            >
-              <Trophy className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span className="hidden lg:inline">Gamificación</span>
-              <span className="lg:hidden">Gam.</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="user-management"
-              className="data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg text-purple-300 hover:text-white hover:bg-purple-900/50 text-xs sm:text-sm px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 md:py-3.5 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-md transition-all font-medium w-full"
-            >
-              <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span className="hidden md:inline">Usuario</span>
-              <span className="md:hidden">Usu.</span>
-            </TabsTrigger>
-          </TabsList>
-          </div>
+        {/* Content Wrapper */}
+        <div className="p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto animate-fade-in flex-1">
+          <Tabs value={activeTab} className="space-y-6">
 
           <TabsContent value="overview" className="space-y-4 sm:space-y-6">
             <div className="flex justify-end">
@@ -592,7 +722,7 @@ const Dashboard = ({ onLogout }) => {
                   <div className="space-y-2">
                     <p className="text-lg">Contactos en la base de datos</p>
                     <p className="text-sm text-purple-300">
-                      {contacts.filter(c => c.status === 'active').length} activos
+                      {contacts.filter(c => c.status !== 'responded' && c.status !== 'resolved').length} pendientes de respuesta
                     </p>
                   </div>
                 }
@@ -637,11 +767,28 @@ const Dashboard = ({ onLogout }) => {
                 icon={Download}
                 color="pink"
                 modalContent={
-                  <div className="space-y-2">
-                    <p className="text-lg">Descargas totales de la aplicación</p>
-                    <p className="text-sm text-purple-300">
-                      Usuarios que han instalado la app móvil
-                    </p>
+                  <div className="space-y-4">
+                    <p className="text-lg font-semibold text-white">Usuarios registrados en el sistema</p>
+                    {usersList.length > 0 ? (
+                      <div className="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                        {usersList.map((u) => (
+                          <div key={u.id || u.user_id} className="flex items-center space-x-3 p-3 bg-zinc-900/50 rounded-lg border border-zinc-800/40 hover:bg-zinc-900 transition-colors">
+                            <Avatar className="h-9 w-9">
+                              <AvatarImage src={u.profile_picture || u.avatar_url} />
+                              <AvatarFallback className="bg-zinc-800 text-zinc-300 text-xs font-semibold">
+                                {((u.name || u.email || 'U').substring(0, 2)).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-white truncate">{u.name || u.username || 'Usuario'}</p>
+                              <p className="text-xs text-zinc-400 truncate">{u.email}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-zinc-400">No hay usuarios registrados.</p>
+                    )}
                   </div>
                 }
               />
@@ -663,13 +810,31 @@ const Dashboard = ({ onLogout }) => {
                 <CardContent>
                   {getEventsByMonth().length > 0 ? (
                     <ResponsiveContainer width="100%" height={280}>
-                      <LineChart data={getEventsByMonth()}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#4c1d95" />
-                        <XAxis dataKey="mes" stroke="#a78bfa" style={{ fontSize: '11px' }} />
-                        <YAxis stroke="#a78bfa" style={{ fontSize: '11px' }} allowDecimals={false} />
-                        <Tooltip contentStyle={{ backgroundColor: '#1a0b2e', border: '1px solid #7c3aed', borderRadius: '8px', color: '#fff' }} />
-                        <Line type="monotone" dataKey="eventos" stroke="#8b5cf6" strokeWidth={3} dot={{ fill: '#8b5cf6', r: 4 }} activeDot={{ r: 6 }} name="Eventos" />
-                      </LineChart>
+                      <AreaChart data={getEventsByMonth()}>
+                        <defs>
+                          <linearGradient id="colorEventos" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                        <XAxis 
+                          dataKey="mes" 
+                          stroke="#a1a1aa" 
+                          dy={8} 
+                          tickLine={false} 
+                          style={{ fontSize: '11px', fontFamily: 'Inter, sans-serif' }} 
+                        />
+                        <YAxis 
+                          stroke="#a1a1aa" 
+                          dx={-8} 
+                          tickLine={false} 
+                          style={{ fontSize: '11px', fontFamily: 'Inter, sans-serif' }} 
+                          allowDecimals={false} 
+                        />
+                        <Tooltip contentStyle={{ backgroundColor: '#09090b', border: '1px solid #27272a', borderRadius: '8px', color: '#f4f4f5' }} />
+                        <Area type="monotone" dataKey="eventos" stroke="#8b5cf6" strokeWidth={2.5} fillOpacity={1} fill="url(#colorEventos)" name="Eventos" />
+                      </AreaChart>
                     </ResponsiveContainer>
                   ) : (
                     <div className="flex items-center justify-center h-[280px] text-purple-400 text-sm">Sin datos suficientes</div>
@@ -692,12 +857,20 @@ const Dashboard = ({ onLogout }) => {
                 <CardContent>
                   {topEventsByLikes.length > 0 ? (
                     <ResponsiveContainer width="100%" height={280}>
-                      <BarChart data={topEventsByLikes} layout="vertical" margin={{ left: 8, right: 24 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#4c1d95" horizontal={false} />
-                        <XAxis type="number" stroke="#a78bfa" style={{ fontSize: '11px' }} allowDecimals={false} />
-                        <YAxis type="category" dataKey="categoria" stroke="#a78bfa" style={{ fontSize: '10px' }} width={110} />
-                        <Tooltip contentStyle={{ backgroundColor: '#1a0b2e', border: '1px solid #7c3aed', borderRadius: '8px', color: '#fff' }} />
-                        <Bar dataKey="total" name="Eventos" radius={[0, 4, 4, 0]}>
+                      <BarChart data={topEventsByLikes} layout="vertical" margin={{ left: 8, right: 24, top: 10, bottom: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
+                        <XAxis type="number" stroke="#a1a1aa" dy={8} tickLine={false} style={{ fontSize: '11px', fontFamily: 'Inter, sans-serif' }} allowDecimals={false} />
+                        <YAxis 
+                          type="category" 
+                          dataKey="categoria" 
+                          stroke="#a1a1aa" 
+                          tickLine={false} 
+                          style={{ fontSize: '11px', fontFamily: 'Inter, sans-serif' }} 
+                          width={130} 
+                          tickFormatter={(val) => val.length > 15 ? `${val.substring(0, 15)}...` : val} 
+                        />
+                        <Tooltip contentStyle={{ backgroundColor: '#09090b', border: '1px solid #27272a', borderRadius: '8px', color: '#f4f4f5' }} />
+                        <Bar dataKey="total" name="Eventos" radius={[0, 6, 6, 0]} maxBarSize={28}>
                           {topEventsByLikes.map((_, i) => (
                             <Cell key={i} fill={`hsl(${260 + i * 15}, 70%, ${55 + i * 2}%)`} />
                           ))}
@@ -814,8 +987,9 @@ const Dashboard = ({ onLogout }) => {
           <TabsContent value="user-management">
             <UserManagementManager />
           </TabsContent>
-        </Tabs>
-      </main>
+          </Tabs>
+        </div>
+      </div>
     </div>
   );
 };

@@ -5,7 +5,8 @@ import {
   API_URL_GAMIFICATION_ACTION,
   API_URL_GAMIFICATION_POINTS,
   API_URL_GAMIFICATION_REDEEM,
-  API_URL_GAMIFICATION_HISTORY
+  API_URL_GAMIFICATION_HISTORY,
+  API_URL_OFFERS_REDEEM
 } from './config';
 
 /**
@@ -18,21 +19,144 @@ export const registerAction = async (actionData) => {
       throw new Error('No hay token de autenticación');
     }
 
-    const response = await fetch(API_URL_GAMIFICATION_ACTION, {
+    const targetUserId = actionData.user_id ? actionData.user_id.toString() : '';
+    const targetEventId = actionData.event_id ? actionData.event_id.toString() : null;
+
+    // Intentamos primero con el nombre de la acción bruto (tal como viene de la regla seleccionada)
+    const rawActionName = actionData.action_name;
+    console.log('🔵 registerAction - Intentando primer intento con nombre de acción bruto:', rawActionName);
+
+    let response = await fetch(API_URL_GAMIFICATION_ACTION, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({
-        user_id: actionData.user_id,
-        action_name: actionData.action_name,
-        event_id: actionData.event_id || null,
+        user_id: targetUserId,
+        action_name: rawActionName,
+        event_id: targetEventId,
       }),
     });
 
+    console.log('🔵 registerAction - Primer intento: status =', response.status, 'ok =', response.ok);
+
+    let errorData = {};
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      errorData = await response.json().catch(() => ({}));
+      console.warn('🔵 registerAction - Primer intento errorData:', errorData);
+    }
+
+    // Si falló con "Accion no encontrada" (404), intentamos normalizar a snake_case como fallback
+    if (!response.ok && (response.status === 404 || errorData.message?.toLowerCase().includes('no encontrada'))) {
+      console.warn('⚠️ registerAction - Falló con nombre de acción bruto. Aplicando fallback de normalización...');
+      
+      // Normalizar el action_name a snake_case
+      let normalizedActionName = rawActionName;
+      if (normalizedActionName) {
+        const lower = normalizedActionName.toLowerCase().trim();
+        if (lower === 'crear evento' || lower === 'crear_evento' || lower === 'event_created') {
+          normalizedActionName = 'crear_evento';
+        } else if (lower === 'asistir a evento' || lower === 'asistir_evento' || lower === 'asistir evento' || lower === 'asistir a un evento' || lower === 'event_attended') {
+          normalizedActionName = 'asistir_evento';
+        } else if (lower === 'perfil completado' || lower === 'completar perfil' || lower === 'completar_perfil' || lower === 'profile_completed') {
+          normalizedActionName = 'completar_perfil';
+        } else if (lower === 'like a evento' || lower === 'dar like a evento' || lower === 'dar_like_evento' || lower === 'event_liked' || lower === 'like_evento') {
+          normalizedActionName = 'dar_like_evento';
+        } else if (lower === 'invitar a un amigo' || lower === 'invitar_a_un_amigo' || lower === 'invitar amigo' || lower === 'invitar_amigo') {
+          normalizedActionName = 'invitar_amigo';
+        } else if (lower === 'compartir un evento' || lower === 'compartir_un_evento' || lower === 'compartir evento' || lower === 'compartir_evento') {
+          normalizedActionName = 'compartir_evento';
+        } else if (lower === 'compartir aplicacion' || lower === 'compartir aplicación' || lower === 'compartir_aplicacion' || lower === 'compartir_app' || lower === 'compartir app') {
+          normalizedActionName = 'compartir_app';
+        } else if (lower === 'enviar foto en chat de evento' || lower === 'enviar_foto_en_chat_de_evento' || lower === 'enviar foto' || lower === 'enviar_foto') {
+          normalizedActionName = 'enviar_foto';
+        } else if (lower === 'reportar informacion incorrecta o evento falso' || lower === 'reportar_informacion_incorrecta_o_evento_falso' || lower === 'reportar evento' || lower === 'reportar_evento') {
+          normalizedActionName = 'reportar_evento';
+        } else {
+          normalizedActionName = lower
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/\s+/g, '_')
+            .replace(/[^a-z0-9_]/g, '');
+        }
+      }
+
+      console.log('🔵 registerAction - Reintentando con nombre normalizado:', normalizedActionName);
+      response = await fetch(API_URL_GAMIFICATION_ACTION, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          user_id: targetUserId,
+          action_name: normalizedActionName,
+          event_id: targetEventId,
+        }),
+      });
+
+      console.log('🔵 registerAction - Reintento: status =', response.status, 'ok =', response.ok);
+
+      if (!response.ok) {
+        errorData = await response.json().catch(() => ({}));
+        console.warn('🔵 registerAction - Reintento errorData:', errorData);
+      }
+    }
+
+    // Si sigue fallando con "Accion no encontrada" (404) y tenemos rule_id, intentamos con el rule_id stringificado (ej. "6" o "5")
+    if (!response.ok && actionData.rule_id && (response.status === 404 || errorData.message?.toLowerCase().includes('no encontrada'))) {
+      const targetRuleId = actionData.rule_id.toString();
+      console.warn('⚠️ registerAction - Falló con normalización. Aplicando fallback de rule_id:', targetRuleId);
+      
+      response = await fetch(API_URL_GAMIFICATION_ACTION, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          user_id: targetUserId,
+          action_name: targetRuleId,
+          event_id: targetEventId,
+        }),
+      });
+
+      console.log('🔵 registerAction - Reintento con rule_id: status =', response.status, 'ok =', response.ok);
+
+      if (!response.ok) {
+        errorData = await response.json().catch(() => ({}));
+        console.warn('🔵 registerAction - Reintento con rule_id errorData:', errorData);
+      }
+    }
+
+    // Si sigue fallando y tenemos point_type, intentamos con el point_type (ej. "Events", "Profile", "Engagement")
+    if (!response.ok && actionData.point_type && (response.status === 404 || errorData.message?.toLowerCase().includes('no encontrada'))) {
+      const targetPointType = actionData.point_type.toString();
+      console.warn('⚠️ registerAction - Falló con rule_id. Aplicando fallback de point_type:', targetPointType);
+      
+      response = await fetch(API_URL_GAMIFICATION_ACTION, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          user_id: targetUserId,
+          action_name: targetPointType,
+          event_id: targetEventId,
+        }),
+      });
+
+      console.log('🔵 registerAction - Reintento con point_type: status =', response.status, 'ok =', response.ok);
+
+      if (!response.ok) {
+        errorData = await response.json().catch(() => ({}));
+        console.warn('🔵 registerAction - Reintento con point_type errorData:', errorData);
+      }
+    }
+
+    if (!response.ok) {
       throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
     }
 
@@ -61,9 +185,35 @@ export const getUserPoints = async (userId) => {
     console.log('🔵 getUserPoints - userId (original):', userId, 'Tipo:', typeof userId);
     console.log('🔵 getUserPoints - userId (string):', userIdStr);
     
-    const data = await fetchWithAuth(url, {
-      method: 'GET',
-    });
+    let data;
+    try {
+      data = await fetchWithAuth(url, {
+        method: 'GET',
+      });
+    } catch (firstError) {
+      // Si el error es por falta de permisos (403/Forbidden), retornar 0 puntos directamente sin reintentar
+      if (firstError.message && (
+        firstError.message.includes('permisos') || 
+        firstError.message.includes('denegado') || 
+        firstError.message.includes('403') || 
+        firstError.message.includes('Forbidden')
+      )) {
+        console.warn('⚠️ getUserPoints - Acceso denegado (403/Forbidden) para este usuario:', userIdStr);
+        return { user_id: userId, total_points: 0, is_forbidden: true };
+      }
+
+      console.warn('⚠️ getUserPoints - Error con primer endpoint, intentando compatibilidad:', firstError.message);
+      const altUrl = `${API_URL_GAMIFICATION}/${userIdStr}/points`;
+      console.log('🔵 getUserPoints - URL Alternativa:', altUrl);
+      try {
+        data = await fetchWithAuth(altUrl, {
+          method: 'GET',
+        });
+      } catch (altError) {
+        console.warn('⚠️ getUserPoints - Error con endpoint alternativo:', altError.message);
+        return { user_id: userId, total_points: 0, is_forbidden: true };
+      }
+    }
     
     console.log('🔵 getUserPoints - Respuesta completa del backend:', data);
     console.log('🔵 getUserPoints - Tipo de respuesta:', typeof data);
@@ -102,8 +252,7 @@ export const getUserPoints = async (userId) => {
   } catch (error) {
     console.error('🔴 Error en getUserPoints:', error);
     console.error('🔴 Error stack:', error.stack);
-    // No lanzar error, devolver valores por defecto
-    return { user_id: userId, total_points: 0 };
+    return { user_id: userId, total_points: 0, is_forbidden: true };
   }
 };
 
@@ -117,17 +266,59 @@ export const redeemReward = async (redeemData) => {
       throw new Error('No hay token de autenticación');
     }
 
+    const targetUserId = parseInt(redeemData.user_id, 10);
+    const targetPointsRedeemed = parseInt(redeemData.points_redeemed, 10);
+
+    const payload = {
+      user_id: targetUserId,
+      userId: targetUserId,
+      user_id_str: targetUserId.toString(),
+      userIdStr: targetUserId.toString(),
+      reward_name: redeemData.reward_name,
+      points_redeemed: targetPointsRedeemed,
+      points: targetPointsRedeemed,
+    };
+
+    // Si se especifica offer_id, intentamos usar el endpoint del catálogo de ofertas /api/offer/rewards/offers/redeem/:offerId
+    if (redeemData.offer_id) {
+      const offerIdStr = redeemData.offer_id.toString();
+      const offersRedeemUrl = API_URL_OFFERS_REDEEM.replace(':offerId', offerIdStr);
+      console.log('🔵 redeemReward - Intentando canje usando endpoint de ofertas:', offersRedeemUrl);
+      
+      try {
+        const response = await fetch(offersRedeemUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) {
+          const data = await response.json().catch(() => ({}));
+          console.log('🟢 redeemReward - Canje exitoso por API de ofertas:', data);
+          return data;
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          console.warn('⚠️ redeemReward - Endpoint de ofertas devolvió error:', errData.message || response.statusText);
+        }
+      } catch (err) {
+        console.warn('⚠️ redeemReward - Error llamando a la API de ofertas:', err.message);
+      }
+    }
+
+    // Fallback: usar el endpoint original de gamificación legacy /api/gamification/redeem
+    console.log('🔵 redeemReward - Utilizando endpoint legacy /api/gamification/redeem');
+    console.log('🔵 redeemReward - Sending payload:', payload);
+
     const response = await fetch(API_URL_GAMIFICATION_REDEEM, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        user_id: redeemData.user_id,
-        reward_name: redeemData.reward_name,
-        points_redeemed: redeemData.points_redeemed,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
@@ -195,7 +386,7 @@ export const getUserHistory = async (userId) => {
         fetchError.message.includes('Internal Server Error')
       )) {
         console.error('🔴 getUserHistory - Error 500 del servidor. El backend tiene un problema interno.');
-        console.error('🔴 getUserHistory - Esto puede deberse a un error en el controlador o en la base de datos.');
+        console.error('🔴 getUserHistory - Esto puede debido a un error en el controlador o en la base de datos.');
         console.error('🔴 getUserHistory - Verifica los logs del servidor backend.');
       } else {
         console.warn('⚠️ getUserHistory - Esto puede ser normal si el usuario no tiene historial aún');
@@ -224,3 +415,48 @@ export const getUserHistory = async (userId) => {
   }
 };
 
+/**
+ * Obtener historial global de acciones y canjes de todos los usuarios (solo Admin)
+ */
+export const getAllUsersHistory = async () => {
+  try {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    const url = `${API_URL_GAMIFICATION}/history/all`;
+    console.log('🔵 getAllUsersHistory - URL:', url);
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      }
+    });
+
+    console.log('🔵 getAllUsersHistory - Response status:', response.status);
+
+    if (response.status === 403) {
+      console.warn('⚠️ getAllUsersHistory - Acceso denegado (403/Forbidden) para historial global de todos los usuarios.');
+      return { actions: [], rewards: [], is_forbidden: true };
+    }
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('🔵 getAllUsersHistory - Respuesta del backend:', data);
+
+    return {
+      actions: Array.isArray(data?.actions) ? data.actions : (data?.actions ? [data.actions] : []),
+      rewards: Array.isArray(data?.rewards) ? data.rewards : (data?.rewards ? [data.rewards] : [])
+    };
+  } catch (error) {
+    console.warn('⚠️ Ocurrió un error en getAllUsersHistory:', error.message);
+    return { actions: [], rewards: [], is_forbidden: true };
+  }
+};

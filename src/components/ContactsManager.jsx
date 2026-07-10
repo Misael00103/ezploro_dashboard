@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -14,15 +14,20 @@ import {
   CheckCircle,
   Clock,
   MessageCircle,
-  User
+  Reply,
+  User,
+  Loader2
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
+import { replyContact, deleteContact } from '../services/contactService';
 
 const ContactsManager = ({ contacts = [], updateContacts }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedContact, setSelectedContact] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [isAutoReplying, setIsAutoReplying] = useState(false);
   const { toast } = useToast();
   
   console.log('ContactsManager received contacts:', contacts);
@@ -30,13 +35,64 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
   // Ensure contacts is always an array
   const safeContacts = Array.isArray(contacts) ? contacts : [];
 
-  const filteredContacts = safeContacts.filter(contact => {
+  const getContactIdentifier = (contact) => contact?.contact_us_id ?? contact?.contact_id ?? contact?.id ?? null;
+  const getContactLookupKey = (contact) => {
+    const identifier = getContactIdentifier(contact);
+    if (identifier) return String(identifier);
+    return `${contact?.email || ''}|${contact?.name || ''}|${contact?.message || ''}`;
+  };
+  const deduplicatedContacts = safeContacts.filter((contact, index, array) => {
+    const lookupKey = getContactLookupKey(contact);
+    return array.findIndex((item) => getContactLookupKey(item) === lookupKey) === index;
+  });
+  const getContactStatus = (contact) => {
+    const rawStatus = contact?.status || contact?.state || contact?.current_status || contact?.status_label || contact?.is_read;
+    const normalized = String(rawStatus ?? '').trim().toLowerCase();
+
+    if (!normalized) return 'pending';
+    if (['read', 'leído', 'leido', 'seen', 'viewed'].includes(normalized)) return 'read';
+    if (['resolved', 'resuelto', 'closed', 'answered', 'responded', 'complete', 'completed'].includes(normalized)) return 'resolved';
+    if (['unread', 'pending', 'pendiente', 'new', 'nuevo', 'received', 'recibido', 'sin leer', 'sin_leer'].includes(normalized)) return 'pending';
+
+    return 'pending';
+  };
+  const getContactMessage = (contact) => contact?.message || contact?.body || contact?.content || contact?.text || contact?.description || '';
+  const getContactDate = (contact) => contact?.created_at || contact?.createdAt || contact?.received_at || contact?.timestamp || contact?.date || contact?.sent_at || contact?.updated_at || null;
+
+  const buildReplyText = (contact) => {
+    const name = contact?.name || 'Usuario';
+    const message = getContactMessage(contact);
+    const date = formatDate(getContactDate(contact));
+    
+    return `Estimado/a ${name},
+
+Agradecemos sinceramente que te hayas puesto en contacto con nosotros en Ezploro. Hemos recibido tu consulta del día ${date} con éxito.
+
+Detalles del mensaje recibido:
+--------------------------------------------------
+"${message}"
+--------------------------------------------------
+
+Un miembro de nuestro equipo está revisando tu caso y se pondrá en contacto contigo a la brevedad.
+
+Atentamente,
+El Equipo de Ezploro
+https://ezploro.com`;
+  };
+
+  useEffect(() => {
+    if (selectedContact) {
+      setReplyText(buildReplyText(selectedContact));
+    }
+  }, [selectedContact]);
+
+  const filteredContacts = deduplicatedContacts.filter(contact => {
     if (!contact) return false;
     
     const name = contact.name || '';
     const email = contact.email || '';
-    const message = contact.message || '';
-    const status = contact.status || 'pending';
+    const message = getContactMessage(contact);
+    const status = getContactStatus(contact);
     
     const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -47,6 +103,8 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
   });
 
   const handleStatusChange = (contactId, newStatus) => {
+    if (!contactId) return;
+
     if (updateContacts) {
       updateContacts(contactId, newStatus);
     }
@@ -57,14 +115,151 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
     });
   };
 
-  const handleDelete = (contactId) => {
-    const updatedContacts = contacts.filter(contact => contact.id !== contactId);
-    updateContacts(updatedContacts);
-    
-    toast({
-      title: "Mensaje eliminado",
-      description: "El mensaje se ha eliminado exitosamente",
-    });
+  const handleDelete = async (contactId) => {
+    try {
+      await deleteContact(contactId);
+      const updatedContacts = deduplicatedContacts.filter(contact => getContactIdentifier(contact) !== contactId);
+      if (updateContacts) {
+        updateContacts(updatedContacts);
+      }
+      
+      toast({
+        title: "Mensaje eliminado",
+        description: "El mensaje se ha eliminado exitosamente",
+      });
+    } catch (error) {
+      console.error('Error al eliminar mensaje de contacto:', error);
+      toast({
+        title: "No se pudo eliminar el mensaje",
+        description: error?.message || "Ocurrió un error en el servidor al intentar eliminar.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleReply = async (contact) => {
+    const contactId = getContactIdentifier(contact);
+    const email = contact?.email;
+
+    if (!contactId) {
+      toast({
+        title: 'Contacto inválido',
+        description: 'No se pudo identificar el mensaje para responder.',
+      });
+      return;
+    }
+
+    if (!email) {
+      toast({
+        title: 'Sin correo asociado',
+        description: 'Este contacto no tiene un email válido para responder.',
+      });
+      return;
+    }
+
+    const message = replyText.trim() || buildReplyText(contact);
+    const subject = `Re: ${contact?.name ? `Mensaje de ${contact.name}` : 'Consulta recibida'}`;
+
+    try {
+      const result = await replyContact(contactId, {
+        email,
+        subject,
+        message,
+        name: contact?.name || '',
+      });
+
+      if (result?.ok) {
+        if (getContactStatus(contact) !== 'resolved') {
+          handleStatusChange(contactId, 'resolved');
+        }
+
+        toast({
+          title: 'Respuesta enviada',
+          description: 'La respuesta se ha enviado correctamente desde la API.',
+        });
+        return;
+      }
+
+      const mailtoLink = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
+      window.location.href = mailtoLink;
+
+      if (getContactStatus(contact) !== 'resolved') {
+        handleStatusChange(contactId, 'resolved');
+      }
+
+      toast({
+        title: 'Respuesta preparada',
+        description: 'El backend no expone un endpoint de respuesta, así que se abrió tu cliente de correo.',
+      });
+    } catch (error) {
+      console.error('Error al responder contacto:', error);
+      toast({
+        title: 'No se pudo enviar la respuesta',
+        description: error?.message || 'El backend no aceptó la solicitud de respuesta.',
+      });
+    }
+  };
+
+  const handleAutoReplyAllPending = async () => {
+    const pendingContacts = deduplicatedContacts.filter(
+      contact => getContactStatus(contact) === 'pending'
+    );
+
+    if (pendingContacts.length === 0) {
+      toast({
+        title: "Sin mensajes pendientes",
+        description: "Todos los mensajes ya han sido respondidos.",
+      });
+      return;
+    }
+
+    try {
+      setIsAutoReplying(true);
+      toast({
+        title: "Iniciando auto-respuestas",
+        description: `Procesando ${pendingContacts.length} mensajes pendientes...`,
+      });
+
+      let successCount = 0;
+      for (const contact of pendingContacts) {
+        const contactId = getContactIdentifier(contact);
+        const email = contact?.email;
+        if (!contactId || !email) continue;
+
+        const message = buildReplyText(contact);
+        const subject = `Re: ${contact?.name ? `Mensaje de ${contact.name}` : 'Consulta recibida'}`;
+
+        try {
+          const result = await replyContact(contactId, {
+            email,
+            subject,
+            message,
+            name: contact?.name || '',
+          });
+
+          if (result?.ok) {
+            successCount++;
+            handleStatusChange(contactId, 'resolved');
+          }
+        } catch (err) {
+          console.error(`Error auto-replying to message ${contactId}:`, err);
+        }
+      }
+
+      toast({
+        title: "Proceso completado",
+        description: `Se enviaron ${successCount} respuestas automáticas correctamente.`,
+      });
+    } catch (error) {
+      console.error("Error in handleAutoReplyAllPending:", error);
+      toast({
+        title: "Error al procesar",
+        description: "Ocurrió un error inesperado al enviar las respuestas automáticas.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAutoReplying(false);
+    }
   };
 
   const handleViewDetails = (contact) => {
@@ -72,8 +267,8 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
     setIsDetailModalOpen(true);
     
     // Mark as read when viewing
-    if (contact.status === 'unread') {
-      handleStatusChange(contact.id, 'read');
+    if (getContactStatus(contact) === 'pending') {
+      handleStatusChange(getContactIdentifier(contact), 'read');
     }
   };
 
@@ -90,7 +285,12 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('es-ES', {
+    if (!dateString) return 'Sin fecha';
+
+    const parsedDate = dateString instanceof Date ? dateString : new Date(dateString);
+    if (Number.isNaN(parsedDate.getTime())) return 'Sin fecha';
+
+    return parsedDate.toLocaleDateString('es-ES', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -99,8 +299,8 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
     });
   };
 
-  const unreadCount = safeContacts.filter(contact => contact && (contact.status === 'unread' || contact.status === 'pending')).length;
-  const newsletterCount = safeContacts.filter(contact => contact && contact.newsletter).length;
+  const unreadCount = deduplicatedContacts.filter(contact => contact && (getContactStatus(contact) === 'unread' || getContactStatus(contact) === 'pending')).length;
+  const newsletterCount = deduplicatedContacts.filter(contact => contact && contact.newsletter).length;
 
   return (
     <div className="space-y-6">
@@ -110,22 +310,41 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
           <h2 className="text-2xl font-bold text-white">Gestión de Contactos</h2>
           <p className="text-purple-300">Administra los mensajes de contacto de los usuarios</p>
         </div>
-        <div className="flex space-x-4">
-          <Card className="bg-black/40 border-purple-500/30 px-4 py-2">
+        <div className="flex items-center space-x-4">
+          {unreadCount > 0 && (
+            <Button
+              onClick={handleAutoReplyAllPending}
+              disabled={isAutoReplying}
+              className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white border border-purple-500/30 shadow-lg shadow-purple-900/20"
+            >
+              {isAutoReplying ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Auto-respondiendo...
+                </>
+              ) : (
+                <>
+                  <Reply className="h-4 w-4 mr-2" />
+                  Auto-responder pendientes ({unreadCount})
+                </>
+              )}
+            </Button>
+          )}
+          <Card className="glass-panel px-4 py-2 border-zinc-800/50">
             <div className="flex items-center space-x-2">
-              <Mail className="h-5 w-5 text-purple-400" />
+              <Mail className="h-5 w-5 text-violet-400" />
               <div className="text-center">
-                <p className="text-sm text-purple-200">Sin leer</p>
-                <p className="text-xl font-bold text-white">{unreadCount}</p>
+                <p className="text-xs text-zinc-400">Sin leer</p>
+                <p className="text-lg font-bold text-white">{unreadCount}</p>
               </div>
             </div>
           </Card>
-          <Card className="bg-black/40 border-purple-500/30 px-4 py-2">
+          <Card className="glass-panel px-4 py-2 border-zinc-800/50">
             <div className="flex items-center space-x-2">
-              <MessageCircle className="h-5 w-5 text-purple-400" />
+              <MessageCircle className="h-5 w-5 text-violet-400" />
               <div className="text-center">
-                <p className="text-sm text-purple-200">Newsletter</p>
-                <p className="text-xl font-bold text-white">{newsletterCount}</p>
+                <p className="text-xs text-zinc-400">Newsletter</p>
+                <p className="text-lg font-bold text-white">{newsletterCount}</p>
               </div>
             </div>
           </Card>
@@ -133,33 +352,33 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
       </div>
 
       {/* Filters */}
-      <Card className="bg-black/40 border-purple-500/30">
+      <Card className="glass-panel border-zinc-800/50 shadow-lg shadow-black/20">
         <CardContent className="pt-6">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label className="text-purple-200">Buscar</Label>
+              <Label className="text-zinc-300">Buscar</Label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-400 h-4 w-4" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-500 h-4 w-4" />
                 <Input
                   placeholder="Buscar por nombre, email o mensaje..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-black/50 border-purple-500/30 text-white"
+                  className="pl-10 bg-zinc-900/50 border-zinc-800/50 text-white placeholder:text-zinc-500 focus-visible:ring-violet-500"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label className="text-purple-200">Estado</Label>
+              <Label className="text-zinc-300">Estado</Label>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="bg-black/50 border-purple-500/30 text-white">
+                <SelectTrigger className="bg-zinc-900/50 border-zinc-800/50 text-white">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-black border-purple-500/30">
-                  <SelectItem value="all" className="text-white hover:bg-purple-900/50">Todos</SelectItem>
-                  <SelectItem value="pending" className="text-white hover:bg-purple-900/50">Pendientes</SelectItem>
-                  <SelectItem value="read" className="text-white hover:bg-purple-900/50">Leídos</SelectItem>
-                  <SelectItem value="resolved" className="text-white hover:bg-purple-900/50">Resueltos</SelectItem>
+                <SelectContent className="bg-zinc-950 border-zinc-800/60">
+                  <SelectItem value="all" className="text-white focus:bg-zinc-900">Todos</SelectItem>
+                  <SelectItem value="pending" className="text-white focus:bg-zinc-900">Pendientes</SelectItem>
+                  <SelectItem value="read" className="text-white focus:bg-zinc-900">Leídos</SelectItem>
+                  <SelectItem value="resolved" className="text-white focus:bg-zinc-900">Resueltos</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -169,23 +388,26 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
 
       {/* Contacts List */}
       <div className="space-y-4">
-        {filteredContacts.map(contact => (
-          <Card key={contact.contact_id || contact.id} className={`bg-black/40 border-purple-500/30 transition-all hover:bg-black/60 ${(contact.status === 'unread' || contact.status === 'pending') ? 'border-red-500/50' : ''}`}>
+        {filteredContacts.map((contact, index) => (
+          <Card 
+            key={contact.contact_us_id || contact.contact_id || contact.id || index} 
+            className={`glass-panel-interactive border-zinc-800/50 ${(getContactStatus(contact) === 'pending') ? 'border-amber-500/20' : ''}`}
+          >
             <CardContent className="pt-6">
               <div className="flex justify-between items-start">
                 <div className="space-y-3 flex-1">
                   <div className="flex items-center space-x-3">
                     <div className="flex items-center space-x-2">
-                      <User className="h-5 w-5 text-purple-400" />
+                      <User className="h-5 w-5 text-violet-400" />
                       <span className="font-semibold text-white">{contact.name}</span>
                     </div>
-                    <Badge className={getStatusColor(contact.status)}>
-                      {contact.status === 'resolved' ? (
+                    <Badge className={getStatusColor(getContactStatus(contact))}>
+                      {getContactStatus(contact) === 'resolved' ? (
                         <>
                           <CheckCircle className="h-3 w-3 mr-1" />
                           Resuelto
                         </>
-                      ) : contact.status === 'read' ? (
+                      ) : getContactStatus(contact) === 'read' ? (
                         <>
                           <Eye className="h-3 w-3 mr-1" />
                           Leído
@@ -198,23 +420,23 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
                       )}
                     </Badge>
                     {contact.newsletter && (
-                      <Badge variant="secondary" className="bg-blue-900/50 text-blue-200">
+                      <Badge variant="secondary" className="bg-blue-950/50 text-blue-300 border border-blue-800/30">
                         Newsletter
                       </Badge>
                     )}
                   </div>
 
                   <div className="space-y-1">
-                    <p className="text-sm text-purple-300">{contact.email}</p>
-                    <p className="text-purple-200 line-clamp-2">
-                      {contact.message.length > 100 
-                        ? `${contact.message.substring(0, 100)}...` 
-                        : contact.message}
+                    <p className="text-sm text-zinc-400">{contact.email}</p>
+                    <p className="text-zinc-200 line-clamp-2">
+                      {getContactMessage(contact).length > 100 
+                        ? `${getContactMessage(contact).substring(0, 100)}...` 
+                        : getContactMessage(contact)}
                     </p>
                   </div>
 
-                  <p className="text-xs text-purple-400">
-                    Recibido: {formatDate(contact.created_at)}
+                  <p className="text-xs text-zinc-500">
+                    Recibido: {formatDate(getContactDate(contact))}
                   </p>
                 </div>
 
@@ -223,7 +445,7 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
                     size="sm"
                     variant="ghost"
                     onClick={() => handleViewDetails(contact)}
-                    className="text-purple-300 hover:bg-purple-900/50"
+                    className="text-zinc-300 hover:text-white hover:bg-zinc-900/50"
                   >
                     <Eye className="h-4 w-4 mr-1" />
                     Ver
@@ -232,27 +454,39 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => handleStatusChange(contact.id, contact.status === 'read' ? 'unread' : 'read')}
-                    className="text-purple-300 hover:bg-purple-900/50"
+                    onClick={() => handleReply(contact)}
+                    className="text-zinc-300 hover:text-white hover:bg-zinc-900/50"
                   >
-                    {contact.status === 'read' ? (
-                      <>
-                        <Clock className="h-4 w-4 mr-1" />
-                        No leído
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Leído
-                      </>
-                    )}
+                    <Reply className="h-4 w-4 mr-1" />
+                    Responder
                   </Button>
+
+                  {getContactStatus(contact) !== 'resolved' && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleStatusChange(getContactIdentifier(contact), getContactStatus(contact) === 'read' ? 'unread' : 'read')}
+                      className="text-zinc-300 hover:text-white hover:bg-zinc-900/50"
+                    >
+                      {getContactStatus(contact) === 'read' ? (
+                        <>
+                          <Clock className="h-4 w-4 mr-1" />
+                          No leído
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Leído
+                        </>
+                      )}
+                    </Button>
+                  )}
                   
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => handleDelete(contact.id)}
-                    className="text-red-400 hover:bg-red-900/50"
+                    onClick={() => handleDelete(getContactIdentifier(contact))}
+                    className="text-rose-400 hover:text-rose-300 hover:bg-rose-950/20"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -263,12 +497,12 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
         ))}
 
         {filteredContacts.length === 0 && (
-          <Card className="bg-black/40 border-purple-500/30">
+          <Card className="glass-panel border-zinc-800/50">
             <CardContent className="pt-6">
               <div className="text-center py-8">
-                <Mail className="h-16 w-16 text-purple-400 mx-auto mb-4" />
+                <Mail className="h-16 w-16 text-zinc-500 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-white mb-2">No se encontraron mensajes</h3>
-                <p className="text-purple-300">No hay mensajes que coincidan con los filtros aplicados.</p>
+                <p className="text-zinc-400">No hay mensajes que coincidan con los filtros aplicados.</p>
               </div>
             </CardContent>
           </Card>
@@ -277,10 +511,10 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
 
       {/* Detail Modal */}
       <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
-        <DialogContent className="bg-black/90 border-purple-500/30 text-white max-w-2xl">
+        <DialogContent className="bg-zinc-950/95 border-zinc-800/60 text-white max-w-2xl backdrop-blur-lg">
           <DialogHeader>
             <DialogTitle className="text-white">Detalles del Mensaje</DialogTitle>
-            <DialogDescription className="text-purple-300">
+            <DialogDescription className="text-zinc-400">
               Información completa del mensaje de contacto
             </DialogDescription>
           </DialogHeader>
@@ -289,22 +523,27 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-purple-200">Nombre</Label>
-                  <p className="text-white">{selectedContact.name}</p>
+                  <Label className="text-zinc-400">Nombre</Label>
+                  <p className="text-white font-medium">{selectedContact.name}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-purple-200">Email</Label>
-                  <p className="text-white">{selectedContact.email}</p>
+                  <Label className="text-zinc-400">Email</Label>
+                  <p className="text-white font-medium">{selectedContact.email}</p>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label className="text-purple-200">Estado</Label>
+                <Label className="text-zinc-400">Estado</Label>
                 <div className="flex items-center space-x-2">
-                  <Badge className={getStatusColor(selectedContact.status)}>
-                    {selectedContact.status === 'read' ? (
+                  <Badge className={getStatusColor(getContactStatus(selectedContact))}>
+                    {getContactStatus(selectedContact) === 'resolved' ? (
                       <>
                         <CheckCircle className="h-3 w-3 mr-1" />
+                        Resuelto
+                      </>
+                    ) : getContactStatus(selectedContact) === 'read' ? (
+                      <>
+                        <Eye className="h-3 w-3 mr-1" />
                         Leído
                       </>
                     ) : (
@@ -315,7 +554,7 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
                     )}
                   </Badge>
                   {selectedContact.newsletter && (
-                    <Badge variant="secondary" className="bg-blue-900/50 text-blue-200">
+                    <Badge variant="secondary" className="bg-blue-950/50 text-blue-300 border border-blue-800/30">
                       Suscrito al newsletter
                     </Badge>
                   )}
@@ -323,33 +562,53 @@ const ContactsManager = ({ contacts = [], updateContacts }) => {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-purple-200">Mensaje</Label>
-                <Card className="bg-black/50 border-purple-500/30">
+                <Label className="text-zinc-400">Mensaje</Label>
+                <Card className="bg-zinc-900/50 border-zinc-800/50">
                   <CardContent className="pt-4">
-                    <p className="text-white whitespace-pre-wrap">{selectedContact.message}</p>
+                    <p className="text-white whitespace-pre-wrap">{getContactMessage(selectedContact)}</p>
                   </CardContent>
                 </Card>
               </div>
 
               <div className="space-y-2">
-                <Label className="text-purple-200">Fecha de recepción</Label>
-                <p className="text-purple-300">{formatDate(selectedContact.created_at)}</p>
+                <Label className="text-zinc-400">Respuesta</Label>
+                <textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  rows={6}
+                  className="w-full rounded-md border border-zinc-800/60 bg-zinc-900/40 px-3 py-2 text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  placeholder="Escribe tu respuesta para este contacto..."
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-zinc-400">Fecha de recepción</Label>
+                <p className="text-zinc-300">{formatDate(getContactDate(selectedContact))}</p>
               </div>
 
               <div className="flex justify-end space-x-2">
                 <Button
                   variant="ghost"
                   onClick={() => setIsDetailModalOpen(false)}
-                  className="text-purple-300 hover:bg-purple-900/50"
+                  className="text-zinc-400 hover:text-white hover:bg-zinc-900/50"
                 >
                   Cerrar
                 </Button>
                 <Button
-                  onClick={() => handleStatusChange(selectedContact.id, selectedContact.status === 'read' ? 'unread' : 'read')}
-                  className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+                  onClick={() => handleReply(selectedContact)}
+                  className="bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800 text-white"
                 >
-                  {selectedContact.status === 'read' ? 'Marcar como no leído' : 'Marcar como leído'}
+                  <Reply className="h-4 w-4 mr-1" />
+                  Responder
                 </Button>
+                {getContactStatus(selectedContact) !== 'resolved' && (
+                  <Button
+                    onClick={() => handleStatusChange(getContactIdentifier(selectedContact), getContactStatus(selectedContact) === 'read' ? 'unread' : 'read')}
+                    className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700"
+                  >
+                    {getContactStatus(selectedContact) === 'read' ? 'Marcar como no leído' : 'Marcar como leído'}
+                  </Button>
+                )}
               </div>
             </div>
           )}

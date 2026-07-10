@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Switch } from './ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Textarea } from './ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import {
   Trophy,
   Star,
@@ -24,12 +25,6 @@ import {
   Medal,
   Loader2
 } from 'lucide-react';
-import { 
-  mockGamificationActions, 
-  mockPointsRules, 
-  mockUserRankings, 
-  mockRedemptionHistory 
-} from '../mock';
 import {
   getRankingUsuariosMasSuscritos,
   getRankingUsuariosMasPuntos,
@@ -40,7 +35,8 @@ import {
   getRankingEventosMasLikes
 } from '../services/rankingService';
 import { getAllRules, createRule, updateRule, deleteRule } from '../services/rulesService';
-import { registerAction, getUserPoints, redeemReward, getUserHistory } from '../services/gamificationService';
+import { registerAction, getUserPoints, redeemReward, getUserHistory, getAllUsersHistory } from '../services/gamificationService';
+import { fetchWithAuth } from '../services/userService';
 import { getClaimableActions, claimPoints, getClaimedTransactions } from '../services/pointsService';
 import { getCurrentUserId } from '../services/authService';
 import { 
@@ -51,12 +47,12 @@ import {
   toggleOfferStatus 
 } from '../services/offerService';
 import { toast } from 'react-hot-toast';
+import { API_URL_USERS_LIST } from '../services/config';
 
 const GamificationManager = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [pointsRules, setPointsRules] = useState([]);
   const [rewards, setRewards] = useState([]);
-  const [userRankings, setUserRankings] = useState(mockUserRankings);
   const [gamificationActions, setGamificationActions] = useState([]);
   const [redemptionHistory, setRedemptionHistory] = useState([]);
   const [realRankings, setRealRankings] = useState({
@@ -82,6 +78,24 @@ const GamificationManager = () => {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [userTotalPoints, setUserTotalPoints] = useState(0);
   const [claimableActions, setClaimableActions] = useState([]);
+  
+  const [users, setUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [isManualActionModalOpen, setIsManualActionModalOpen] = useState(false);
+  const [isManualRedeemModalOpen, setIsManualRedeemModalOpen] = useState(false);
+  const [manualActionData, setManualActionData] = useState({
+    action_name: '',
+    event_id: ''
+  });
+  const [manualRedeemData, setManualRedeemData] = useState({
+    reward_name: '',
+    points_required: 0,
+    offer_id: ''
+  });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [globalActions, setGlobalActions] = useState([]);
+  const [globalRedemptions, setGlobalRedemptions] = useState([]);
+  const [isLoadingGlobalActivity, setIsLoadingGlobalActivity] = useState(false);
   const [formData, setFormData] = useState({
     rule_name: '',
     point_type: 'Profile',
@@ -113,6 +127,182 @@ const GamificationManager = () => {
   const [offerImagePreview, setOfferImagePreview] = useState(null);
   const [editOfferImageFile, setEditOfferImageFile] = useState(null);
   const [editOfferImagePreview, setEditOfferImagePreview] = useState(null);
+
+  const loadUsers = async (loggedInUserId) => {
+    try {
+      const response = await fetchWithAuth(API_URL_USERS_LIST);
+      console.log('🔵 loadUsers - Response raw from API_URL_USERS_LIST:', response);
+      let uList = [];
+      if (Array.isArray(response)) {
+        uList = response;
+      } else if (response && Array.isArray(response.data)) {
+        uList = response.data;
+      } else if (response && Array.isArray(response.users)) {
+        uList = response.users;
+      }
+
+      console.log('🔵 loadUsers - Users List extracted:', uList);
+      if (uList.length > 0) {
+        console.log('🔵 loadUsers - First User details:', uList[0]);
+      }
+      setUsers(uList);
+
+      if (loggedInUserId) {
+        const found = uList.find(x => x.id?.toString() === loggedInUserId.toString() || x.user_id?.toString() === loggedInUserId.toString());
+        if (found) {
+          setSelectedUser(found);
+          await loadUserData(found.id || found.user_id, found);
+          await loadActivity(found.id || found.user_id, found);
+          return;
+        }
+      }
+
+      if (uList.length > 0) {
+        setSelectedUser(uList[0]);
+        await loadUserData(uList[0].id || uList[0].user_id, uList[0]);
+        await loadActivity(uList[0].id || uList[0].user_id, uList[0]);
+      }
+    } catch (error) {
+      console.error('Error loading users in GamificationManager:', error);
+    }
+  };
+
+  const loadGlobalActivity = async () => {
+    try {
+      setIsLoadingGlobalActivity(true);
+      console.log('🔵 loadGlobalActivity - Cargando historial de todos los usuarios...');
+      const history = await getAllUsersHistory();
+      
+      let hasGlobalData = false;
+      
+      if (history && history.actions && Array.isArray(history.actions) && history.actions.length > 0) {
+        const mappedActions = history.actions.map(action => ({
+          id: action.user_action_id || action.id,
+          user: {
+            name: action.user?.display_name || action.user?.name || action.user?.username || 'Usuario',
+            avatar: action.user?.profile_picture || action.user?.avatar
+          },
+          action_name: action.action?.name || action.action_name,
+          points_awarded: action.action?.points || action.points || 0,
+          created_at: action.created_at,
+          event_title: action.event?.title || null
+        }));
+        setGlobalActions(mappedActions);
+        hasGlobalData = true;
+      } else {
+        setGlobalActions([]);
+      }
+
+      if (history && history.rewards && Array.isArray(history.rewards) && history.rewards.length > 0) {
+        const mappedRewards = history.rewards.map(reward => ({
+          id: reward.user_reward_id || reward.id || reward.redemption_id,
+          user: {
+            name: reward.user?.display_name || reward.user?.name || reward.user?.username || 'Usuario',
+            avatar: reward.user?.profile_picture || reward.user?.avatar,
+            email: reward.user?.email
+          },
+          reward_name: reward.reward_name || reward.offer?.title || reward.offer?.name || 'Recompensa',
+          points_redeemed: reward.points_redeemed || reward.points || 0,
+          redeemed_at: reward.redeemed_at || reward.created_at || reward.redeemedAt,
+          status: reward.status || 'active',
+          used_at: reward.used_at || reward.usedAt
+        }));
+        setGlobalRedemptions(mappedRewards);
+        hasGlobalData = true;
+      } else {
+        setGlobalRedemptions([]);
+      }
+
+      // Fallback: Si no hay información global, usar el historial local del usuario seleccionado
+      if (!hasGlobalData) {
+        console.log('🔵 loadGlobalActivity - Historial global vacío, usando fallback de usuario seleccionado...');
+        setGlobalActions(gamificationActions);
+        setGlobalRedemptions(redemptionHistory);
+      }
+    } catch (error) {
+      console.error('🔴 Error loading global activity:', error);
+      console.log('🔵 loadGlobalActivity - Fallback a actividad local de usuario por error...');
+      setGlobalActions(gamificationActions);
+      setGlobalRedemptions(redemptionHistory);
+    } finally {
+      setIsLoadingGlobalActivity(false);
+    }
+  };
+
+  const handleManualActionSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedUser) {
+      toast.error('No se ha seleccionado ningún usuario');
+      return;
+    }
+    if (!manualActionData.action_name) {
+      toast.error('Por favor selecciona una acción');
+      return;
+    }
+
+    try {
+      const targetId = selectedUser.id || selectedUser.user_id;
+      console.log('🔵 handleManualActionSubmit - Payload:', {
+        user_id: targetId,
+        action_name: manualActionData.action_name,
+        event_id: manualActionData.event_id || null
+      });
+      const selRule = pointsRules.find(r => r.rule_name === manualActionData.action_name || r.display_name === manualActionData.action_name);
+      await registerAction({
+        user_id: targetId,
+        action_name: manualActionData.action_name,
+        event_id: manualActionData.event_id || null,
+        rule_id: selRule ? (selRule.rule_id || selRule.id) : null,
+        point_type: selRule ? selRule.point_type : null
+      });
+
+      toast.success('Acción registrada y puntos sumados');
+      setIsManualActionModalOpen(false);
+      setManualActionData({ action_name: '', event_id: '' });
+      
+      await loadUserData(targetId, selectedUser);
+      await loadActivity(targetId, selectedUser);
+    } catch (error) {
+      console.error('Error registering manual action:', error);
+      toast.error(error.message || 'Error al registrar acción');
+    }
+  };
+
+  const handleManualRedeemSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedUser) {
+      toast.error('No se ha seleccionado ningún usuario');
+      return;
+    }
+    if (!manualRedeemData.reward_name) {
+      toast.error('Por favor selecciona una recompensa');
+      return;
+    }
+    if (parseFloat(userTotalPoints) < parseFloat(manualRedeemData.points_required)) {
+      toast.error('El usuario no tiene suficientes puntos');
+      return;
+    }
+
+    try {
+      const targetId = selectedUser.id || selectedUser.user_id;
+      await redeemReward({
+        user_id: targetId,
+        reward_name: manualRedeemData.reward_name,
+        points_redeemed: manualRedeemData.points_required,
+        offer_id: manualRedeemData.offer_id
+      });
+
+      toast.success('Canje realizado exitosamente');
+      setIsManualRedeemModalOpen(false);
+      setManualRedeemData({ reward_name: '', points_required: 0, offer_id: '' });
+      
+      await loadUserData(targetId, selectedUser);
+      await loadActivity(targetId, selectedUser);
+    } catch (error) {
+      console.error('Error in manual redeem:', error);
+      toast.error(error.message || 'Error al realizar canje');
+    }
+  };
 
   // Cargar reglas y datos iniciales desde el backend
   useEffect(() => {
@@ -176,17 +366,15 @@ const GamificationManager = () => {
       
       setCurrentUserId(userId);
       
-      // Cargar todo en paralelo, incluso si hay errores
       const results = await Promise.allSettled([
         loadRules(),
         loadOffers(),
-        userId ? loadUserData(userId) : Promise.resolve(),
-        userId ? loadActivity(userId) : Promise.resolve()
+        loadUsers(userId)
       ]);
       
       // Log de resultados
       results.forEach((result, index) => {
-        const names = ['loadRules', 'loadOffers', 'loadUserData', 'loadActivity'];
+        const names = ['loadRules', 'loadOffers', 'loadUsers'];
         if (result.status === 'rejected') {
           console.error(`🔴 Error en ${names[index]}:`, result.reason);
         } else {
@@ -205,7 +393,14 @@ const GamificationManager = () => {
     }
   }, [activeTab]);
 
-  const loadUserData = async (userId) => {
+  // Cargar actividad global cuando se abre la pestaña de actividad
+  useEffect(() => {
+    if (activeTab === 'activity') {
+      loadGlobalActivity();
+    }
+  }, [activeTab]);
+
+  const loadUserData = async (userId, userObj = null) => {
     try {
       if (!userId) {
         console.warn('⚠️ loadUserData - No hay userId, no se pueden cargar datos');
@@ -219,10 +414,57 @@ const GamificationManager = () => {
       console.log('🔵 loadUserData - Puntos recibidos del servicio:', pointsData);
       
       // Intentar diferentes formatos de respuesta
-      const totalPoints = pointsData?.total_points 
-        || pointsData?.points 
-        || pointsData?.count 
-        || (typeof pointsData === 'number' ? pointsData : 0);
+      let totalPoints = 0;
+      if (pointsData !== null && pointsData !== undefined) {
+        if (typeof pointsData === 'number') {
+          totalPoints = pointsData;
+        } else if (typeof pointsData === 'string') {
+          const parsed = parseFloat(pointsData);
+          if (!isNaN(parsed)) {
+            totalPoints = parsed;
+          }
+        } else {
+          // Es un objeto
+          const rawVal = pointsData.total_points !== undefined ? pointsData.total_points : (pointsData.points !== undefined ? pointsData.points : pointsData.count);
+          if (rawVal !== undefined && rawVal !== null) {
+            const parsed = typeof rawVal === 'number' ? rawVal : parseFloat(rawVal);
+            if (!isNaN(parsed)) {
+              totalPoints = parsed;
+            }
+          }
+        }
+      }
+      
+      // Fallback: Si los puntos retornados de la API son 0 (o hubo error de permisos), intentar leerlos de selectedUser o del userObj provisto
+      if (totalPoints === 0) {
+        const targetUserObj = userObj || selectedUser;
+        if (targetUserObj) {
+          const fallbackPoints = targetUserObj.total_points !== undefined ? targetUserObj.total_points : (targetUserObj.points !== undefined ? targetUserObj.points : (targetUserObj.points_total || 0));
+          if (fallbackPoints !== undefined && fallbackPoints !== null && Number(fallbackPoints) > 0) {
+            console.log('🔵 loadUserData - Usando puntos de fallback del objeto de usuario:', fallbackPoints);
+            totalPoints = Number(fallbackPoints);
+          }
+        }
+
+        // Segundo Fallback: si sigue siendo 0, consultar ranking
+        if (totalPoints === 0) {
+          try {
+            console.log('🔵 loadUserData - Intentando obtener puntos desde el ranking...');
+            const rankingData = await getRankingUsuariosMasPuntos(200);
+            console.log('🔵 loadUserData - Datos de ranking cargados para fallback:', rankingData);
+            if (Array.isArray(rankingData)) {
+              const foundInRanking = rankingData.find(r => (r.user_id || r.id)?.toString() === userId.toString());
+              if (foundInRanking) {
+                const rankingPoints = foundInRanking.count !== undefined ? foundInRanking.count : (foundInRanking.points !== undefined ? foundInRanking.points : (foundInRanking.total_points || 0));
+                console.log('🟢 loadUserData - Puntos encontrados en ranking para usuario:', userId, '=', rankingPoints);
+                totalPoints = Number(rankingPoints);
+              }
+            }
+          } catch (rankingError) {
+            console.warn('⚠️ loadUserData - Error al buscar puntos en el ranking para fallback:', rankingError.message);
+          }
+        }
+      }
       
       console.log('🔵 loadUserData - Puntos extraídos:', totalPoints);
       setUserTotalPoints(totalPoints);
@@ -240,7 +482,7 @@ const GamificationManager = () => {
     }
   };
 
-  const loadActivity = async (userId) => {
+  const loadActivity = async (userId, userObj = null) => {
     try {
       setIsLoadingActivity(true);
       
@@ -264,6 +506,8 @@ const GamificationManager = () => {
       
       console.log('🔵 loadActivity - Cargando actividad para usuario:', userIdNum);
       
+      const targetUser = userObj || selectedUser;
+      
       try {
         const history = await getUserHistory(userIdNum);
         console.log('🔵 loadActivity - Historial recibido:', history);
@@ -281,8 +525,8 @@ const GamificationManager = () => {
         const mappedActions = history.actions.map(action => ({
           id: action.user_action_id || action.id,
           user: {
-            name: action.user?.display_name || action.user?.name || 'Usuario',
-            avatar: action.user?.profile_picture || action.user?.avatar
+            name: action.user?.display_name || action.user?.name || targetUser?.display_name || targetUser?.name || targetUser?.username || 'Usuario',
+            avatar: action.user?.profile_picture || action.user?.avatar || targetUser?.profile_picture || targetUser?.avatar
           },
           action_name: action.action?.name || action.action_name,
           points_awarded: action.action?.points || action.points || 0,
@@ -301,9 +545,9 @@ const GamificationManager = () => {
         const mappedRewards = history.rewards.map(reward => ({
             id: reward.user_reward_id || reward.id || reward.redemption_id,
           user: {
-            name: reward.user?.display_name || reward.user?.name || 'Usuario',
-              avatar: reward.user?.profile_picture || reward.user?.avatar,
-              email: reward.user?.email
+            name: reward.user?.display_name || reward.user?.name || targetUser?.display_name || targetUser?.name || targetUser?.username || 'Usuario',
+              avatar: reward.user?.profile_picture || reward.user?.avatar || targetUser?.profile_picture || targetUser?.avatar,
+              email: reward.user?.email || targetUser?.email
             },
             reward_name: reward.reward_name || reward.offer?.title || reward.offer?.name || 'Recompensa',
             points_redeemed: reward.points_redeemed || reward.points || 0,
@@ -312,11 +556,30 @@ const GamificationManager = () => {
             used_at: reward.used_at || reward.usedAt
           }));
           console.log('🔵 loadActivity - Canjes mapeados:', mappedRewards);
-        setRedemptionHistory(mappedRewards);
+          setRedemptionHistory(mappedRewards);
         } else {
           console.warn('⚠️ loadActivity - No hay canjes en el historial');
           setRedemptionHistory([]);
         }
+
+        // Calcular puntos netos reales basándose en el historial de transacciones (acciones - canjes)
+        let calculatedPoints = 0;
+        if (history && history.actions && Array.isArray(history.actions)) {
+          history.actions.forEach(action => {
+            const pts = Number(action.action?.points || action.points || 0);
+            calculatedPoints += pts;
+          });
+        }
+        if (history && history.rewards && Array.isArray(history.rewards)) {
+          history.rewards.forEach(reward => {
+            const pts = Number(reward.points_redeemed || (reward.reward && reward.reward.points) || 0);
+            calculatedPoints -= pts;
+          });
+        }
+        if (calculatedPoints < 0) calculatedPoints = 0;
+        console.log('🟢 loadActivity - Puntos netos calculados desde el historial:', calculatedPoints);
+        setUserTotalPoints(calculatedPoints);
+
       } catch (historyError) {
         // Si getUserHistory lanza un error (aunque no debería), manejarlo aquí
         console.warn('⚠️ loadActivity - Error al obtener historial:', historyError.message);
@@ -335,10 +598,18 @@ const GamificationManager = () => {
     }
   };
 
+  const getFallbackRules = () => [
+    { id: '1', rule_id: '1', display_name: 'Crear Evento', rule_name: 'Crear Evento', category: 'events', point_type: 'Events', points: 10, description: 'Sumar puntos por organizar un evento', is_active: true },
+    { id: '2', rule_id: '2', display_name: 'Asistir a Evento', rule_name: 'Asistir a Evento', category: 'events', point_type: 'Events', points: 5, description: 'Sumar puntos por participar en un evento', is_active: true },
+    { id: '3', rule_id: '3', display_name: 'Completar Perfil', rule_name: 'Completar Perfil', category: 'profile', point_type: 'Profile', points: 15, description: 'Sumar puntos por completar datos de perfil', is_active: true },
+    { id: '4', rule_id: '4', display_name: 'Dar Like a Evento', rule_name: 'Dar Like a Evento', category: 'engagement', point_type: 'Engagement', points: 2, description: 'Sumar puntos por dar me gusta a un evento', is_active: true }
+  ];
+
   const loadRules = async () => {
     try {
       setIsLoadingRules(true);
       const rules = await getAllRules();
+      console.log('🔵 loadRules - Raw rules from backend:', JSON.stringify(rules, null, 2));
       // Mapear datos del backend al formato del frontend
       const mappedRules = rules.map(rule => ({
         id: rule.rule_id,
@@ -351,10 +622,11 @@ const GamificationManager = () => {
         description: rule.description || '',
         is_active: rule.is_active
       }));
-      setPointsRules(mappedRules);
+      setPointsRules(mappedRules.length > 0 ? mappedRules : getFallbackRules());
     } catch (error) {
       console.error('Error loading rules:', error);
-      toast.error('Error al cargar las reglas');
+      console.log('🔵 loadRules - Fallback a reglas por defecto por error de API (500)...');
+      setPointsRules(getFallbackRules());
     } finally {
       setIsLoadingRules(false);
     }
@@ -507,7 +779,7 @@ const GamificationManager = () => {
           name: offer.title,
           title: offer.title,
           description: offer.description || '',
-          points_required: offer.discount_percentage || offer.discount_amount || 0,
+          points_required: offer.points_required !== undefined && offer.points_required !== null ? offer.points_required : (offer.discount_percentage || offer.discount_amount || 0),
           category: offer.category || offer.offer_type || 'discounts',
           times_redeemed: offer.current_uses || 0,
           is_active: offer.is_active !== undefined ? offer.is_active : true,
@@ -821,7 +1093,7 @@ const GamificationManager = () => {
       case 'Gold': return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
       case 'Silver': return 'bg-gray-400/20 text-gray-300 border-gray-400/30';
       case 'Bronze': return 'bg-orange-600/20 text-orange-300 border-orange-600/30';
-      default: return 'bg-purple-600/20 text-purple-300 border-purple-600/30';
+      default: return 'bg-violet-600/20 text-zinc-400 border-purple-600/30';
     }
   };
 
@@ -830,7 +1102,7 @@ const GamificationManager = () => {
     switch (cat) {
       case 'events': return 'bg-blue-600/20 text-blue-300 border-blue-600/30';
       case 'engagement': return 'bg-green-600/20 text-green-300 border-green-600/30';
-      case 'profile': return 'bg-purple-600/20 text-purple-300 border-purple-600/30';
+      case 'profile': return 'bg-violet-600/20 text-zinc-400 border-purple-600/30';
       case 'discounts': return 'bg-red-600/20 text-red-300 border-red-600/30';
       case 'badges': return 'bg-yellow-600/20 text-yellow-300 border-yellow-600/30';
       case 'merchandise': return 'bg-pink-600/20 text-pink-300 border-pink-600/30';
@@ -882,7 +1154,7 @@ const GamificationManager = () => {
       case 1: return <Crown className="h-4 w-4 text-yellow-400" />;
       case 2: return <Medal className="h-4 w-4 text-gray-400" />;
       case 3: return <Award className="h-4 w-4 text-amber-600" />;
-      default: return <span className="text-purple-400">{position}</span>;
+      default: return <span className="text-zinc-400">{position}</span>;
     }
   };
 
@@ -891,7 +1163,7 @@ const GamificationManager = () => {
       case 1: return 'bg-yellow-900/50 text-yellow-200 border-yellow-600/30';
       case 2: return 'bg-gray-900/50 text-gray-200 border-gray-600/30';
       case 3: return 'bg-amber-900/50 text-amber-200 border-amber-600/30';
-      default: return 'bg-purple-900/50 text-purple-200 border-purple-600/30';
+      default: return 'bg-zinc-800/50 text-zinc-300 border-purple-600/30';
     }
   };
 
@@ -900,43 +1172,43 @@ const GamificationManager = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-white">Sistema de Gamificación</h1>
-          <p className="text-purple-300 mt-2">Gestiona puntos, recompensas y clasificaciones</p>
+          <p className="text-zinc-400 mt-2">Gestiona puntos, recompensas y clasificaciones</p>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5 bg-black/30 border border-purple-500/30">
+        <TabsList className="grid w-full grid-cols-5 glass-panel border-zinc-800/50">
           <TabsTrigger 
             value="overview" 
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
+            className="data-[state=active]:bg-violet-600/10 data-[state=active]:text-violet-400 text-zinc-400 focus:text-white"
           >
             <Trophy className="h-4 w-4 mr-2" />
             Resumen
           </TabsTrigger>
           <TabsTrigger 
             value="points" 
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
+            className="data-[state=active]:bg-violet-600/10 data-[state=active]:text-violet-400 text-zinc-400 focus:text-white"
           >
             <Star className="h-4 w-4 mr-2" />
             Puntos
           </TabsTrigger>
           <TabsTrigger 
             value="rewards" 
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
+            className="data-[state=active]:bg-violet-600/10 data-[state=active]:text-violet-400 text-zinc-400 focus:text-white"
           >
             <Gift className="h-4 w-4 mr-2" />
             Recompensas
           </TabsTrigger>
           <TabsTrigger 
             value="rankings" 
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
+            className="data-[state=active]:bg-violet-600/10 data-[state=active]:text-violet-400 text-zinc-400 focus:text-white"
           >
             <Crown className="h-4 w-4 mr-2" />
             Rankings
           </TabsTrigger>
           <TabsTrigger 
             value="activity" 
-            className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300"
+            className="data-[state=active]:bg-violet-600/10 data-[state=active]:text-violet-400 text-zinc-400 focus:text-white"
           >
             <TrendingUp className="h-4 w-4 mr-2" />
             Actividad
@@ -945,86 +1217,153 @@ const GamificationManager = () => {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
+          {/* User Selector Card */}
+          <Card className="glass-panel border-zinc-800/50 shadow-lg shadow-black/20">
+            <CardContent className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1.5 flex-1">
+                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Usuario en Gestión</span>
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10 border border-violet-500/20">
+                    <AvatarImage src={selectedUser?.profile_picture} />
+                    <AvatarFallback className="bg-violet-900/50 text-violet-200 text-sm">
+                      {selectedUser?.name?.substring(0, 2).toUpperCase() || 'US'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">{selectedUser?.name || 'Cargando...'}</h3>
+                    <p className="text-xs text-zinc-400">{selectedUser?.email || 'Selecciona un usuario'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Input 
+                  type="text"
+                  placeholder="Buscar usuario..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-[180px] bg-zinc-900/50 border-zinc-800/60 text-white placeholder-zinc-500 text-xs h-9"
+                />
+
+                <Select 
+                  value={selectedUser?.id?.toString() || selectedUser?.user_id?.toString() || ''} 
+                  onValueChange={(val) => {
+                    const u = users.find(x => x.id?.toString() === val || x.user_id?.toString() === val);
+                    if (u) {
+                      setSelectedUser(u);
+                      loadUserData(u.id || u.user_id, u);
+                      loadActivity(u.id || u.user_id, u);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[220px] bg-zinc-900/50 border-zinc-850 text-white h-9 text-xs">
+                    <SelectValue placeholder="Seleccionar usuario..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-950 border-zinc-800/60 max-h-[220px]">
+                    {users.filter(u => 
+                      u.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                      u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      u.username?.toLowerCase().includes(searchTerm.toLowerCase())
+                    ).map(u => (
+                      <SelectItem key={u.id || u.user_id} value={u.id?.toString() || u.user_id?.toString()} className="text-white focus:bg-zinc-900 text-xs">
+                        {u.name || u.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Button
+                  size="sm"
+                  onClick={() => setIsManualRedeemModalOpen(true)}
+                  className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 text-xs"
+                >
+                  <Gift className="h-4 w-4 mr-1.5" />
+                  Canjear Puntos
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
-            <Card className="bg-black/40 border-purple-500/30">
+            <Card className="glass-panel border-zinc-800/50">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-purple-200">
+                <CardTitle className="text-sm font-medium text-zinc-300">
                   Total Puntos Otorgados
                 </CardTitle>
-                <Star className="h-4 w-4 text-purple-400" />
+                <Star className="h-4 w-4 text-zinc-400" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-white">
                   {userTotalPoints.toLocaleString()}
                 </div>
-                <p className="text-xs text-purple-300">Puntos del usuario actual</p>
+                <p className="text-xs text-zinc-400">Puntos del usuario seleccionado</p>
               </CardContent>
             </Card>
 
-            <Card className="bg-black/40 border-purple-500/30">
+            <Card className="glass-panel border-zinc-800/50">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-purple-200">
+                <CardTitle className="text-sm font-medium text-zinc-300">
                   Acciones Disponibles
                 </CardTitle>
-                <Users className="h-4 w-4 text-purple-400" />
+                <Users className="h-4 w-4 text-zinc-400" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-white">{claimableActions.length}</div>
-                <p className="text-xs text-purple-300">Para reclamar puntos</p>
+                <p className="text-xs text-zinc-400">Para reclamar puntos</p>
               </CardContent>
             </Card>
 
-            <Card className="bg-black/40 border-purple-500/30">
+            <Card className="glass-panel border-zinc-800/50">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-purple-200">
+                <CardTitle className="text-sm font-medium text-zinc-300">
                   Ofertas Disponibles
                 </CardTitle>
-                <Gift className="h-4 w-4 text-purple-400" />
+                <Gift className="h-4 w-4 text-zinc-400" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-white">
                   {rewards.filter(r => r.is_active).length}
                 </div>
-                <p className="text-xs text-purple-300">de {rewards.length} total</p>
+                <p className="text-xs text-zinc-400">de {rewards.length} total</p>
               </CardContent>
             </Card>
 
-            <Card className="bg-black/40 border-purple-500/30">
+            <Card className="glass-panel border-zinc-800/50">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-purple-200">
+                <CardTitle className="text-sm font-medium text-zinc-300">
                   Recompensas Canjeadas
                 </CardTitle>
-                <Trophy className="h-4 w-4 text-purple-400" />
+                <Trophy className="h-4 w-4 text-zinc-400" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-white">
                   {redemptionHistory.length}
                 </div>
-                <p className="text-xs text-purple-300">Total histórico</p>
+                <p className="text-xs text-zinc-400">Total histórico</p>
               </CardContent>
             </Card>
 
-            <Card className="bg-black/40 border-purple-500/30">
+            <Card className="glass-panel border-zinc-800/50">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-purple-200">
+                <CardTitle className="text-sm font-medium text-zinc-300">
                   Reglas Activas
                 </CardTitle>
-                <Target className="h-4 w-4 text-purple-400" />
+                <Target className="h-4 w-4 text-zinc-400" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-white">
                   {pointsRules.filter(rule => rule.is_active).length}
                 </div>
-                <p className="text-xs text-purple-300">de {pointsRules.length} total</p>
+                <p className="text-xs text-zinc-400">de {pointsRules.length} total</p>
               </CardContent>
             </Card>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
-            <Card className="bg-black/40 border-purple-500/30">
+            <Card className="glass-panel border-zinc-800/50">
               <CardHeader>
                 <CardTitle className="text-white">Ofertas Activas</CardTitle>
-                <CardDescription className="text-purple-300">
+                <CardDescription className="text-zinc-400">
                   Ofertas disponibles para canjear
                 </CardDescription>
               </CardHeader>
@@ -1032,16 +1371,16 @@ const GamificationManager = () => {
                 <div className="space-y-4">
                   {rewards.filter(r => r.is_active).length > 0 ? (
                     rewards.filter(r => r.is_active).slice(0, 5).map((offer) => (
-                      <div key={offer.id || offer.offer_id} className="flex items-center justify-between p-3 rounded-lg bg-purple-900/10">
+                      <div key={offer.id || offer.offer_id} className="flex items-center justify-between p-3 rounded-lg bg-zinc-900/40">
                         <div className="flex items-center space-x-3 flex-1 min-w-0">
-                          <div className="w-8 h-8 bg-purple-600/20 rounded-full flex items-center justify-center flex-shrink-0">
-                            <Gift className="h-4 w-4 text-purple-400" />
+                          <div className="w-8 h-8 bg-violet-600/20 rounded-full flex items-center justify-center flex-shrink-0">
+                            <Gift className="h-4 w-4 text-zinc-400" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-purple-200 truncate">
+                            <p className="text-sm font-medium text-zinc-300 truncate">
                               {offer.name || offer.title}
                             </p>
-                            <p className="text-xs text-purple-400 truncate">
+                            <p className="text-xs text-zinc-400 truncate">
                               {offer.description || 'Sin descripción'}
                             </p>
                           </div>
@@ -1061,7 +1400,7 @@ const GamificationManager = () => {
                       </div>
                     ))
                   ) : (
-                    <div className="text-center py-8 text-purple-300">
+                    <div className="text-center py-8 text-zinc-400">
                       No hay ofertas activas disponibles
                     </div>
                   )}
@@ -1069,10 +1408,10 @@ const GamificationManager = () => {
               </CardContent>
             </Card>
 
-            <Card className="bg-black/40 border-purple-500/30">
+            <Card className="glass-panel border-zinc-800/50">
               <CardHeader>
                 <CardTitle className="text-white">Acciones Reclamables</CardTitle>
-                <CardDescription className="text-purple-300">
+                <CardDescription className="text-zinc-400">
                   Acciones disponibles para reclamar puntos
                 </CardDescription>
               </CardHeader>
@@ -1080,28 +1419,28 @@ const GamificationManager = () => {
                 <div className="space-y-4">
                   {claimableActions.length > 0 ? (
                     claimableActions.slice(0, 5).map((action) => (
-                      <div key={action.action_id || action.id} className="flex items-center justify-between p-3 rounded-lg bg-purple-900/10">
+                      <div key={action.action_id || action.id} className="flex items-center justify-between p-3 rounded-lg bg-zinc-900/40">
                         <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-purple-600/20 rounded-full flex items-center justify-center">
-                            <Award className="h-4 w-4 text-purple-400" />
+                          <div className="w-8 h-8 bg-violet-600/20 rounded-full flex items-center justify-center">
+                            <Award className="h-4 w-4 text-zinc-400" />
                           </div>
                       <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-purple-200">
+                            <p className="text-sm font-medium text-zinc-300">
                               {action.action_name || action.name}
                             </p>
-                            <p className="text-xs text-purple-400">
+                            <p className="text-xs text-zinc-400">
                               {action.description || 'Sin descripción'}
                         </p>
                       </div>
                       </div>
                         <div className="flex items-center space-x-2">
-                          <Badge className="bg-purple-900/50 text-purple-200">
+                          <Badge className="bg-zinc-800/50 text-zinc-300">
                             {action.points || 0} pts
                           </Badge>
                           {currentUserId && (
                             <Button
                               size="sm"
-                              className="bg-purple-600 hover:bg-purple-700"
+                              className="bg-violet-600 hover:bg-violet-700"
                               onClick={() => handleClaimAction(action.action_id || action.id)}
                             >
                               Reclamar
@@ -1111,7 +1450,7 @@ const GamificationManager = () => {
                       </div>
                     ))
                   ) : (
-                    <div className="text-center py-8 text-purple-300">
+                    <div className="text-center py-8 text-zinc-400">
                       No hay acciones disponibles para reclamar
                     </div>
                   )}
@@ -1119,10 +1458,10 @@ const GamificationManager = () => {
               </CardContent>
             </Card>
 
-            <Card className="bg-black/40 border-purple-500/30">
+            <Card className="glass-panel border-zinc-800/50">
               <CardHeader>
                 <CardTitle className="text-white">Canjes Recientes</CardTitle>
-                <CardDescription className="text-purple-300">
+                <CardDescription className="text-zinc-400">
                   Usuarios que canjearon sus puntos
                 </CardDescription>
               </CardHeader>
@@ -1136,17 +1475,17 @@ const GamificationManager = () => {
                           src={redemption.user?.avatar || redemption.user?.profile_picture} 
                           alt={redemption.user?.name} 
                         />
-                        <AvatarFallback className="bg-purple-600 text-white text-xs">
+                        <AvatarFallback className="bg-violet-600 text-white text-xs">
                           {redemption.user?.name?.charAt(0)?.toUpperCase() || 'U'}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-purple-200">
+                        <p className="text-sm text-zinc-300">
                           <span className="font-medium">{redemption.user?.name || 'Usuario'}</span>
-                          <span className="text-purple-300"> canjeó </span>
-                          <span className="font-medium text-purple-200">{redemption.points_redeemed || 0} pts</span>
+                          <span className="text-zinc-400"> canjeó </span>
+                          <span className="font-medium text-zinc-300">{redemption.points_redeemed || 0} pts</span>
                         </p>
-                        <p className="text-xs text-purple-400">
+                        <p className="text-xs text-zinc-400">
                           {redemption.reward_name || 'Recompensa'}
                         </p>
                           {redemption.redeemed_at && (
@@ -1171,7 +1510,7 @@ const GamificationManager = () => {
                     </div>
                     ))
                   ) : (
-                    <div className="text-center py-8 text-purple-300">
+                    <div className="text-center py-8 text-zinc-400">
                       No hay canjes recientes
                     </div>
                   )}
@@ -1186,11 +1525,11 @@ const GamificationManager = () => {
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold text-white">Reglas de Puntos</h2>
-              <p className="text-purple-300">Gestiona cómo se otorgan los puntos</p>
+              <p className="text-zinc-400">Gestiona cómo se otorgan los puntos</p>
             </div>
             <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
               <DialogTrigger asChild>
-            <Button className="bg-purple-600 hover:bg-purple-700">
+            <Button className="bg-violet-600 hover:bg-violet-700">
               <Plus className="h-4 w-4 mr-2" />
               Nueva Regla
             </Button>
@@ -1200,26 +1539,26 @@ const GamificationManager = () => {
 
           {isLoadingRules ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+              <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
             </div>
           ) : (
           <div className="grid gap-4">
             {pointsRules.map((rule) => (
-                <Card key={rule.id || rule.rule_id} className="bg-black/40 border-purple-500/30">
+                <Card key={rule.id || rule.rule_id} className="glass-panel border-zinc-800/50">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 bg-purple-600/20 rounded-lg flex items-center justify-center">
-                        <Star className="h-6 w-6 text-purple-400" />
+                      <div className="w-12 h-12 bg-violet-600/20 rounded-lg flex items-center justify-center">
+                        <Star className="h-6 w-6 text-zinc-400" />
                       </div>
                       <div>
                           <h3 className="text-lg font-semibold text-white">{rule.display_name || rule.rule_name}</h3>
-                          <p className="text-purple-300 text-sm">{rule.description || 'Sin descripción'}</p>
+                          <p className="text-zinc-400 text-sm">{rule.description || 'Sin descripción'}</p>
                         <div className="flex items-center space-x-2 mt-2">
                             <Badge className={getCategoryColor(rule.category || rule.point_type)}>
                               {getCategoryDisplayName(rule.point_type)}
                           </Badge>
-                          <Badge className="bg-purple-900/50 text-purple-200">
+                          <Badge className="bg-zinc-800/50 text-zinc-300">
                             {rule.points} puntos
                           </Badge>
                         </div>
@@ -1233,7 +1572,7 @@ const GamificationManager = () => {
                         <Button 
                           variant="ghost" 
                           size="sm" 
-                          className="text-purple-300 hover:text-white"
+                          className="text-zinc-400 hover:text-white"
                           onClick={() => handleEdit(rule)}
                         >
                         <Edit className="h-4 w-4" />
@@ -1252,12 +1591,12 @@ const GamificationManager = () => {
               </Card>
             ))}
               {pointsRules.length === 0 && (
-                <Card className="bg-black/40 border-purple-500/30">
+                <Card className="glass-panel border-zinc-800/50">
                   <CardContent className="pt-6">
                     <div className="text-center py-8">
-                      <Star className="h-16 w-16 text-purple-400 mx-auto mb-4" />
+                      <Star className="h-16 w-16 text-zinc-400 mx-auto mb-4" />
                       <h3 className="text-lg font-semibold text-white mb-2">No hay reglas</h3>
-                      <p className="text-purple-300">Crea tu primera regla de puntos para comenzar</p>
+                      <p className="text-zinc-400">Crea tu primera regla de puntos para comenzar</p>
           </div>
                   </CardContent>
                 </Card>
@@ -1271,11 +1610,11 @@ const GamificationManager = () => {
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold text-white">Recompensas</h2>
-              <p className="text-purple-300">Administra las recompensas disponibles</p>
+              <p className="text-zinc-400">Administra las recompensas disponibles</p>
             </div>
             <Dialog open={isCreateOfferModalOpen} onOpenChange={setIsCreateOfferModalOpen}>
               <DialogTrigger asChild>
-            <Button className="bg-purple-600 hover:bg-purple-700">
+            <Button className="bg-violet-600 hover:bg-violet-700">
               <Plus className="h-4 w-4 mr-2" />
               Nueva Recompensa
             </Button>
@@ -1285,17 +1624,17 @@ const GamificationManager = () => {
 
           {isLoadingOffers ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+              <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
             </div>
           ) : (
           <div className="grid gap-4 md:grid-cols-2">
               {rewards.length > 0 ? (
                 rewards.map((reward) => (
-                  <Card key={reward.id || reward.offer_id} className="bg-black/40 border-purple-500/30">
+                  <Card key={reward.id || reward.offer_id} className="glass-panel border-zinc-800/50">
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between">
                         <div className="flex items-start space-x-4 flex-1">
-                          <div className="w-12 h-12 bg-purple-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <div className="w-12 h-12 bg-violet-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
                             {reward.image_url ? (
                               <img 
                                 src={reward.image_url} 
@@ -1308,12 +1647,12 @@ const GamificationManager = () => {
                               />
                             ) : null}
                             <div className={`w-full h-full rounded-lg flex items-center justify-center ${reward.image_url ? 'hidden' : ''}`}>
-                        <Gift className="h-6 w-6 text-purple-400" />
+                        <Gift className="h-6 w-6 text-zinc-400" />
                       </div>
                           </div>
                           <div className="flex-1 min-w-0">
                             <h3 className="text-lg font-semibold text-white">{reward.name || reward.title}</h3>
-                            <p className="text-purple-300 text-sm mt-1 line-clamp-2">{reward.description}</p>
+                            <p className="text-zinc-400 text-sm mt-1 line-clamp-2">{reward.description}</p>
                             <div className="flex items-center flex-wrap gap-2 mt-3">
                               {reward.discount_percentage && (
                           <Badge className="bg-yellow-900/50 text-yellow-200 border-yellow-600/30">
@@ -1328,17 +1667,17 @@ const GamificationManager = () => {
                           <Badge className={getCategoryColor(reward.category)}>
                                 {reward.category || reward.offer_type || 'discounts'}
                           </Badge>
-                          <span className="text-xs text-purple-400">
+                          <span className="text-xs text-zinc-400">
                                 Canjeado {reward.times_redeemed || 0} veces
                           </span>
                               {reward.promo_code && (
-                                <Badge className="bg-purple-900/50 text-purple-200">
+                                <Badge className="bg-zinc-800/50 text-zinc-300">
                                   {reward.promo_code}
                                 </Badge>
                               )}
                         </div>
                             {reward.final_price && (
-                              <p className="text-sm text-purple-200 mt-2">
+                              <p className="text-sm text-zinc-300 mt-2">
                                 Precio final: ${reward.final_price}
                               </p>
                             )}
@@ -1353,7 +1692,7 @@ const GamificationManager = () => {
                             <Button 
                               variant="ghost" 
                               size="sm" 
-                              className="text-purple-300 hover:text-white"
+                              className="text-zinc-400 hover:text-white"
                               onClick={() => handleEditOffer(reward)}
                             >
                           <Edit className="h-4 w-4" />
@@ -1373,12 +1712,12 @@ const GamificationManager = () => {
               </Card>
                 ))
               ) : (
-                <Card className="bg-black/40 border-purple-500/30">
+                <Card className="glass-panel border-zinc-800/50">
                   <CardContent className="pt-6">
                     <div className="text-center py-8">
-                      <Gift className="h-16 w-16 text-purple-400 mx-auto mb-4" />
+                      <Gift className="h-16 w-16 text-zinc-400 mx-auto mb-4" />
                       <h3 className="text-lg font-semibold text-white mb-2">No hay ofertas</h3>
-                      <p className="text-purple-300">Crea tu primera oferta para comenzar</p>
+                      <p className="text-zinc-400">Crea tu primera oferta para comenzar</p>
           </div>
                   </CardContent>
                 </Card>
@@ -1392,38 +1731,38 @@ const GamificationManager = () => {
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold text-white">Rankings y Estadísticas</h2>
-              <p className="text-purple-300">Descubre los usuarios y eventos más destacados</p>
+              <p className="text-zinc-400">Descubre los usuarios y eventos más destacados</p>
             </div>
             <Button 
               onClick={loadRealRankings} 
               disabled={isLoadingRankings}
-              className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+              className="bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800"
             >
               {isLoadingRankings ? 'Cargando...' : 'Actualizar Rankings'}
             </Button>
           </div>
 
           <Tabs value={rankingTab} onValueChange={setRankingTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-3 bg-black/30 border border-purple-500/30">
-              <TabsTrigger value="puntos" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300">
+            <TabsList className="grid w-full grid-cols-3 bg-black/30 border border-zinc-800/50">
+              <TabsTrigger value="puntos" className="data-[state=active]:bg-violet-600 data-[state=active]:text-white text-zinc-400">
                 <Star className="h-4 w-4 mr-2" />
                 Puntos
               </TabsTrigger>
-              <TabsTrigger value="usuarios" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300">
+              <TabsTrigger value="usuarios" className="data-[state=active]:bg-violet-600 data-[state=active]:text-white text-zinc-400">
                 <Users className="h-4 w-4 mr-2" />
                 Usuarios
               </TabsTrigger>
-              <TabsTrigger value="eventos" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-300">
+              <TabsTrigger value="eventos" className="data-[state=active]:bg-violet-600 data-[state=active]:text-white text-zinc-400">
                 <Trophy className="h-4 w-4 mr-2" />
                 Eventos
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="puntos" className="space-y-6">
-              <Card className="bg-black/40 border-purple-500/30">
+              <Card className="glass-panel border-zinc-800/50">
                 <CardHeader>
                   <CardTitle className="text-white flex items-center gap-2">
-                    <Star className="h-5 w-5 text-purple-400" />
+                    <Star className="h-5 w-5 text-zinc-400" />
                     Usuarios con Más Puntos
                   </CardTitle>
                 </CardHeader>
@@ -1441,22 +1780,22 @@ const GamificationManager = () => {
                               src={user.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.display_name || user.username)}&background=7c3aed&color=fff&size=40`} 
                               alt={user.display_name || user.username}
                             />
-                            <AvatarFallback className="bg-purple-600 text-white">
+                            <AvatarFallback className="bg-violet-600 text-white">
                               {(user.display_name || user.username || 'U').charAt(0).toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
                           <div>
                             <p className="font-medium text-white">{user.display_name || user.username}</p>
-                            <p className="text-sm text-purple-300">@{user.username}</p>
+                            <p className="text-sm text-zinc-400">@{user.username}</p>
                           </div>
                         </div>
-                        <Badge variant="secondary" className="bg-purple-900/50 text-purple-200">
+                        <Badge variant="secondary" className="bg-zinc-800/50 text-zinc-300">
                           {user.count} puntos
                         </Badge>
                       </div>
                     ))}
                     {realRankings.usuariosMasPuntos.length === 0 && (
-                      <div className="text-center py-8 text-purple-300">
+                      <div className="text-center py-8 text-zinc-400">
                         No hay datos disponibles. Haz clic en "Actualizar Rankings" para cargar.
                       </div>
                     )}
@@ -1467,10 +1806,10 @@ const GamificationManager = () => {
 
             <TabsContent value="usuarios" className="space-y-6">
               <div className="grid gap-6 md:grid-cols-2">
-                <Card className="bg-black/40 border-purple-500/30">
+                <Card className="glass-panel border-zinc-800/50">
                   <CardHeader>
                     <CardTitle className="text-white flex items-center gap-2">
-                      <Users className="h-5 w-5 text-purple-400" />
+                      <Users className="h-5 w-5 text-zinc-400" />
                       Más Seguidos
                     </CardTitle>
                   </CardHeader>
@@ -1484,17 +1823,17 @@ const GamificationManager = () => {
                             </Badge>
                             <span className="text-white text-sm">{user.display_name || user.username}</span>
                           </div>
-                          <span className="text-purple-300 text-sm">{user.count} seguidores</span>
+                          <span className="text-zinc-400 text-sm">{user.count} seguidores</span>
                         </div>
                       ))}
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-black/40 border-purple-500/30">
+                <Card className="glass-panel border-zinc-800/50">
                   <CardHeader>
                     <CardTitle className="text-white flex items-center gap-2">
-                      <Trophy className="h-5 w-5 text-purple-400" />
+                      <Trophy className="h-5 w-5 text-zinc-400" />
                       Más Activos
                     </CardTitle>
                   </CardHeader>
@@ -1508,7 +1847,7 @@ const GamificationManager = () => {
                             </Badge>
                             <span className="text-white text-sm">{user.display_name || user.username}</span>
                           </div>
-                          <span className="text-purple-300 text-sm">{user.count} likes</span>
+                          <span className="text-zinc-400 text-sm">{user.count} likes</span>
                         </div>
                       ))}
                     </div>
@@ -1519,10 +1858,10 @@ const GamificationManager = () => {
 
             <TabsContent value="eventos" className="space-y-6">
               <div className="grid gap-6 md:grid-cols-2">
-                <Card className="bg-black/40 border-purple-500/30">
+                <Card className="glass-panel border-zinc-800/50">
                   <CardHeader>
                     <CardTitle className="text-white flex items-center gap-2">
-                      <Users className="h-5 w-5 text-purple-400" />
+                      <Users className="h-5 w-5 text-zinc-400" />
                       Eventos Más Populares
                     </CardTitle>
                   </CardHeader>
@@ -1544,14 +1883,14 @@ const GamificationManager = () => {
                                     alt={event.organizer.display_name || event.organizer.username}
                                     className="w-4 h-4 rounded-full object-cover"
                                   />
-                                  <p className="text-sm text-purple-300">
+                                  <p className="text-sm text-zinc-400">
                                     Por: {event.organizer.display_name || event.organizer.username}
                                   </p>
                                 </div>
                               )}
                             </div>
                           </div>
-                          <Badge variant="secondary" className="bg-purple-900/50 text-purple-200">
+                          <Badge variant="secondary" className="bg-zinc-800/50 text-zinc-300">
                             {event.count} suscriptores
                           </Badge>
                         </div>
@@ -1560,10 +1899,10 @@ const GamificationManager = () => {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-black/40 border-purple-500/30">
+                <Card className="glass-panel border-zinc-800/50">
                   <CardHeader>
                     <CardTitle className="text-white flex items-center gap-2">
-                      <Trophy className="h-5 w-5 text-purple-400" />
+                      <Trophy className="h-5 w-5 text-zinc-400" />
                       Eventos Más Queridos
                     </CardTitle>
                   </CardHeader>
@@ -1585,14 +1924,14 @@ const GamificationManager = () => {
                                     alt={event.organizer.display_name || event.organizer.username}
                                     className="w-4 h-4 rounded-full object-cover"
                                   />
-                                  <p className="text-sm text-purple-300">
+                                  <p className="text-sm text-zinc-400">
                                     Por: {event.organizer.display_name || event.organizer.username}
                                   </p>
                                 </div>
                               )}
                             </div>
                           </div>
-                          <Badge variant="secondary" className="bg-purple-900/50 text-purple-200">
+                          <Badge variant="secondary" className="bg-zinc-800/50 text-zinc-300">
                             {event.count} likes
                           </Badge>
                         </div>
@@ -1610,160 +1949,158 @@ const GamificationManager = () => {
         {/* Activity Tab */}
         <TabsContent value="activity" className="space-y-6">
           <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-2xl font-bold text-white">Actividad de Gamificación</h2>
-            <p className="text-purple-300">Historial de canjes y actividades recientes</p>
+            <div>
+              <h2 className="text-2xl font-bold text-white">Actividad de Gamificación</h2>
+              <p className="text-zinc-400">Historial de canjes y actividades recientes de todos los usuarios</p>
             </div>
-            {currentUserId && (
-              <Button 
-                onClick={() => loadActivity(currentUserId)} 
-                disabled={isLoadingActivity}
-                className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
-              >
-                {isLoadingActivity ? 'Cargando...' : 'Actualizar'}
-              </Button>
-            )}
+            <Button 
+              onClick={() => loadGlobalActivity()} 
+              disabled={isLoadingGlobalActivity}
+              className="bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800"
+            >
+              {isLoadingGlobalActivity ? 'Cargando...' : 'Actualizar'}
+            </Button>
           </div>
 
-          {isLoadingActivity ? (
+          {isLoadingGlobalActivity ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+              <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
             </div>
           ) : (
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="bg-black/40 border-purple-500/30">
-              <CardHeader>
-                <CardTitle className="text-white">Historial de Canjes</CardTitle>
-                <CardDescription className="text-purple-300">
-                  Recompensas canjeadas recientemente
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {redemptionHistory.length > 0 ? (
-                    redemptionHistory.map((redemption) => (
-                    <div key={redemption.id} className="flex items-center space-x-3 p-3 rounded-lg bg-purple-900/10">
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage src={redemption.user.avatar} alt={redemption.user.name} />
-                        <AvatarFallback className="bg-purple-600 text-white text-sm">
-                          {redemption.user.name.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-purple-200">
-                          {redemption.user.name}
-                        </p>
-                        <p className="text-xs text-purple-400">
-                          Canjeó: {redemption.reward_name}
-                        </p>
-                        <p className="text-xs text-purple-500">
-                          {new Date(redemption.redeemed_at).toLocaleDateString('es-DO')}
-                        </p>
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card className="glass-panel border-zinc-800/50">
+                <CardHeader>
+                  <CardTitle className="text-white">Historial de Canjes</CardTitle>
+                  <CardDescription className="text-zinc-400">
+                    Recompensas canjeadas recientemente por todos los usuarios
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {globalRedemptions.length > 0 ? (
+                      globalRedemptions.map((redemption) => (
+                        <div key={redemption.id} className="flex items-center space-x-3 p-3 rounded-lg bg-zinc-900/40 border border-zinc-850">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={redemption.user.avatar} alt={redemption.user.name} />
+                            <AvatarFallback className="bg-violet-600 text-white text-sm">
+                              {redemption.user.name ? redemption.user.name.charAt(0) : 'U'}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-zinc-300">
+                              {redemption.user.name}
+                            </p>
+                            <p className="text-xs text-zinc-400">
+                              Canjeó: {redemption.reward_name}
+                            </p>
+                            <p className="text-xs text-purple-500">
+                              {new Date(redemption.redeemed_at).toLocaleDateString('es-DO')}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <Badge className={
+                              redemption.status === 'used' 
+                                ? 'bg-green-900/50 text-green-200 border-green-600/30'
+                                : 'bg-yellow-900/50 text-yellow-200 border-yellow-600/30'
+                            }>
+                              {redemption.status === 'used' ? 'Usado' : 'Activo'}
+                            </Badge>
+                            <p className="text-xs text-zinc-400 mt-1">
+                              -{redemption.points_redeemed} pts
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-zinc-400">
+                        No hay historial de canjes
                       </div>
-                      <div className="text-right">
-                        <Badge className={
-                          redemption.status === 'used' 
-                            ? 'bg-green-900/50 text-green-200 border-green-600/30'
-                            : 'bg-yellow-900/50 text-yellow-200 border-yellow-600/30'
-                        }>
-                          {redemption.status === 'used' ? 'Usado' : 'Activo'}
-                        </Badge>
-                        <p className="text-xs text-purple-400 mt-1">
-                          -{redemption.points_redeemed} pts
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                  ) : (
-                    <div className="text-center py-8 text-purple-300">
-                      No hay historial de canjes
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
 
-            <Card className="bg-black/40 border-purple-500/30">
-              <CardHeader>
-                <CardTitle className="text-white">Acciones de Puntos</CardTitle>
-                <CardDescription className="text-purple-300">
-                  Actividad reciente de usuarios
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {gamificationActions.length > 0 ? (
-                    gamificationActions.map((action) => (
-                    <div key={action.id} className="flex items-center space-x-3 p-3 rounded-lg bg-purple-900/10">
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage src={action.user.avatar} alt={action.user.name} />
-                        <AvatarFallback className="bg-purple-600 text-white text-sm">
-                          {action.user.name.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-purple-200">
-                          {action.user.name}
-                        </p>
-                        <p className="text-xs text-purple-400">
-                          {action.action_name?.replace('_', ' ') || 'Acción'}
-                          {action.event_title && `: ${action.event_title}`}
-                        </p>
-                        {action.created_at && (
-                        <p className="text-xs text-purple-500">
-                            {new Date(action.created_at).toLocaleDateString('es-DO')}
-                        </p>
-                        )}
+              <Card className="glass-panel border-zinc-800/50">
+                <CardHeader>
+                  <CardTitle className="text-white">Acciones de Puntos</CardTitle>
+                  <CardDescription className="text-zinc-400">
+                    Actividad reciente de todos los usuarios
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {globalActions.length > 0 ? (
+                      globalActions.map((action) => (
+                        <div key={action.id} className="flex items-center space-x-3 p-3 rounded-lg bg-zinc-900/40 border border-zinc-850">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={action.user.avatar} alt={action.user.name} />
+                            <AvatarFallback className="bg-violet-600 text-white text-sm">
+                              {action.user.name ? action.user.name.charAt(0) : 'U'}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-zinc-300">
+                              {action.user.name}
+                            </p>
+                            <p className="text-xs text-zinc-400">
+                              {action.action_name?.replace('_', ' ') || 'Acción'}
+                              {action.event_title && `: ${action.event_title}`}
+                            </p>
+                            {action.created_at && (
+                              <p className="text-xs text-purple-500">
+                                {new Date(action.created_at).toLocaleDateString('es-DO')}
+                              </p>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <Badge className="bg-zinc-800/50 text-zinc-300">
+                              +{action.points_awarded} pts
+                            </Badge>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-zinc-400">
+                        No hay acciones registradas
                       </div>
-                      <div className="text-right">
-                        <Badge className="bg-purple-900/50 text-purple-200">
-                          +{action.points_awarded} pts
-                        </Badge>
-                      </div>
-                    </div>
-                  ))
-                  ) : (
-                    <div className="text-center py-8 text-purple-300">
-                      No hay acciones registradas
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
         </TabsContent>
       </Tabs>
 
       {/* Create Rule Modal */}
       <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-        <DialogContent className="bg-black/90 border-purple-500/30 text-white max-w-md">
+        <DialogContent className="glass-panel border-zinc-800/50 text-white max-w-md">
           <DialogHeader>
             <DialogTitle className="text-white">Crear Nueva Regla</DialogTitle>
-            <DialogDescription className="text-purple-300">
+            <DialogDescription className="text-zinc-400">
               Completa la información para crear una nueva regla de puntos
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="rule_name" className="text-purple-200">Nombre de la Regla *</Label>
+              <Label htmlFor="rule_name" className="text-zinc-300">Nombre de la Regla *</Label>
               <Input
                 id="rule_name"
                 value={formData.rule_name}
                 onChange={(e) => setFormData({ ...formData, rule_name: e.target.value })}
                 placeholder="Ej: Completar perfil"
-                className="bg-black/50 border-purple-500/30 text-white"
+                className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="point_type" className="text-purple-200">Tipo de Punto *</Label>
+              <Label htmlFor="point_type" className="text-zinc-300">Tipo de Punto *</Label>
               <select
                 id="point_type"
                 value={formData.point_type}
                 onChange={(e) => setFormData({ ...formData, point_type: e.target.value })}
-                className="w-full px-3 py-2 bg-black/50 border border-purple-500/30 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full px-3 py-2 bg-black/50 border border-zinc-800/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                 required
               >
                 <option value="Profile">Perfil</option>
@@ -1773,7 +2110,7 @@ const GamificationManager = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="points" className="text-purple-200">Puntos (1-5) *</Label>
+              <Label htmlFor="points" className="text-zinc-300">Puntos (1-5) *</Label>
               <Input
                 id="points"
                 type="number"
@@ -1781,19 +2118,19 @@ const GamificationManager = () => {
                 max="5"
                 value={formData.points}
                 onChange={(e) => setFormData({ ...formData, points: parseInt(e.target.value) || 1 })}
-                className="bg-black/50 border-purple-500/30 text-white"
+                className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description" className="text-purple-200">Descripción</Label>
+              <Label htmlFor="description" className="text-zinc-300">Descripción</Label>
               <Textarea
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Descripción de la regla..."
-                className="bg-black/50 border-purple-500/30 text-white"
+                className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 rows={3}
               />
             </div>
@@ -1804,7 +2141,7 @@ const GamificationManager = () => {
                 checked={formData.is_active}
                 onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
               />
-              <Label htmlFor="is_active" className="text-purple-200">Regla activa</Label>
+              <Label htmlFor="is_active" className="text-zinc-300">Regla activa</Label>
             </div>
 
             <div className="flex justify-end space-x-2">
@@ -1812,13 +2149,13 @@ const GamificationManager = () => {
                 type="button"
                 variant="ghost"
                 onClick={() => setIsCreateModalOpen(false)}
-                className="text-purple-300 hover:bg-purple-900/50"
+                className="text-zinc-400 hover:bg-zinc-800/50"
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
-                className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+                className="bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800"
               >
                 Crear Regla
               </Button>
@@ -1829,33 +2166,33 @@ const GamificationManager = () => {
 
       {/* Edit Rule Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="bg-black/90 border-purple-500/30 text-white max-w-md">
+        <DialogContent className="glass-panel border-zinc-800/50 text-white max-w-md">
           <DialogHeader>
             <DialogTitle className="text-white">Editar Regla</DialogTitle>
-            <DialogDescription className="text-purple-300">
+            <DialogDescription className="text-zinc-400">
               Modifica la información de la regla
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleUpdate} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="edit_rule_name" className="text-purple-200">Nombre de la Regla *</Label>
+              <Label htmlFor="edit_rule_name" className="text-zinc-300">Nombre de la Regla *</Label>
               <Input
                 id="edit_rule_name"
                 value={formData.rule_name}
                 onChange={(e) => setFormData({ ...formData, rule_name: e.target.value })}
                 placeholder="Ej: Completar perfil"
-                className="bg-black/50 border-purple-500/30 text-white"
+                className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit_point_type" className="text-purple-200">Tipo de Punto *</Label>
+              <Label htmlFor="edit_point_type" className="text-zinc-300">Tipo de Punto *</Label>
               <select
                 id="edit_point_type"
                 value={formData.point_type}
                 onChange={(e) => setFormData({ ...formData, point_type: e.target.value })}
-                className="w-full px-3 py-2 bg-black/50 border border-purple-500/30 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full px-3 py-2 bg-black/50 border border-zinc-800/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                 required
               >
                 <option value="Profile">Perfil</option>
@@ -1865,7 +2202,7 @@ const GamificationManager = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit_points" className="text-purple-200">Puntos (1-5) *</Label>
+              <Label htmlFor="edit_points" className="text-zinc-300">Puntos (1-5) *</Label>
               <Input
                 id="edit_points"
                 type="number"
@@ -1873,19 +2210,19 @@ const GamificationManager = () => {
                 max="5"
                 value={formData.points}
                 onChange={(e) => setFormData({ ...formData, points: parseInt(e.target.value) || 1 })}
-                className="bg-black/50 border-purple-500/30 text-white"
+                className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit_description" className="text-purple-200">Descripción</Label>
+              <Label htmlFor="edit_description" className="text-zinc-300">Descripción</Label>
               <Textarea
                 id="edit_description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Descripción de la regla..."
-                className="bg-black/50 border-purple-500/30 text-white"
+                className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 rows={3}
               />
             </div>
@@ -1896,7 +2233,7 @@ const GamificationManager = () => {
                 checked={formData.is_active}
                 onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
               />
-              <Label htmlFor="edit_is_active" className="text-purple-200">Regla activa</Label>
+              <Label htmlFor="edit_is_active" className="text-zinc-300">Regla activa</Label>
             </div>
 
             <div className="flex justify-end space-x-2">
@@ -1904,13 +2241,13 @@ const GamificationManager = () => {
                 type="button"
                 variant="ghost"
                 onClick={() => setIsEditModalOpen(false)}
-                className="text-purple-300 hover:bg-purple-900/50"
+                className="text-zinc-400 hover:bg-zinc-800/50"
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
-                className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+                className="bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800"
               >
                 Actualizar Regla
               </Button>
@@ -1946,58 +2283,58 @@ const GamificationManager = () => {
           });
         }
       }}>
-        <DialogContent className="bg-black/90 border-purple-500/30 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="glass-panel border-zinc-800/50 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-white">Crear Nueva Oferta</DialogTitle>
-            <DialogDescription className="text-purple-300">
+            <DialogDescription className="text-zinc-400">
               Completa la información para crear una nueva oferta
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateOffer} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="offer_title" className="text-purple-200">Título *</Label>
+                <Label htmlFor="offer_title" className="text-zinc-300">Título *</Label>
                 <Input
                   id="offer_title"
                   value={offerFormData.title}
                   onChange={(e) => setOfferFormData({ ...offerFormData, title: e.target.value })}
                   placeholder="Ej: Descuento de Verano"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="offer_category" className="text-purple-200">Categoría</Label>
+                <Label htmlFor="offer_category" className="text-zinc-300">Categoría</Label>
                 <Input
                   id="offer_category"
                   value={offerFormData.category}
                   onChange={(e) => setOfferFormData({ ...offerFormData, category: e.target.value })}
                   placeholder="Ej: Música, Deportes"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="offer_description" className="text-purple-200">Descripción</Label>
+              <Label htmlFor="offer_description" className="text-zinc-300">Descripción</Label>
               <Textarea
                 id="offer_description"
                 value={offerFormData.description}
                 onChange={(e) => setOfferFormData({ ...offerFormData, description: e.target.value })}
                 placeholder="Descripción de la oferta..."
-                className="bg-black/50 border-purple-500/30 text-white"
+                className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 rows={3}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="offer_type" className="text-purple-200">Tipo de Oferta *</Label>
+                <Label htmlFor="offer_type" className="text-zinc-300">Tipo de Oferta *</Label>
                 <select
                   id="offer_type"
                   value={offerFormData.offer_type}
                   onChange={(e) => setOfferFormData({ ...offerFormData, offer_type: e.target.value })}
-                  className="w-full px-3 py-2 bg-black/50 border border-purple-500/30 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-3 py-2 bg-black/50 border border-zinc-800/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                   required
                 >
                   <option value="percentage">Porcentaje</option>
@@ -2007,12 +2344,12 @@ const GamificationManager = () => {
                 </select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="target_audience" className="text-purple-200">Audiencia Objetivo</Label>
+                <Label htmlFor="target_audience" className="text-zinc-300">Audiencia Objetivo</Label>
                 <select
                   id="target_audience"
                   value={offerFormData.target_audience}
                   onChange={(e) => setOfferFormData({ ...offerFormData, target_audience: e.target.value })}
-                  className="w-full px-3 py-2 bg-black/50 border border-purple-500/30 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-3 py-2 bg-black/50 border border-zinc-800/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
                   <option value="all">Todos</option>
                   <option value="new_users">Usuarios Nuevos</option>
@@ -2024,7 +2361,7 @@ const GamificationManager = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="discount_percentage" className="text-purple-200">Descuento %</Label>
+                <Label htmlFor="discount_percentage" className="text-zinc-300">Descuento %</Label>
                 <Input
                   id="discount_percentage"
                   type="number"
@@ -2033,11 +2370,11 @@ const GamificationManager = () => {
                   value={offerFormData.discount_percentage || ''}
                   onChange={(e) => setOfferFormData({ ...offerFormData, discount_percentage: e.target.value ? parseFloat(e.target.value) : null })}
                   placeholder="Ej: 10"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="discount_amount" className="text-purple-200">Descuento Fijo ($)</Label>
+                <Label htmlFor="discount_amount" className="text-zinc-300">Descuento Fijo ($)</Label>
                 <Input
                   id="discount_amount"
                   type="number"
@@ -2045,14 +2382,14 @@ const GamificationManager = () => {
                   value={offerFormData.discount_amount || ''}
                   onChange={(e) => setOfferFormData({ ...offerFormData, discount_amount: e.target.value ? parseFloat(e.target.value) : null })}
                   placeholder="Ej: 50"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="original_price" className="text-purple-200">Precio Original</Label>
+                <Label htmlFor="original_price" className="text-zinc-300">Precio Original</Label>
                 <Input
                   id="original_price"
                   type="number"
@@ -2060,11 +2397,11 @@ const GamificationManager = () => {
                   value={offerFormData.original_price || ''}
                   onChange={(e) => setOfferFormData({ ...offerFormData, original_price: e.target.value ? parseFloat(e.target.value) : null })}
                   placeholder="Ej: 100"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="final_price" className="text-purple-200">Precio Final</Label>
+                <Label htmlFor="final_price" className="text-zinc-300">Precio Final</Label>
                 <Input
                   id="final_price"
                   type="number"
@@ -2072,13 +2409,13 @@ const GamificationManager = () => {
                   value={offerFormData.final_price || ''}
                   onChange={(e) => setOfferFormData({ ...offerFormData, final_price: e.target.value ? parseFloat(e.target.value) : null })}
                   placeholder="Ej: 90"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="points_required" className="text-purple-200">Puntos Requeridos *</Label>
+              <Label htmlFor="points_required" className="text-zinc-300">Puntos Requeridos *</Label>
               <Input
                 id="points_required"
                 type="number"
@@ -2086,31 +2423,31 @@ const GamificationManager = () => {
                 value={offerFormData.points_required || ''}
                 onChange={(e) => setOfferFormData({ ...offerFormData, points_required: e.target.value ? parseInt(e.target.value, 10) : null })}
                 placeholder="Ej: 100"
-                className="bg-black/50 border-purple-500/30 text-white"
+                className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 required
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="start_date" className="text-purple-200">Fecha de Inicio *</Label>
+                <Label htmlFor="start_date" className="text-zinc-300">Fecha de Inicio *</Label>
                 <Input
                   id="start_date"
                   type="datetime-local"
                   value={offerFormData.start_date}
                   onChange={(e) => setOfferFormData({ ...offerFormData, start_date: e.target.value })}
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="end_date" className="text-purple-200">Fecha de Fin *</Label>
+                <Label htmlFor="end_date" className="text-zinc-300">Fecha de Fin *</Label>
                 <Input
                   id="end_date"
                   type="datetime-local"
                   value={offerFormData.end_date}
                   onChange={(e) => setOfferFormData({ ...offerFormData, end_date: e.target.value })}
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                   required
                 />
               </div>
@@ -2118,17 +2455,17 @@ const GamificationManager = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="promo_code" className="text-purple-200">Código Promocional</Label>
+                <Label htmlFor="promo_code" className="text-zinc-300">Código Promocional</Label>
                 <Input
                   id="promo_code"
                   value={offerFormData.promo_code}
                   onChange={(e) => setOfferFormData({ ...offerFormData, promo_code: e.target.value.toUpperCase() })}
                   placeholder="Ej: SUMMER50"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="max_uses" className="text-purple-200">Usos Máximos</Label>
+                <Label htmlFor="max_uses" className="text-zinc-300">Usos Máximos</Label>
                 <Input
                   id="max_uses"
                   type="number"
@@ -2136,16 +2473,16 @@ const GamificationManager = () => {
                   value={offerFormData.max_uses || ''}
                   onChange={(e) => setOfferFormData({ ...offerFormData, max_uses: e.target.value ? parseInt(e.target.value) : null })}
                   placeholder="Dejar vacío para ilimitado"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="offer_image" className="text-purple-200">Imagen desde Archivo</Label>
+              <Label htmlFor="offer_image" className="text-zinc-300">Imagen desde Archivo</Label>
               <div className="flex items-center space-x-4">
                 {offerImagePreview && (
-                  <div className="w-20 h-20 rounded-lg overflow-hidden border border-purple-500/30 flex-shrink-0">
+                  <div className="w-20 h-20 rounded-lg overflow-hidden border border-zinc-800/50 flex-shrink-0">
                     <img src={offerImagePreview} alt="Preview" className="w-full h-full object-cover" />
                   </div>
                 )}
@@ -2155,33 +2492,33 @@ const GamificationManager = () => {
                     type="file"
                     accept="image/*"
                     onChange={handleOfferImageChange}
-                    className="bg-black/50 border-purple-500/30 text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700"
+                    className="bg-zinc-900/50 border-zinc-800/60 text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-600 file:text-white hover:file:bg-purple-700"
                   />
-                  <p className="text-xs text-purple-400 mt-1">Selecciona una imagen desde tu dispositivo</p>
+                  <p className="text-xs text-zinc-400 mt-1">Selecciona una imagen desde tu dispositivo</p>
                 </div>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="image_url" className="text-purple-200">O desde URL</Label>
+              <Label htmlFor="image_url" className="text-zinc-300">O desde URL</Label>
               <Input
                 id="image_url"
                 value={offerFormData.image_url}
                 onChange={handleOfferUrlChange}
                 placeholder="https://example.com/image.jpg"
-                className="bg-black/50 border-purple-500/30 text-white"
+                className="bg-zinc-900/50 border-zinc-800/60 text-white"
               />
-              <p className="text-xs text-purple-400">Pega la URL de una imagen (http:// o https://)</p>
+              <p className="text-xs text-zinc-400">Pega la URL de una imagen (http:// o https://)</p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="terms_conditions" className="text-purple-200">Términos y Condiciones</Label>
+              <Label htmlFor="terms_conditions" className="text-zinc-300">Términos y Condiciones</Label>
               <Textarea
                 id="terms_conditions"
                 value={offerFormData.terms_conditions}
                 onChange={(e) => setOfferFormData({ ...offerFormData, terms_conditions: e.target.value })}
                 placeholder="Términos y condiciones de la oferta..."
-                className="bg-black/50 border-purple-500/30 text-white"
+                className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 rows={3}
               />
             </div>
@@ -2192,7 +2529,7 @@ const GamificationManager = () => {
                 checked={offerFormData.is_active}
                 onCheckedChange={(checked) => setOfferFormData({ ...offerFormData, is_active: checked })}
               />
-              <Label htmlFor="offer_is_active" className="text-purple-200">Oferta activa</Label>
+              <Label htmlFor="offer_is_active" className="text-zinc-300">Oferta activa</Label>
             </div>
 
             <div className="flex justify-end space-x-2">
@@ -2200,13 +2537,13 @@ const GamificationManager = () => {
                 type="button"
                 variant="ghost"
                 onClick={() => setIsCreateOfferModalOpen(false)}
-                className="text-purple-300 hover:bg-purple-900/50"
+                className="text-zinc-400 hover:bg-zinc-800/50"
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
-                className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+                className="bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800"
               >
                 Crear Oferta
               </Button>
@@ -2224,58 +2561,58 @@ const GamificationManager = () => {
           setSelectedOffer(null);
         }
       }}>
-        <DialogContent className="bg-black/90 border-purple-500/30 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="glass-panel border-zinc-800/50 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-white">Editar Oferta</DialogTitle>
-            <DialogDescription className="text-purple-300">
+            <DialogDescription className="text-zinc-400">
               Modifica la información de la oferta
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleUpdateOffer} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="edit_offer_title" className="text-purple-200">Título *</Label>
+                <Label htmlFor="edit_offer_title" className="text-zinc-300">Título *</Label>
                 <Input
                   id="edit_offer_title"
                   value={offerFormData.title}
                   onChange={(e) => setOfferFormData({ ...offerFormData, title: e.target.value })}
                   placeholder="Ej: Descuento de Verano"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit_offer_category" className="text-purple-200">Categoría</Label>
+                <Label htmlFor="edit_offer_category" className="text-zinc-300">Categoría</Label>
                 <Input
                   id="edit_offer_category"
                   value={offerFormData.category}
                   onChange={(e) => setOfferFormData({ ...offerFormData, category: e.target.value })}
                   placeholder="Ej: Música, Deportes"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit_offer_description" className="text-purple-200">Descripción</Label>
+              <Label htmlFor="edit_offer_description" className="text-zinc-300">Descripción</Label>
               <Textarea
                 id="edit_offer_description"
                 value={offerFormData.description}
                 onChange={(e) => setOfferFormData({ ...offerFormData, description: e.target.value })}
                 placeholder="Descripción de la oferta..."
-                className="bg-black/50 border-purple-500/30 text-white"
+                className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 rows={3}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="edit_offer_type" className="text-purple-200">Tipo de Oferta *</Label>
+                <Label htmlFor="edit_offer_type" className="text-zinc-300">Tipo de Oferta *</Label>
                 <select
                   id="edit_offer_type"
                   value={offerFormData.offer_type}
                   onChange={(e) => setOfferFormData({ ...offerFormData, offer_type: e.target.value })}
-                  className="w-full px-3 py-2 bg-black/50 border border-purple-500/30 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-3 py-2 bg-black/50 border border-zinc-800/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                   required
                 >
                   <option value="percentage">Porcentaje</option>
@@ -2285,12 +2622,12 @@ const GamificationManager = () => {
                 </select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit_target_audience" className="text-purple-200">Audiencia Objetivo</Label>
+                <Label htmlFor="edit_target_audience" className="text-zinc-300">Audiencia Objetivo</Label>
                 <select
                   id="edit_target_audience"
                   value={offerFormData.target_audience}
                   onChange={(e) => setOfferFormData({ ...offerFormData, target_audience: e.target.value })}
-                  className="w-full px-3 py-2 bg-black/50 border border-purple-500/30 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-3 py-2 bg-black/50 border border-zinc-800/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
                   <option value="all">Todos</option>
                   <option value="new_users">Usuarios Nuevos</option>
@@ -2302,7 +2639,7 @@ const GamificationManager = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="edit_discount_percentage" className="text-purple-200">Descuento %</Label>
+                <Label htmlFor="edit_discount_percentage" className="text-zinc-300">Descuento %</Label>
                 <Input
                   id="edit_discount_percentage"
                   type="number"
@@ -2311,11 +2648,11 @@ const GamificationManager = () => {
                   value={offerFormData.discount_percentage || ''}
                   onChange={(e) => setOfferFormData({ ...offerFormData, discount_percentage: e.target.value ? parseFloat(e.target.value) : null })}
                   placeholder="Ej: 10"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit_discount_amount" className="text-purple-200">Descuento Fijo ($)</Label>
+                <Label htmlFor="edit_discount_amount" className="text-zinc-300">Descuento Fijo ($)</Label>
                 <Input
                   id="edit_discount_amount"
                   type="number"
@@ -2323,14 +2660,14 @@ const GamificationManager = () => {
                   value={offerFormData.discount_amount || ''}
                   onChange={(e) => setOfferFormData({ ...offerFormData, discount_amount: e.target.value ? parseFloat(e.target.value) : null })}
                   placeholder="Ej: 50"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="edit_original_price" className="text-purple-200">Precio Original</Label>
+                <Label htmlFor="edit_original_price" className="text-zinc-300">Precio Original</Label>
                 <Input
                   id="edit_original_price"
                   type="number"
@@ -2338,11 +2675,11 @@ const GamificationManager = () => {
                   value={offerFormData.original_price || ''}
                   onChange={(e) => setOfferFormData({ ...offerFormData, original_price: e.target.value ? parseFloat(e.target.value) : null })}
                   placeholder="Ej: 100"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit_final_price" className="text-purple-200">Precio Final</Label>
+                <Label htmlFor="edit_final_price" className="text-zinc-300">Precio Final</Label>
                 <Input
                   id="edit_final_price"
                   type="number"
@@ -2350,31 +2687,31 @@ const GamificationManager = () => {
                   value={offerFormData.final_price || ''}
                   onChange={(e) => setOfferFormData({ ...offerFormData, final_price: e.target.value ? parseFloat(e.target.value) : null })}
                   placeholder="Ej: 90"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="edit_start_date" className="text-purple-200">Fecha de Inicio *</Label>
+                <Label htmlFor="edit_start_date" className="text-zinc-300">Fecha de Inicio *</Label>
                 <Input
                   id="edit_start_date"
                   type="datetime-local"
                   value={offerFormData.start_date}
                   onChange={(e) => setOfferFormData({ ...offerFormData, start_date: e.target.value })}
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit_end_date" className="text-purple-200">Fecha de Fin *</Label>
+                <Label htmlFor="edit_end_date" className="text-zinc-300">Fecha de Fin *</Label>
                 <Input
                   id="edit_end_date"
                   type="datetime-local"
                   value={offerFormData.end_date}
                   onChange={(e) => setOfferFormData({ ...offerFormData, end_date: e.target.value })}
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                   required
                 />
               </div>
@@ -2382,17 +2719,17 @@ const GamificationManager = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="edit_promo_code" className="text-purple-200">Código Promocional</Label>
+                <Label htmlFor="edit_promo_code" className="text-zinc-300">Código Promocional</Label>
                 <Input
                   id="edit_promo_code"
                   value={offerFormData.promo_code}
                   onChange={(e) => setOfferFormData({ ...offerFormData, promo_code: e.target.value.toUpperCase() })}
                   placeholder="Ej: SUMMER50"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit_max_uses" className="text-purple-200">Usos Máximos</Label>
+                <Label htmlFor="edit_max_uses" className="text-zinc-300">Usos Máximos</Label>
                 <Input
                   id="edit_max_uses"
                   type="number"
@@ -2400,16 +2737,16 @@ const GamificationManager = () => {
                   value={offerFormData.max_uses || ''}
                   onChange={(e) => setOfferFormData({ ...offerFormData, max_uses: e.target.value ? parseInt(e.target.value) : null })}
                   placeholder="Dejar vacío para ilimitado"
-                  className="bg-black/50 border-purple-500/30 text-white"
+                  className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit_offer_image" className="text-purple-200">Imagen desde Archivo</Label>
+              <Label htmlFor="edit_offer_image" className="text-zinc-300">Imagen desde Archivo</Label>
               <div className="flex items-center space-x-4">
                 {editOfferImagePreview && (
-                  <div className="w-20 h-20 rounded-lg overflow-hidden border border-purple-500/30 flex-shrink-0">
+                  <div className="w-20 h-20 rounded-lg overflow-hidden border border-zinc-800/50 flex-shrink-0">
                     <img src={editOfferImagePreview} alt="Preview" className="w-full h-full object-cover" />
                   </div>
                 )}
@@ -2419,33 +2756,33 @@ const GamificationManager = () => {
                     type="file"
                     accept="image/*"
                     onChange={handleEditOfferImageChange}
-                    className="bg-black/50 border-purple-500/30 text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700"
+                    className="bg-zinc-900/50 border-zinc-800/60 text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-600 file:text-white hover:file:bg-purple-700"
                   />
-                  <p className="text-xs text-purple-400 mt-1">Selecciona una imagen desde tu dispositivo</p>
+                  <p className="text-xs text-zinc-400 mt-1">Selecciona una imagen desde tu dispositivo</p>
                 </div>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit_image_url" className="text-purple-200">O desde URL</Label>
+              <Label htmlFor="edit_image_url" className="text-zinc-300">O desde URL</Label>
               <Input
                 id="edit_image_url"
                 value={offerFormData.image_url}
                 onChange={handleEditOfferUrlChange}
                 placeholder="https://example.com/image.jpg"
-                className="bg-black/50 border-purple-500/30 text-white"
+                className="bg-zinc-900/50 border-zinc-800/60 text-white"
               />
-              <p className="text-xs text-purple-400">Pega la URL de una imagen (http:// o https://)</p>
+              <p className="text-xs text-zinc-400">Pega la URL de una imagen (http:// o https://)</p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit_terms_conditions" className="text-purple-200">Términos y Condiciones</Label>
+              <Label htmlFor="edit_terms_conditions" className="text-zinc-300">Términos y Condiciones</Label>
               <Textarea
                 id="edit_terms_conditions"
                 value={offerFormData.terms_conditions}
                 onChange={(e) => setOfferFormData({ ...offerFormData, terms_conditions: e.target.value })}
                 placeholder="Términos y condiciones de la oferta..."
-                className="bg-black/50 border-purple-500/30 text-white"
+                className="bg-zinc-900/50 border-zinc-800/60 text-white"
                 rows={3}
               />
             </div>
@@ -2456,7 +2793,7 @@ const GamificationManager = () => {
                 checked={offerFormData.is_active}
                 onCheckedChange={(checked) => setOfferFormData({ ...offerFormData, is_active: checked })}
               />
-              <Label htmlFor="edit_offer_is_active" className="text-purple-200">Oferta activa</Label>
+              <Label htmlFor="edit_offer_is_active" className="text-zinc-300">Oferta activa</Label>
             </div>
 
             <div className="flex justify-end space-x-2">
@@ -2464,15 +2801,86 @@ const GamificationManager = () => {
                 type="button"
                 variant="ghost"
                 onClick={() => setIsEditOfferModalOpen(false)}
-                className="text-purple-300 hover:bg-purple-900/50"
+                className="text-zinc-400 hover:bg-zinc-800/50"
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
-                className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+                className="bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800"
               >
                 Actualizar Oferta
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+
+
+      {/* Manual Redeem Modal */}
+      <Dialog open={isManualRedeemModalOpen} onOpenChange={setIsManualRedeemModalOpen}>
+        <DialogContent className="bg-zinc-950/95 border border-zinc-800/60 text-white max-w-md backdrop-blur-lg animate-fade-in">
+          <DialogHeader>
+            <DialogTitle className="text-white">Canjear Recompensa Manual</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Canjea puntos del usuario {selectedUser?.name} por una oferta. Puntos disponibles: {userTotalPoints}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleManualRedeemSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="redeem_reward_name" className="text-zinc-300">Seleccionar Oferta *</Label>
+              <select
+                id="redeem_reward_name"
+                value={manualRedeemData.offer_id}
+                onChange={(e) => {
+                  const offer = rewards.find(r => r.id?.toString() === e.target.value || r.offer_id?.toString() === e.target.value);
+                  const parsedPoints = offer ? parseFloat(offer.points_required !== undefined && offer.points_required !== null ? offer.points_required : (offer.discount_percentage || offer.discount_amount || 0)) : 0;
+                  setManualRedeemData({ 
+                    reward_name: offer ? (offer.title || offer.name) : '', 
+                    points_required: isNaN(parsedPoints) ? 0 : parsedPoints,
+                    offer_id: offer ? (offer.id || offer.offer_id || '').toString() : ''
+                  });
+                }}
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800/60 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                required
+              >
+                <option value="" className="bg-zinc-950 text-white">Selecciona una recompensa...</option>
+                {rewards.filter(r => r.is_active).map((offer) => (
+                  <option key={offer.id || offer.offer_id} value={offer.id || offer.offer_id} className="bg-zinc-950 text-white">
+                    {offer.title || offer.name} ({offer.points_required || offer.discount_percentage || 0} pts)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {manualRedeemData.reward_name && (
+              <div className="p-3 bg-zinc-900/60 border border-zinc-800/60 rounded-lg space-y-1">
+                <p className="text-xs text-zinc-400">Detalles del Canje</p>
+                <p className="text-sm font-semibold text-white">Puntos requeridos: {manualRedeemData.points_required} pts</p>
+                {parseFloat(userTotalPoints) < parseFloat(manualRedeemData.points_required) ? (
+                  <p className="text-xs text-rose-400 font-medium">⚠️ Puntos insuficientes (Faltan {parseFloat(manualRedeemData.points_required) - parseFloat(userTotalPoints)} pts)</p>
+                ) : (
+                  <p className="text-xs text-emerald-400 font-medium">✓ Puntos disponibles suficientes</p>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsManualRedeemModalOpen(false)}
+                className="text-zinc-400 hover:text-white"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={!manualRedeemData.reward_name || parseFloat(userTotalPoints) < parseFloat(manualRedeemData.points_required)}
+                className="bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800 text-white border border-transparent"
+              >
+                Canjear Puntos
               </Button>
             </div>
           </form>

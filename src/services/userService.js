@@ -5,6 +5,7 @@ import {
   API_URL_PASSWORD_CHANGE,
   API_URL_USERS_UPLOAD_IMAGE,
   API_URL_NOTIFICATIONS_PREFERENCES,
+  API_URL_USERS_LIST,
   DASHBOARD_CONFIG
 } from './config';
 import { getAuthToken, getCurrentUserId } from './authService';
@@ -389,6 +390,25 @@ export const updateDashboardPreferences = async (preferences) => {
     return data;
   } catch (error) {
     console.error('Error en updateDashboardPreferences:', error);
+    throw error;
+  }
+};
+
+// Obtiene la lista de todos los usuarios
+export const getAllUsers = async () => {
+  try {
+    const response = await fetchWithAuth(API_URL_USERS_LIST);
+    let uList = [];
+    if (Array.isArray(response)) {
+      uList = response;
+    } else if (response && Array.isArray(response.data)) {
+      uList = response.data;
+    } else if (response && Array.isArray(response.users)) {
+      uList = response.users;
+    }
+    return uList;
+  } catch (error) {
+    console.error('Error en getAllUsers:', error);
     throw error;
   }
 };
