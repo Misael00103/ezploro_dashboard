@@ -57,6 +57,21 @@ import { getUserProfile, getAllUsers } from '../services/userService';
 import { debugAuthState, validateAuth, clearAuthData } from '../services/authUtils';
 import { startScheduler } from '../services/notificationService';
 import { getRankingEventosMasSuscritos, getRankingEventosMasLikes } from '../services/rankingService';
+import { BASE_URL_IMAGE } from '../services/config';
+
+// Helper to safely format profile picture URLs
+const getProfilePictureUrl = (profilePicture) => {
+  if (!profilePicture || profilePicture === 'null' || profilePicture === 'undefined' || profilePicture === '') {
+    return undefined;
+  }
+  if (profilePicture.startsWith('http://') || profilePicture.startsWith('https://')) {
+    return profilePicture;
+  }
+  const baseUrl = BASE_URL_IMAGE || "https://api-v5-backend-ezploro.apps.ezploro.com";
+  const cleanPath = profilePicture.startsWith('/') ? profilePicture : `/${profilePicture}`;
+  return `${baseUrl}${cleanPath}`;
+};
+
 const Dashboard = ({ onLogout }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
@@ -651,7 +666,7 @@ const Dashboard = ({ onLogout }) => {
             <div className="flex items-center space-x-3 bg-zinc-900/40 border border-zinc-800/50 rounded-full px-3 py-1.5">
               <Avatar className="h-7 w-7 border border-violet-500/30">
                 <AvatarImage 
-                  src={user?.profile_picture} 
+                  src={getProfilePictureUrl(user?.profile_picture)} 
                   onError={(e) => {
                     e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=7c3aed&color=fff&size=32`;
                   }}
@@ -774,7 +789,7 @@ const Dashboard = ({ onLogout }) => {
                         {usersList.map((u) => (
                           <div key={u.id || u.user_id} className="flex items-center space-x-3 p-3 bg-zinc-900/50 rounded-lg border border-zinc-800/40 hover:bg-zinc-900 transition-colors">
                             <Avatar className="h-9 w-9">
-                              <AvatarImage src={u.profile_picture || u.avatar_url} />
+                              <AvatarImage src={getProfilePictureUrl(u.profile_picture || u.avatar_url)} />
                               <AvatarFallback className="bg-zinc-800 text-zinc-300 text-xs font-semibold">
                                 {((u.name || u.email || 'U').substring(0, 2)).toUpperCase()}
                               </AvatarFallback>
