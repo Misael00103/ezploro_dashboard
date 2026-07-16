@@ -10,6 +10,9 @@ RUN npm run build
 # Etapa 2: servir el frontend con Nginx
 FROM nginx:stable-alpine
 
+# Copiar la configuración personalizada de Nginx
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 # Copiar los archivos construidos desde la primera etapa
 COPY --from=builder /app/build /usr/share/nginx/html
 
