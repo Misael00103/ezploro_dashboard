@@ -276,7 +276,7 @@ export const uploadProfilePicture = async (file) => {
 
     // El backend puede devolver la URL en diferentes formatos
     // Intentar extraer la URL de diferentes propiedades posibles
-    const imageUrl = data.url || data.data?.url || data.image_url || data.data?.image_url || data;
+    const imageUrl = data.url || data.data?.url || data.image_url || data.data?.image_url || data.profile_picture || data.banner_image || data;
     
     if (!imageUrl) {
       console.error('🔴 uploadProfilePicture - No se encontró URL en la respuesta:', data);
@@ -285,8 +285,14 @@ export const uploadProfilePicture = async (file) => {
     
     console.log('✅ uploadProfilePicture - URL extraída:', imageUrl);
     
-    // Si es un objeto completo, devolverlo para que createOffer lo procese
+    // Si es un objeto completo, intentar extraer la propiedad correcta o devolver el valor apropiado
     if (typeof imageUrl === 'object' && imageUrl !== null) {
+      if (imageUrl.profile_picture) {
+        return imageUrl.profile_picture;
+      }
+      if (imageUrl.banner_image) {
+        return imageUrl.banner_image;
+      }
       console.warn('⚠️ uploadProfilePicture - La respuesta es un objeto, devolviendo completo:', imageUrl);
       return imageUrl;
     }

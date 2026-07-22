@@ -25,6 +25,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
+  Info,
 } from 'lucide-react';
 import { AnimatedCounter } from './AnimatedCounter';
 import { toast, Toaster } from 'react-hot-toast';
@@ -107,7 +108,8 @@ const Dashboard = ({ onLogout }) => {
     { id: 'social', label: 'Redes Sociales', icon: Globe },
     ...(user?.role === 'admin' || user?.role === 'moderator' ? [
       { id: 'gamification', label: 'Gamificación', icon: Trophy },
-      { id: 'user-management', label: 'Usuarios', icon: User }
+      { id: 'user-management', label: 'Usuarios', icon: User },
+      { id: 'ezploro-info', label: 'Info Ezploro', icon: Info }
     ] : [])
   ];
 
@@ -1000,7 +1002,11 @@ const Dashboard = ({ onLogout }) => {
           </TabsContent>
 
           <TabsContent value="user-management">
-            <UserManagementManager />
+            <UserManagementManager initialTab="profile" />
+          </TabsContent>
+
+          <TabsContent value="ezploro-info">
+            <UserManagementManager initialTab="ezploro-info" />
           </TabsContent>
           </Tabs>
         </div>

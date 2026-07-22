@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import logoEzploro from '../img/logoezploro.png';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -26,11 +27,20 @@ import {
   getEzploroInfo,
   updateEzploroInfo,
   patchEzploroInfo,
+  uploadEzploroLogo,
+  uploadEzploroIcon,
 } from '../services/ezploroInfoService';
 
-const UserManagementManager = () => {
+const UserManagementManager = ({ initialTab = 'profile' }) => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('profile');
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -91,17 +101,21 @@ const UserManagementManager = () => {
     dark_mode: false,
   });
 
+  const [isSavingLogo, setIsSavingLogo] = useState(false);
+  const [isSavingIcon, setIsSavingIcon] = useState(false);
   const [ezploroInfo, setEzploroInfo] = useState({
-    correo: '',
-    telefono: '',
-    direccion: '',
-    instagram: '',
-    x: '',
-    facebook: '',
-    biografia: '',
-    google_play_link: '',
-    app_store_link: '',
-    tiktok: '',
+    correo: 'ezploro@gmail.com',
+    telefono: '+1 809 513 5855',
+    direccion: 'C. Presa de Valdesia 63, Santo Domingo',
+    instagram: 'https://instagram.com/ezploro',
+    x: 'https://x.com/ezploro',
+    facebook: 'https://facebook.com/ezploro',
+    biografia: 'Ezploro es una plataforma dedicada a conectar usuarios con experiencias únicas y contenido relevante.',
+    google_play_link: 'https://play.google.com/store/apps/details?id=com.misael25.ezploro&pcampaignid=web_share',
+    app_store_link: 'https://apps.apple.com/us/app/ezploro/id6755828808',
+    tiktok: 'https://www.tiktok.com/@ezploro',
+    logo: '',
+    icono: '',
   });
 
   // Load user profile on component mount
@@ -240,16 +254,18 @@ const UserManagementManager = () => {
           console.log('✅ UserManagement - Información de Ezploro cargada:', ezploroData);
           
           setEzploroInfo({
-            correo: ezploroData.correo || '',
-            telefono: ezploroData.telefono || '',
-            direccion: ezploroData.direccion || '',
-            instagram: ezploroData.instagram || '',
-            x: ezploroData.x || '',
-            facebook: ezploroData.facebook || '',
-            biografia: ezploroData.biografia || '',
-            google_play_link: ezploroData.google_play_link || '',
-            app_store_link: ezploroData.app_store_link || '',
-            tiktok: ezploroData.tiktok || '',
+            correo: ezploroData.correo || 'ezploro@gmail.com',
+            telefono: ezploroData.telefono || '+1 809 513 5855',
+            direccion: ezploroData.direccion || 'C. Presa de Valdesia 63, Santo Domingo',
+            instagram: ezploroData.instagram || 'https://instagram.com/ezploro',
+            x: ezploroData.x || 'https://x.com/ezploro',
+            facebook: ezploroData.facebook || 'https://facebook.com/ezploro',
+            biografia: ezploroData.biografia || 'Ezploro es una plataforma dedicada a conectar usuarios con experiencias únicas y contenido relevante.',
+            google_play_link: ezploroData.google_play_link || 'https://play.google.com/store/apps/details?id=com.misael25.ezploro&pcampaignid=web_share',
+            app_store_link: ezploroData.app_store_link || 'https://apps.apple.com/us/app/ezploro/id6755828808',
+            tiktok: ezploroData.tiktok || 'https://www.tiktok.com/@ezploro',
+            logo: ezploroData.logo || '',
+            icono: ezploroData.icono || '',
           });
         } catch (ezploroError) {
           console.error('⚠️ UserManagement - Error al cargar información de Ezploro:', ezploroError);
@@ -271,11 +287,45 @@ const UserManagementManager = () => {
     loadUserProfile();
   }, [navigate]);
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setProfileImage(file);
-      setImagePreview(URL.createObjectURL(file));
+    if (!file) return;
+
+    // Show temporary local preview while uploading
+    setImagePreview(URL.createObjectURL(file));
+
+    try {
+      setIsSaving(true);
+      toast('Subiendo foto de perfil al servidor...');
+      const imageUrl = await uploadProfilePicture(file);
+
+      if (imageUrl) {
+        // Synchronize all states with the backend-returned image URL
+        setUser((prev) => {
+          const updated = { ...prev, profile_picture: imageUrl };
+          localStorage.setItem('user', JSON.stringify(updated));
+          return updated;
+        });
+        setProfileForm((prev) => ({ ...prev, profile_picture: imageUrl }));
+        setImagePreview(imageUrl);
+        setProfileImage(null);
+
+        // Notify dashboard components of the updated user image
+        const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+        window.dispatchEvent(
+          new StorageEvent('storage', {
+            key: 'user',
+            newValue: JSON.stringify({ ...currentUser, profile_picture: imageUrl }),
+          })
+        );
+
+        toast.success('Foto de perfil guardada exitosamente en el servidor');
+      }
+    } catch (err) {
+      console.error('Error al subir foto de perfil:', err);
+      toast.error(err.message || 'Error al subir la foto de perfil al servidor');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -463,6 +513,69 @@ const UserManagementManager = () => {
     }
   };
 
+  const subirLogo = async () => {
+    const fileInput = document.getElementById("logoInput");
+    const file = fileInput?.files?.[0];
+
+    if (!file) {
+      toast.error("Selecciona una imagen");
+      return;
+    }
+
+    setIsSavingLogo(true);
+    try {
+      const data = await uploadEzploroLogo(file, ezploroInfo);
+      const logoUrl = data?.data?.logo || data?.logo;
+      if (logoUrl) {
+        setEzploroInfo(prev => ({ ...prev, logo: logoUrl }));
+        toast.success("Logo subido exitosamente");
+      } else {
+        throw new Error("No se pudo obtener la URL del logo de la respuesta");
+      }
+    } catch (error) {
+      console.error("Error al subir el logo:", error);
+      toast.error(error.message || "Error al subir el logo");
+    } finally {
+      setIsSavingLogo(false);
+    }
+  };
+
+  const subirIcono = async () => {
+    const fileInput = document.getElementById("iconInput");
+    const file = fileInput?.files?.[0];
+
+    if (!file) {
+      toast.error("Selecciona una imagen para el icono");
+      return;
+    }
+
+    setIsSavingIcon(true);
+    try {
+      const data = await uploadEzploroIcon(file, ezploroInfo);
+      const iconUrl = data?.data?.icono || data?.icono;
+      if (iconUrl) {
+        setEzploroInfo(prev => ({ ...prev, icono: iconUrl }));
+        toast.success("Icono subido exitosamente");
+      } else {
+        throw new Error("No se pudo obtener la URL del icono de la respuesta");
+      }
+    } catch (error) {
+      console.error("Error al subir el icono:", error);
+      toast.error(error.message || "Error al subir el icono");
+    } finally {
+      setIsSavingIcon(false);
+    }
+  };
+
+  useEffect(() => {
+    window.subirLogo = subirLogo;
+    window.subirIcono = subirIcono;
+    return () => {
+      delete window.subirLogo;
+      delete window.subirIcono;
+    };
+  }, [ezploroInfo]);
+
   // Handler for saving Ezploro info
   const handleSaveEzploroInfo = async (e) => {
     e.preventDefault();
@@ -557,7 +670,7 @@ const UserManagementManager = () => {
                 <div className="relative mb-4">
                   <Avatar className="h-24 w-24">
                     <AvatarImage 
-                      src={user?.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.display_name || user?.name || 'User')}&background=7c3aed&color=fff&size=96`} 
+                      src={imagePreview || user?.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.display_name || user?.name || 'User')}&background=7c3aed&color=fff&size=96`} 
                       alt={user?.name || 'User'}
                       onError={(e) => {
                         e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.display_name || user?.name || 'User')}&background=7c3aed&color=fff&size=96`;
@@ -1237,54 +1350,98 @@ const UserManagementManager = () => {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleSaveEzploroInfo} className="space-y-6">
-                    <div className="space-y-4">
-                      <h3 className="font-medium">Información de Contacto</h3>
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label htmlFor="ezploro-correo">Correo Electrónico</Label>
-                          <Input
-                            id="ezploro-correo"
-                            type="email"
-                            value={ezploroInfo.correo}
-                            onChange={(e) => setEzploroInfo({ ...ezploroInfo, correo: e.target.value })}
-                            placeholder="contacto@ezploro.com"
-                            disabled={isSaving}
+                    <div className="grid gap-6 md:grid-cols-3">
+                      {/* Logo Section */}
+                      <div className="md:col-span-1 flex flex-col items-center justify-center p-6 border rounded-lg bg-card/50 backdrop-blur-sm space-y-4">
+                        <Label className="font-semibold text-muted-foreground text-sm uppercase tracking-wider">Logo de Ezploro</Label>
+                        <div className="relative group w-32 h-32 flex items-center justify-center rounded-lg overflow-hidden border bg-background/50 shadow-inner p-2">
+                          <img
+                            id="ezploro-logo"
+                            src={ezploroInfo.logo || logoEzploro}
+                            alt="Logo Ezploro"
+                            className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105"
                           />
                         </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="ezploro-telefono">Teléfono</Label>
+                        <div className="flex flex-col w-full items-center space-y-2">
                           <Input
-                            id="ezploro-telefono"
-                            type="tel"
-                            value={ezploroInfo.telefono}
-                            onChange={(e) => setEzploroInfo({ ...ezploroInfo, telefono: e.target.value })}
-                            placeholder="+1 (555) 123-4567"
-                            disabled={isSaving}
+                            type="file"
+                            id="logoInput"
+                            accept="image/*"
+                            className="text-xs cursor-pointer file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                            disabled={isSavingLogo}
                           />
+                          <Button
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); subirLogo(); }}
+                            disabled={isSavingLogo}
+                            variant="outline"
+                            className="w-full text-xs flex items-center justify-center gap-2 hover:bg-primary hover:text-white transition-all duration-300"
+                          >
+                            {isSavingLogo ? (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Subiendo...
+                              </>
+                            ) : (
+                              <>
+                                <Camera className="h-3 w-3" />
+                                Subir logo
+                              </>
+                            )}
+                          </Button>
                         </div>
+                      </div>
 
-                        <div className="space-y-2 md:col-span-2">
-                          <Label htmlFor="ezploro-direccion">Dirección</Label>
-                          <Input
-                            id="ezploro-direccion"
-                            value={ezploroInfo.direccion}
-                            onChange={(e) => setEzploroInfo({ ...ezploroInfo, direccion: e.target.value })}
-                            placeholder="Calle Principal 123, Ciudad"
-                            disabled={isSaving}
-                          />
-                        </div>
+                      {/* Contact Fields Section */}
+                      <div className="md:col-span-2 space-y-4">
+                        <h3 className="font-medium text-lg">Información de Contacto</h3>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="ezploro-correo">Correo Electrónico</Label>
+                            <Input
+                              id="ezploro-correo"
+                              type="email"
+                              value={ezploroInfo.correo}
+                              onChange={(e) => setEzploroInfo({ ...ezploroInfo, correo: e.target.value })}
+                              placeholder="contacto@ezploro.com"
+                              disabled={isSaving}
+                            />
+                          </div>
 
-                        <div className="space-y-2 md:col-span-2">
-                          <Label htmlFor="ezploro-biografia">Biografía</Label>
-                          <Textarea
-                            id="ezploro-biografia"
-                            value={ezploroInfo.biografia}
-                            onChange={(e) => setEzploroInfo({ ...ezploroInfo, biografia: e.target.value })}
-                            placeholder="Descripción de Ezploro..."
-                            rows={4}
-                            disabled={isSaving}
-                          />
+                          <div className="space-y-2">
+                            <Label htmlFor="ezploro-telefono">Teléfono</Label>
+                            <Input
+                              id="ezploro-telefono"
+                              type="tel"
+                              value={ezploroInfo.telefono}
+                              onChange={(e) => setEzploroInfo({ ...ezploroInfo, telefono: e.target.value })}
+                              placeholder="+1 (555) 123-4567"
+                              disabled={isSaving}
+                            />
+                          </div>
+
+                          <div className="space-y-2 sm:col-span-2">
+                            <Label htmlFor="ezploro-direccion">Dirección</Label>
+                            <Input
+                              id="ezploro-direccion"
+                              value={ezploroInfo.direccion}
+                              onChange={(e) => setEzploroInfo({ ...ezploroInfo, direccion: e.target.value })}
+                              placeholder="Calle Principal 123, Ciudad"
+                              disabled={isSaving}
+                            />
+                          </div>
+
+                          <div className="space-y-2 sm:col-span-2">
+                            <Label htmlFor="ezploro-biografia">Biografía</Label>
+                            <Textarea
+                              id="ezploro-biografia"
+                              value={ezploroInfo.biografia}
+                              onChange={(e) => setEzploroInfo({ ...ezploroInfo, biografia: e.target.value })}
+                              placeholder="Descripción de Ezploro..."
+                              rows={4}
+                              disabled={isSaving}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
