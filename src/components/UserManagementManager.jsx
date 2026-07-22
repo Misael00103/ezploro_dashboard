@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoEzploro from '../img/logoezploro.png';
+import { formatImageUrl } from '../services/config';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -670,7 +671,7 @@ const UserManagementManager = ({ initialTab = 'profile' }) => {
                 <div className="relative mb-4">
                   <Avatar className="h-24 w-24">
                     <AvatarImage 
-                      src={imagePreview || user?.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.display_name || user?.name || 'User')}&background=7c3aed&color=fff&size=96`} 
+                      src={formatImageUrl(imagePreview || user?.profile_picture) || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.display_name || user?.name || 'User')}&background=7c3aed&color=fff&size=96`} 
                       alt={user?.name || 'User'}
                       onError={(e) => {
                         e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.display_name || user?.name || 'User')}&background=7c3aed&color=fff&size=96`;
@@ -1357,7 +1358,7 @@ const UserManagementManager = ({ initialTab = 'profile' }) => {
                         <div className="relative group w-32 h-32 flex items-center justify-center rounded-lg overflow-hidden border bg-background/50 shadow-inner p-2">
                           <img
                             id="ezploro-logo"
-                            src={ezploroInfo.logo || logoEzploro}
+                            src={formatImageUrl(ezploroInfo.logo) || logoEzploro}
                             alt="Logo Ezploro"
                             className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105"
                           />

@@ -60,6 +60,45 @@ const normalizeUrl = (url) => {
 // Base URL for serving images
 export const BASE_URL_IMAGE = normalizeUrl(BASE_URL.replace('/api', ''))
 
+/**
+ * Normaliza y formatea cualquier URL de imagen del sistema (eventos, posts, testimonios, perfil, logo)
+ * @param {string} url - URL o ruta de imagen
+ * @returns {string} URL formateada correctamente contra la API activa
+ */
+export const formatImageUrl = (url) => {
+  if (!url || typeof url !== 'string') return url;
+
+  // Previsualizaciones locales
+  if (url.startsWith('blob:') || url.startsWith('data:')) {
+    return url;
+  }
+
+  // Rutas que contienen /uploads/
+  if (url.includes('/uploads/')) {
+    const uploadPath = url.substring(url.indexOf('/uploads/'));
+    return `${BASE_URL_IMAGE}${uploadPath}`;
+  }
+
+  if (url.startsWith('uploads/')) {
+    return `${BASE_URL_IMAGE}/${url}`;
+  }
+
+  // URLs absolutas externas o guardadas con dominios antiguos
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    if (url.includes('localhost:3000') || url.includes('apps.ezploro.com')) {
+      const path = url.replace(/^https?:\/\/[^\/]+/, '');
+      return `${BASE_URL_IMAGE}${path}`;
+    }
+    return url;
+  }
+
+  if (url.startsWith('/')) {
+    return `${BASE_URL_IMAGE}${url}`;
+  }
+
+  return `${BASE_URL_IMAGE}/${url}`;
+};
+
 // Base URL for socket connection (without /api) - Fixed URL construction
 export const SOCKET_URL = normalizeUrl(BASE_URL.replace('/api', ''))
 

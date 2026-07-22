@@ -16,7 +16,8 @@ import {
   API_URL_POST_REPLIES_DELETE,
   DASHBOARD_CONFIG,
   BASE_URL,
-  BASE_URL_IMAGE
+  BASE_URL_IMAGE,
+  formatImageUrl
 } from './config';
 import { getAuthToken, getCurrentUserId } from './authService';
 
@@ -28,31 +29,16 @@ import { getAuthToken, getCurrentUserId } from './authService';
 const processCommentData = (comment) => {
   if (!comment) return comment;
 
-  // Función helper para procesar URLs de imágenes
-  const processImageUrl = (imageUrl) => {
-    if (!imageUrl) return imageUrl;
-    // Si ya es una URL completa, devolverla tal como está
-    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-      return imageUrl;
-    }
-    // Si comienza con /, es una ruta absoluta del servidor
-    if (imageUrl.startsWith('/')) {
-      return `${BASE_URL_IMAGE}${imageUrl}`;
-    }
-    // Si es una ruta relativa, agregar la base URL con /
-    return `${BASE_URL_IMAGE}/${imageUrl}`;
-  };
-
   return {
     ...comment,
     // Procesar imágenes del comentario (puede ser un array o string)
-    image: comment.image ? (Array.isArray(comment.image) ? comment.image.map(processImageUrl) : processImageUrl(comment.image)) : comment.image,
+    image: comment.image ? (Array.isArray(comment.image) ? comment.image.map(formatImageUrl) : formatImageUrl(comment.image)) : comment.image,
     
     // Procesar datos del usuario que hizo el comentario
     user: comment.user ? {
       ...comment.user,
-      profile_picture: comment.user.profile_picture ? processImageUrl(comment.user.profile_picture) : comment.user.profile_picture,
-      avatar: comment.user.avatar ? processImageUrl(comment.user.avatar) : comment.user.avatar,
+      profile_picture: formatImageUrl(comment.user.profile_picture || comment.user.avatar),
+      avatar: formatImageUrl(comment.user.avatar || comment.user.profile_picture),
     } : comment.user,
   };
 };
@@ -65,49 +51,21 @@ const processCommentData = (comment) => {
 const processPostData = (post) => {
   if (!post) return post;
 
-  // Función helper para procesar URLs de imágenes
-  const processImageUrl = (imageUrl) => {
-    if (!imageUrl) return imageUrl;
-    // Si ya es una URL completa, devolverla tal como está
-    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-      return imageUrl;
-    }
-    // Si comienza con /, es una ruta absoluta del servidor
-    if (imageUrl.startsWith('/')) {
-      return `${BASE_URL_IMAGE}${imageUrl}`;
-    }
-    // Si es una ruta relativa, agregar la base URL con /
-    return `${BASE_URL_IMAGE}/${imageUrl}`;
-  };
-
-  // Solo procesar si realmente necesitamos hacerlo
-  const needsProcessing = (post.image && !post.image.startsWith('http')) || 
-                         (post.user?.profile_picture && !post.user.profile_picture.startsWith('http')) ||
-                         (post.user?.avatar && !post.user.avatar.startsWith('http'));
-
-  if (!needsProcessing) {
-    return post; // Devolver sin cambios si no necesita procesamiento
-  }
-
   return {
     ...post,
-    // Procesar imagen del post solo si existe y no es URL completa
-    image: post.image ? processImageUrl(post.image) : post.image,
-    
-    // Procesar datos del usuario que creó el post
+    image: formatImageUrl(post.image),
     user: post.user ? {
       ...post.user,
-      profile_picture: post.user.profile_picture ? processImageUrl(post.user.profile_picture) : post.user.profile_picture,
-      avatar: post.user.avatar ? processImageUrl(post.user.avatar) : post.user.avatar,
+      profile_picture: formatImageUrl(post.user.profile_picture || post.user.avatar),
+      avatar: formatImageUrl(post.user.avatar || post.user.profile_picture),
     } : post.user,
-    
-    // Procesar comentarios si existen
     comments: post.comments ? post.comments.map(comment => ({
       ...comment,
+      image: comment.image ? (Array.isArray(comment.image) ? comment.image.map(formatImageUrl) : formatImageUrl(comment.image)) : comment.image,
       user: comment.user ? {
         ...comment.user,
-        profile_picture: comment.user.profile_picture ? processImageUrl(comment.user.profile_picture) : comment.user.profile_picture,
-        avatar: comment.user.avatar ? processImageUrl(comment.user.avatar) : comment.user.avatar,
+        profile_picture: formatImageUrl(comment.user.profile_picture || comment.user.avatar),
+        avatar: formatImageUrl(comment.user.avatar || comment.user.profile_picture),
       } : comment.user,
     })) : post.comments,
   };

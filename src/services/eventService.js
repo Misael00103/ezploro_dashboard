@@ -7,7 +7,8 @@ import {
   API_URL_EVENTS_THIS_WEEK,
   API_URL_EVENTS_RECOMMENDATIONS,
   API_URL_EVENTS_BY_LIKES,
-  BASE_URL_IMAGE
+  BASE_URL_IMAGE,
+  formatImageUrl
 } from './config';
 import { fetchWithAuth } from './userService';
 import { getAuthToken } from './authService';
@@ -20,63 +21,29 @@ import { getAuthToken } from './authService';
 const processEventData = (event) => {
   if (!event) return event;
 
-  // Función helper para procesar URLs de imágenes
-  const processImageUrl = (imageUrl) => {
-    if (!imageUrl) return imageUrl;
-    // Si ya es una URL completa, devolverla tal como está
-    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-      return imageUrl;
-    }
-    // Si comienza con /, es una ruta absoluta del servidor
-    if (imageUrl.startsWith('/')) {
-      return `${BASE_URL_IMAGE}${imageUrl}`;
-    }
-    // Si es una ruta relativa, agregar la base URL con /
-    return `${BASE_URL_IMAGE}/${imageUrl}`;
-  };
-
-  // Solo procesar si realmente necesitamos hacerlo
-  const needsProcessing = (event.image && !event.image.startsWith('http')) || 
-                         (event.user?.profile_picture && !event.user.profile_picture.startsWith('http')) ||
-                         (event.user?.avatar && !event.user.avatar.startsWith('http')) ||
-                         (event.organizer?.profile_picture && !event.organizer.profile_picture.startsWith('http')) ||
-                         (event.organizer?.avatar && !event.organizer.avatar.startsWith('http'));
-
-  if (!needsProcessing) {
-    return event; // Devolver sin cambios si no necesita procesamiento
-  }
-
   return {
     ...event,
-    // Procesar imagen del evento solo si existe y no es URL completa
-    image: event.image ? processImageUrl(event.image) : event.image,
-    
-    // Procesar datos del creador del evento
+    image: formatImageUrl(event.image || event.cover_image),
+    cover_image: formatImageUrl(event.cover_image || event.image),
     user: event.user ? {
       ...event.user,
-      profile_picture: event.user.profile_picture ? processImageUrl(event.user.profile_picture) : event.user.profile_picture,
-      avatar: event.user.avatar ? processImageUrl(event.user.avatar) : event.user.avatar,
+      profile_picture: formatImageUrl(event.user.profile_picture || event.user.avatar),
+      avatar: formatImageUrl(event.user.avatar || event.user.profile_picture),
     } : event.user,
-    
-    // Procesar datos del organizador si existe
     organizer: event.organizer ? {
       ...event.organizer,
-      profile_picture: event.organizer.profile_picture ? processImageUrl(event.organizer.profile_picture) : event.organizer.profile_picture,
-      avatar: event.organizer.avatar ? processImageUrl(event.organizer.avatar) : event.organizer.avatar,
+      profile_picture: formatImageUrl(event.organizer.profile_picture || event.organizer.avatar),
+      avatar: formatImageUrl(event.organizer.avatar || event.organizer.profile_picture),
     } : event.organizer,
-    
-    // Procesar asistentes si existen
     attendees: event.attendees ? event.attendees.map(attendee => ({
       ...attendee,
-      profile_picture: attendee.profile_picture ? processImageUrl(attendee.profile_picture) : attendee.profile_picture,
-      avatar: attendee.avatar ? processImageUrl(attendee.avatar) : attendee.avatar,
+      profile_picture: formatImageUrl(attendee.profile_picture || attendee.avatar),
+      avatar: formatImageUrl(attendee.avatar || attendee.profile_picture),
     })) : event.attendees,
-    
-    // Procesar suscriptores si existen
     subscribers: event.subscribers ? event.subscribers.map(subscriber => ({
       ...subscriber,
-      profile_picture: subscriber.profile_picture ? processImageUrl(subscriber.profile_picture) : subscriber.profile_picture,
-      avatar: subscriber.avatar ? processImageUrl(subscriber.avatar) : subscriber.avatar,
+      profile_picture: formatImageUrl(subscriber.profile_picture || subscriber.avatar),
+      avatar: formatImageUrl(subscriber.avatar || subscriber.profile_picture),
     })) : event.subscribers,
   };
 };
