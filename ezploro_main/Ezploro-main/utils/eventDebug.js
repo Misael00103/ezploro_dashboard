@@ -49,7 +49,7 @@ export const testEventCreationAPI = async () => {
       console.error('🔍 EVENT DEBUG: No token found');
       return false;
     }
-    
+
     const testUrl = 'https://api-v5-backend-ezploro.apps.ezploro.com/api/events';
     
     // Test with a simple GET request first
