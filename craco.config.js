@@ -11,8 +11,12 @@ module.exports = {
     alias: {
       '@': path.resolve(__dirname, 'src'),
     },
-    configure: (webpackConfig) => {
-      
+    configure: (webpackConfig, { env }) => {
+      // Disable sourcemaps in production to protect source code from DevTools inspection
+      if (env === 'production' || process.env.NODE_ENV === 'production' || process.env.GENERATE_SOURCEMAP === 'false') {
+        webpackConfig.devtool = false;
+      }
+
       // Disable hot reload completely if environment variable is set
       if (config.disableHotReload) {
         // Remove hot reload related plugins

@@ -526,7 +526,7 @@ const UserManagementManager = ({ initialTab = 'profile' }) => {
     setIsSavingLogo(true);
     try {
       const data = await uploadEzploroLogo(file, ezploroInfo);
-      const logoUrl = data?.data?.logo || data?.logo;
+      const logoUrl = data?.data?.logo || data?.logo || data?.url || data?.data?.url || data?.path || data?.data?.path || (typeof data === 'string' ? data : null);
       if (logoUrl) {
         setEzploroInfo(prev => ({ ...prev, logo: logoUrl }));
         toast.success("Logo subido exitosamente");
@@ -553,7 +553,7 @@ const UserManagementManager = ({ initialTab = 'profile' }) => {
     setIsSavingIcon(true);
     try {
       const data = await uploadEzploroIcon(file, ezploroInfo);
-      const iconUrl = data?.data?.icono || data?.icono;
+      const iconUrl = data?.data?.icono || data?.icono || data?.url || data?.data?.url || data?.path || data?.data?.path || (typeof data === 'string' ? data : null);
       if (iconUrl) {
         setEzploroInfo(prev => ({ ...prev, icono: iconUrl }));
         toast.success("Icono subido exitosamente");

@@ -57,46 +57,73 @@ const normalizeUrl = (url) => {
   return url.replace(/([^:]\/)\/+/g, "$1")
 }
 
-// Base URL for serving images
-export const BASE_URL_IMAGE = normalizeUrl(BASE_URL.replace('/api', ''))
+// Base URL for serving images (remueve trailing /api)
+export const BASE_URL_IMAGE = normalizeUrl(BASE_URL.replace(/\/api\/?$/, '')) || "https://api-v5-backend-ezploro.apps.ezploro.com"
 
 /**
  * Normaliza y formatea cualquier URL de imagen del sistema (eventos, posts, testimonios, perfil, logo)
  * @param {string} url - URL o ruta de imagen
- * @returns {string} URL formateada correctamente contra la API activa
+ * @returns {string} URL formateada correctamente contra la API activa o vacía si el valor es inválido
  */
 export const formatImageUrl = (url) => {
-  if (!url || typeof url !== 'string') return url;
+  if (!url || typeof url !== 'string') return '';
+
+  const trimmed = url.trim();
+  const lower = trimmed.toLowerCase();
+  
+  // Sanitización de cadenas dummy por defecto en Swagger/Backend o valores nulos en string
+  if (
+    !trimmed || 
+    lower === 'string' || 
+    lower === 'null' || 
+    lower === 'undefined' || 
+    lower === 'none'
+  ) {
+    return '';
+  }
 
   // Previsualizaciones locales
-  if (url.startsWith('blob:') || url.startsWith('data:')) {
-    return url;
+  if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+
+  // Corregir protocolo HTTP -> HTTPS para evitar bloqueos por Contenido Mixto en producción
+  let cleanUrl = trimmed;
+  if (cleanUrl.startsWith('http://api-v5-backend-ezploro.apps.ezploro.com')) {
+    cleanUrl = cleanUrl.replace('http://', 'https://');
+  } else if (
+    typeof window !== 'undefined' && 
+    window.location && 
+    window.location.protocol === 'https:' && 
+    cleanUrl.startsWith('http://')
+  ) {
+    cleanUrl = cleanUrl.replace('http://', 'https://');
   }
 
   // Rutas que contienen /uploads/
-  if (url.includes('/uploads/')) {
-    const uploadPath = url.substring(url.indexOf('/uploads/'));
+  if (cleanUrl.includes('/uploads/')) {
+    const uploadPath = cleanUrl.substring(cleanUrl.indexOf('/uploads/'));
     return `${BASE_URL_IMAGE}${uploadPath}`;
   }
 
-  if (url.startsWith('uploads/')) {
-    return `${BASE_URL_IMAGE}/${url}`;
+  if (cleanUrl.startsWith('uploads/')) {
+    return `${BASE_URL_IMAGE}/${cleanUrl}`;
   }
 
-  // URLs absolutas externas o guardadas con dominios antiguos
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    if (url.includes('localhost:3000') || url.includes('apps.ezploro.com')) {
-      const path = url.replace(/^https?:\/\/[^\/]+/, '');
+  // URLs absolutas externas o guardadas con dominios del backend
+  if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
+    if (cleanUrl.includes('localhost:3000') || cleanUrl.includes('apps.ezploro.com')) {
+      const path = cleanUrl.replace(/^https?:\/\/[^\/]+/, '');
       return `${BASE_URL_IMAGE}${path}`;
     }
-    return url;
+    return cleanUrl;
   }
 
-  if (url.startsWith('/')) {
-    return `${BASE_URL_IMAGE}${url}`;
+  if (cleanUrl.startsWith('/')) {
+    return `${BASE_URL_IMAGE}${cleanUrl}`;
   }
 
-  return `${BASE_URL_IMAGE}/${url}`;
+  return `${BASE_URL_IMAGE}/${cleanUrl}`;
 };
 
 // Base URL for socket connection (without /api) - Fixed URL construction
@@ -372,7 +399,7 @@ export const API_URL_OFFERS_REDEEM = `${API_URL_OFFERS}/redeem/:offerId` // POST
 export const API_URL_OFFERS_MY_REDEMPTIONS = `${BASE_URL}/offer/rewards/my-redemptions` // GET /api/offer/rewards/my-redemptions
 
 // Configuración adicional
-export const GOOGLE_MAPS_API_KEY = "AIzaSyAr4IpigO3ZN4_Qcv8ME59x5-KjjDVY0Wc"
+export const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_PLACES_API_KEY || "";
 
 // Google Places API endpoints (proxy through backend)
 export const API_URL_PLACES_AUTOCOMPLETE = `${BASE_URL}/places/autocomplete`

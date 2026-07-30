@@ -58,19 +58,11 @@ import { getUserProfile, getAllUsers } from '../services/userService';
 import { debugAuthState, validateAuth, clearAuthData } from '../services/authUtils';
 import { startScheduler } from '../services/notificationService';
 import { getRankingEventosMasSuscritos, getRankingEventosMasLikes } from '../services/rankingService';
-import { BASE_URL_IMAGE } from '../services/config';
+import { BASE_URL_IMAGE, formatImageUrl } from '../services/config';
 
 // Helper to safely format profile picture URLs
 const getProfilePictureUrl = (profilePicture) => {
-  if (!profilePicture || profilePicture === 'null' || profilePicture === 'undefined' || profilePicture === '') {
-    return undefined;
-  }
-  if (profilePicture.startsWith('http://') || profilePicture.startsWith('https://')) {
-    return profilePicture;
-  }
-  const baseUrl = BASE_URL_IMAGE || "https://api-v5-backend-ezploro.apps.ezploro.com";
-  const cleanPath = profilePicture.startsWith('/') ? profilePicture : `/${profilePicture}`;
-  return `${baseUrl}${cleanPath}`;
+  return formatImageUrl(profilePicture) || undefined;
 };
 
 const Dashboard = ({ onLogout }) => {

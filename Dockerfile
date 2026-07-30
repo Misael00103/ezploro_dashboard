@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --legacy-peer-deps
 COPY . .
+ENV GENERATE_SOURCEMAP=false
 RUN npm run build
 
 # Etapa 2: servir el frontend con Nginx
