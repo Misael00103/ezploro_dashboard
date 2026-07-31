@@ -200,23 +200,23 @@ export const createTestimonial = async (testimonialData, imageFile = null) => {
 
     // Determinar qué imagen usar: archivo local tiene prioridad, luego URL
     let fileToUpload = imageFile;
-    
-    if (!fileToUpload && testimonialData.imagen_testimonio) {
-      // Si no hay archivo pero hay URL, descargar la imagen desde la URL
-      try {
-        fileToUpload = await urlToFile(testimonialData.imagen_testimonio, 'testimonial-image.jpg');
-      } catch (error) {
-        throw new Error('Error al procesar la imagen desde la URL: ' + error.message);
-      }
+    if (!fileToUpload && testimonialData.imagen_testimonio instanceof File) {
+      fileToUpload = testimonialData.imagen_testimonio;
     }
 
-    // El backend requiere imagen obligatoria
-    if (!fileToUpload) {
+    if (fileToUpload instanceof File || fileToUpload instanceof Blob) {
+      formData.append('image', fileToUpload);
+    } else if (typeof testimonialData.imagen_testimonio === 'string' && testimonialData.imagen_testimonio.trim()) {
+      const urlStr = testimonialData.imagen_testimonio.trim();
+      formData.append('imagen_testimonio', urlStr);
+      formData.append('image', urlStr);
+    } else if (typeof testimonialData.image === 'string' && testimonialData.image.trim()) {
+      const urlStr = testimonialData.image.trim();
+      formData.append('imagen_testimonio', urlStr);
+      formData.append('image', urlStr);
+    } else {
       throw new Error('Debes proporcionar una imagen (archivo o URL)');
     }
-
-    // Agregar imagen al FormData
-    formData.append('image', fileToUpload);
 
     const response = await fetch(API_URL_TESTIMONIALS, {
       method: 'POST',
@@ -271,20 +271,20 @@ export const updateTestimonial = async (testimonialId, testimonialData, imageFil
 
     // Determinar qué imagen usar: archivo local tiene prioridad, luego URL
     let fileToUpload = imageFile;
-    
-    if (!fileToUpload && testimonialData.imagen_testimonio) {
-      // Si no hay archivo pero hay URL, descargar la imagen desde la URL
-      try {
-        fileToUpload = await urlToFile(testimonialData.imagen_testimonio, 'testimonial-image.jpg');
-      } catch (error) {
-        // Si falla la descarga de la URL, no es crítico para actualización
-        console.warn('No se pudo descargar la imagen desde la URL, se mantendrá la imagen actual');
-      }
+    if (!fileToUpload && testimonialData.imagen_testimonio instanceof File) {
+      fileToUpload = testimonialData.imagen_testimonio;
     }
 
-    // Agregar imagen solo si existe (para actualización es opcional)
-    if (fileToUpload) {
+    if (fileToUpload instanceof File || fileToUpload instanceof Blob) {
       formData.append('image', fileToUpload);
+    } else if (typeof testimonialData.imagen_testimonio === 'string' && testimonialData.imagen_testimonio.trim()) {
+      const urlStr = testimonialData.imagen_testimonio.trim();
+      formData.append('imagen_testimonio', urlStr);
+      formData.append('image', urlStr);
+    } else if (typeof testimonialData.image === 'string' && testimonialData.image.trim()) {
+      const urlStr = testimonialData.image.trim();
+      formData.append('imagen_testimonio', urlStr);
+      formData.append('image', urlStr);
     }
 
     const response = await fetch(`${API_URL_TESTIMONIALS}/${testimonialId}`, {

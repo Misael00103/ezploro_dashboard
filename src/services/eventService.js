@@ -202,19 +202,25 @@ export const createEvent = async (eventData) => {
     }
     
     // Imagen de portada
-    if (eventData.coverImageFile) {
-      // Si es un archivo File
-      if (eventData.coverImageFile instanceof File) {
-        formData.append('cover_image', eventData.coverImageFile);
-      } else if (eventData.coverImageFile.startsWith('file://') || eventData.coverImageFile.startsWith('http')) {
-        // Si es una URI, necesitamos convertirla a blob
-        const response = await fetch(eventData.coverImageFile);
-        const blob = await response.blob();
-        const fileName = eventData.coverImageFile.split('/').pop() || 'cover.jpg';
-        formData.append('cover_image', blob, fileName);
+    const imageSource = eventData.coverImageFile || eventData.cover_image || eventData.image || eventData.cover;
+    if (imageSource) {
+      if (imageSource instanceof File || imageSource instanceof Blob) {
+        formData.append('cover_image', imageSource);
+      } else if (typeof imageSource === 'string' && imageSource.trim()) {
+        const trimmed = imageSource.trim();
+        if (trimmed.startsWith('blob:') || trimmed.startsWith('file://')) {
+          try {
+            const response = await fetch(trimmed);
+            const blob = await response.blob();
+            const fileName = trimmed.split('/').pop() || 'cover.jpg';
+            formData.append('cover_image', blob, fileName);
+          } catch (e) {
+            formData.append('cover_image', trimmed);
+          }
+        } else {
+          formData.append('cover_image', trimmed);
+        }
       }
-    } else if (eventData.cover_image instanceof File) {
-      formData.append('cover_image', eventData.cover_image);
     }
 
     const response = await fetch(API_URL_EVENTS_CREATE, {
@@ -273,8 +279,8 @@ export const updateEvent = async (eventData) => {
       return new Date(dateString).toISOString();
     };
     
-    // Si hay imagen, usar FormData; si no, usar JSON
-    const hasImage = eventData.coverImageFile || eventData.cover_image instanceof File;
+    const coverImageSource = eventData.coverImageFile || eventData.cover_image || eventData.image || eventData.cover;
+    const hasImage = coverImageSource !== undefined && coverImageSource !== null && coverImageSource !== '';
     
     if (hasImage) {
       const formData = new FormData();
@@ -316,10 +322,22 @@ export const updateEvent = async (eventData) => {
       }
       
       // Imagen
-      if (eventData.coverImageFile instanceof File) {
-        formData.append('cover_image', eventData.coverImageFile);
-      } else if (eventData.cover_image instanceof File) {
-        formData.append('cover_image', eventData.cover_image);
+      if (coverImageSource instanceof File || coverImageSource instanceof Blob) {
+        formData.append('cover_image', coverImageSource);
+      } else if (typeof coverImageSource === 'string' && coverImageSource.trim()) {
+        const trimmed = coverImageSource.trim();
+        if (trimmed.startsWith('blob:') || trimmed.startsWith('file://')) {
+          try {
+            const response = await fetch(trimmed);
+            const blob = await response.blob();
+            const fileName = trimmed.split('/').pop() || 'cover.jpg';
+            formData.append('cover_image', blob, fileName);
+          } catch (e) {
+            formData.append('cover_image', trimmed);
+          }
+        } else {
+          formData.append('cover_image', trimmed);
+        }
       }
 
       const response = await fetch(url, {

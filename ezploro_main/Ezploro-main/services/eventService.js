@@ -77,27 +77,44 @@ export const eventService = {
     await api.ensureValidToken();
     
     try {
-      // Si hay una imagen local (URI), usar FormData
-      if (eventData.coverImageFile) {
-        // Validación para la imagen: verificar URI y tipo dinámico
-        if (typeof eventData.coverImageFile !== 'string' || !eventData.coverImageFile.startsWith('file://')) {
-          throw new Error('La imagen debe ser una URI válida de archivo local.');
-        }
-        // Determinar tipo dinámico basado en extensión (por simplicidad, asumir jpeg si no se especifica)
-        const imageType = eventData.coverImageFile.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg';
-
+      const coverImg = eventData.coverImageFile || eventData.cover_image || eventData.image || eventData.cover;
+      
+      if (coverImg) {
         const formData = new FormData();
 
-        // Agregar la imagen con el nombre correcto que espera el backend
-        formData.append('cover_image', {
-          uri: eventData.coverImageFile,
-          type: imageType,
-          name: `event_${Date.now()}.${imageType.split('/')[1]}`,
-        });
+        if (typeof coverImg === 'object' && coverImg.uri) {
+          formData.append('cover_image', coverImg);
+        } else if (typeof coverImg === 'string' && coverImg.trim()) {
+          const trimmed = coverImg.trim();
+          if (
+            trimmed.startsWith('file://') ||
+            trimmed.startsWith('content://') ||
+            trimmed.startsWith('ph://') ||
+            trimmed.startsWith('assets-library://') ||
+            trimmed.startsWith('data:image/')
+          ) {
+            const imageType = trimmed.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg';
+            formData.append('cover_image', {
+              uri: trimmed,
+              type: imageType,
+              name: `event_${Date.now()}.${imageType.split('/')[1]}`,
+            });
+          } else {
+            formData.append('cover_image', trimmed);
+          }
+        }
         
-        // Agregar todos los otros campos, excluyendo campos vacíos o nulos
+        // Agregar todos los otros campos, excluyendo campos de imagen
         Object.keys(eventData).forEach(key => {
-          if (key !== 'coverImageFile' && eventData[key] !== null && eventData[key] !== undefined && eventData[key] !== '') {
+          if (
+            key !== 'coverImageFile' &&
+            key !== 'cover_image' &&
+            key !== 'image' &&
+            key !== 'cover' &&
+            eventData[key] !== null &&
+            eventData[key] !== undefined &&
+            eventData[key] !== ''
+          ) {
             try {
               if (key === 'faqs') {
                 if (!Array.isArray(eventData[key]) || eventData[key].length === 0) {
@@ -110,7 +127,6 @@ export const eventService = {
                   console.warn(`⚠️ Campo 'location' no es un objeto válido:`, eventData[key]);
                   return;
                 }
-                // Serializar el objeto GeoJSON como JSON string
                 formData.append(key, JSON.stringify(eventData[key]));
               } else if (typeof eventData[key] === 'boolean') {
                 formData.append(key, eventData[key] ? 'true' : 'false');
@@ -125,27 +141,10 @@ export const eventService = {
         });
         
         console.log('📤 Enviando FormData al backend...');
-        console.log('📋 FormData keys:', Array.from(formData.keys()));
-        
-        // Log específico para el campo online
-        const onlineValue = formData.get('online');
-        console.log('🔍 Valor del campo online en FormData:', onlineValue);
-        
-        // Debug: mostrar todos los campos que se están enviando
-        Array.from(formData.keys()).forEach(key => {
-          const value = formData.get(key);
-          console.log(`📋 FormData[${key}]:`, {
-            value: typeof value === 'string' ? value.substring(0, 100) + (value.length > 100 ? '...' : '') : value,
-            type: typeof value,
-            length: typeof value === 'string' ? value.length : 'N/A'
-          });
-        });
-        
-        // Usar FormData sin headers adicionales (el api.js manejará Authorization)
         return api.post(API_URL_EVENTS_CREATE, formData);
       }
       
-      // Si no hay imagen local, enviar como JSON normal
+      // Si no hay imagen, enviar como JSON normal pero asegurando cover_image si fue especificada
       console.log('📤 Enviando JSON al backend...');
       return api.post(API_URL_EVENTS_CREATE, eventData);
     } catch (error) {
@@ -157,19 +156,16 @@ export const eventService = {
         stack: error.stack
       });
       
-      // Manejo específico de errores de autenticación
       if (error.message.includes('Unauthorized') || error.message.includes('401')) {
         console.error('🔑 Error de autenticación en createEvent - token expirado o inválido');
         throw new Error('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
       }
       
-      // Manejo específico de errores de validación
       if (error.message.includes('400') || error.message.includes('Bad Request')) {
         console.error('📝 Error de validación en createEvent');
         throw new Error('Datos del evento inválidos. Verifica todos los campos.');
       }
       
-      // Manejo específico de errores de red
       if (error.message.includes('Network') || error.message.includes('fetch')) {
         console.error('🌐 Error de red en createEvent');
         throw new Error('Error de conexión. Verifica tu internet e inténtalo de nuevo.');
@@ -182,31 +178,46 @@ export const eventService = {
     console.log("🚀 eventService.updateEvent llamado con:", JSON.stringify(eventData, null, 2));
     console.log("📡 URL de la API:", API_URL_EVENTS_UPDATE.replace(':id', id));
     
-    // Verificar que hay un token válido antes de proceder
     await api.ensureValidToken();
     
     try {
-      // Si hay una imagen local (URI), usar FormData
-      if (eventData.coverImageFile) {
-        // Validación para la imagen: verificar URI y tipo dinámico
-        if (typeof eventData.coverImageFile !== 'string' || !eventData.coverImageFile.startsWith('file://')) {
-          throw new Error('La imagen debe ser una URI válida de archivo local.');
-        }
-        // Determinar tipo dinámico basado en extensión (por simplicidad, asumir jpeg si no se especifica)
-        const imageType = eventData.coverImageFile.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg';
-
+      const coverImg = eventData.coverImageFile || eventData.cover_image || eventData.image || eventData.cover;
+      
+      if (coverImg) {
         const formData = new FormData();
 
-        // Agregar la imagen con el nombre correcto que espera el backend
-        formData.append('cover_image', {
-          uri: eventData.coverImageFile,
-          type: imageType,
-          name: `event_${Date.now()}.${imageType.split('/')[1]}`,
-        });
+        if (typeof coverImg === 'object' && coverImg.uri) {
+          formData.append('cover_image', coverImg);
+        } else if (typeof coverImg === 'string' && coverImg.trim()) {
+          const trimmed = coverImg.trim();
+          if (
+            trimmed.startsWith('file://') ||
+            trimmed.startsWith('content://') ||
+            trimmed.startsWith('ph://') ||
+            trimmed.startsWith('assets-library://') ||
+            trimmed.startsWith('data:image/')
+          ) {
+            const imageType = trimmed.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg';
+            formData.append('cover_image', {
+              uri: trimmed,
+              type: imageType,
+              name: `event_${Date.now()}.${imageType.split('/')[1]}`,
+            });
+          } else {
+            formData.append('cover_image', trimmed);
+          }
+        }
         
-        // Agregar todos los otros campos, excluyendo campos vacíos o nulos
         Object.keys(eventData).forEach(key => {
-          if (key !== 'coverImageFile' && eventData[key] !== null && eventData[key] !== undefined && eventData[key] !== '') {
+          if (
+            key !== 'coverImageFile' &&
+            key !== 'cover_image' &&
+            key !== 'image' &&
+            key !== 'cover' &&
+            eventData[key] !== null &&
+            eventData[key] !== undefined &&
+            eventData[key] !== ''
+          ) {
             try {
               if (key === 'faqs') {
                 if (!Array.isArray(eventData[key]) || eventData[key].length === 0) {
@@ -219,7 +230,6 @@ export const eventService = {
                   console.warn(`⚠️ Campo 'location' no es un objeto válido:`, eventData[key]);
                   return;
                 }
-                // Serializar el objeto GeoJSON como JSON string
                 formData.append(key, JSON.stringify(eventData[key]));
               } else if (typeof eventData[key] === 'boolean') {
                 formData.append(key, eventData[key] ? 'true' : 'false');
@@ -234,13 +244,9 @@ export const eventService = {
         });
         
         console.log('📤 Enviando FormData al backend para update...');
-        console.log('📋 FormData keys:', Array.from(formData.keys()));
-        
-        // Usar FormData sin headers adicionales (el api.js manejará Authorization)
         return api.put(API_URL_EVENTS_UPDATE.replace(':id', id), formData);
       }
       
-      // Si no hay imagen local, enviar como JSON normal
       console.log('📤 Enviando JSON al backend para update...');
       return api.put(API_URL_EVENTS_UPDATE.replace(':id', id), eventData);
     } catch (error) {
