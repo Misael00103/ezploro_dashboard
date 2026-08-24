@@ -26,6 +26,10 @@ import {
   ChevronRight,
   AlertCircle,
   Info,
+  Megaphone,
+  Gift,
+  Ticket,
+  Flame,
 } from 'lucide-react';
 import { AnimatedCounter } from './AnimatedCounter';
 import { toast, Toaster } from 'react-hot-toast';
@@ -38,6 +42,10 @@ import PostsManager from './PostsManager';
 import SocialMediaManager from './SocialMediaManager';
 import GamificationManager from './GamificationManager';
 import UserManagementManager from './UserManagementManager';
+import AdsManager from './AdsManager';
+import DailyRewardsManager from './DailyRewardsManager';
+import StreaksManager from './StreaksManager';
+import PromotionsManager from './PromotionsManager';
 import BroadcastNotificationButton from './BroadcastNotificationButton';
 import {
   getEvents,
@@ -93,16 +101,27 @@ const Dashboard = ({ onLogout }) => {
 
   const navItems = [
     { id: 'overview', label: 'Resumen', icon: BarChart3 },
-    { id: 'contacts', label: 'Contactos', icon: MessageCircle, badge: contacts.filter(c => c.status !== 'responded' && c.status !== 'resolved').length },
-    { id: 'events', label: 'Eventos', icon: Calendar },
-    { id: 'testimonials', label: 'Testimonios', icon: Star },
-    { id: 'posts', label: 'Posts', icon: FileText },
-    { id: 'social', label: 'Redes Sociales', icon: Globe },
     ...(user?.role === 'admin' || user?.role === 'moderator' ? [
-      { id: 'gamification', label: 'Gamificación', icon: Trophy },
       { id: 'user-management', label: 'Usuarios', icon: User },
+      { id: 'points', label: 'Puntos', icon: Star },
+      { id: 'advertising', label: 'Publicidad', icon: Megaphone },
+      { id: 'rewards', label: 'Premios', icon: Gift },
+      { id: 'promotions', label: 'Promociones', icon: Ticket },
+      { id: 'events', label: 'Eventos', icon: Calendar },
+      { id: 'streaks', label: 'Rachas', icon: Flame },
+      { id: 'contacts', label: 'Contactos', icon: MessageCircle, badge: contacts.filter(c => c.status !== 'responded' && c.status !== 'resolved').length },
+      { id: 'testimonials', label: 'Testimonios', icon: Star },
+      { id: 'posts', label: 'Posts', icon: FileText },
+      { id: 'social', label: 'Redes Sociales', icon: Globe },
+      { id: 'gamification', label: 'Gamificación Global', icon: Trophy },
       { id: 'ezploro-info', label: 'Info Ezploro', icon: Info }
-    ] : [])
+    ] : [
+      { id: 'events', label: 'Eventos', icon: Calendar },
+      { id: 'contacts', label: 'Contactos', icon: MessageCircle, badge: contacts.filter(c => c.status !== 'responded' && c.status !== 'resolved').length },
+      { id: 'testimonials', label: 'Testimonios', icon: Star },
+      { id: 'posts', label: 'Posts', icon: FileText },
+      { id: 'social', label: 'Redes Sociales', icon: Globe }
+    ])
   ];
 
   // Agrupar eventos por mes usando fechas reales
@@ -995,6 +1014,26 @@ const Dashboard = ({ onLogout }) => {
 
           <TabsContent value="user-management">
             <UserManagementManager initialTab="profile" />
+          </TabsContent>
+
+          <TabsContent value="points">
+            <GamificationManager initialTab="points" />
+          </TabsContent>
+
+          <TabsContent value="advertising">
+            <AdsManager />
+          </TabsContent>
+
+          <TabsContent value="rewards">
+            <DailyRewardsManager />
+          </TabsContent>
+
+          <TabsContent value="promotions">
+            <PromotionsManager />
+          </TabsContent>
+
+          <TabsContent value="streaks">
+            <StreaksManager />
           </TabsContent>
 
           <TabsContent value="ezploro-info">

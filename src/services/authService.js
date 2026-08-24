@@ -308,7 +308,13 @@ export const getCurrentUserId = () => {
  * @returns {string|null} Token de autenticación o null si no hay sesión activa
  */
 export const getAuthToken = () => {
-  return localStorage.getItem(DASHBOARD_CONFIG.AUTH.TOKEN_KEY);
+  return (
+    localStorage.getItem(DASHBOARD_CONFIG.AUTH.TOKEN_KEY) ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('adminToken') ||
+    localStorage.getItem('userToken') ||
+    localStorage.getItem('authToken')
+  );
 };
 
 /**

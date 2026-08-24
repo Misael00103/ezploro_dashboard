@@ -425,3 +425,42 @@ export const API_URL_CONTACTS_REPLY = `${BASE_URL}/contact/messages`
 export const API_URL_CONTACTS_LIST = `${BASE_URL}/contact-us/messages`
 export const API_URL_SOCIAL_MEDIA = `${BASE_URL}/social-media` // Mantener por compatibilidad
 export const API_URL_LANDING_PAGE = `${BASE_URL}/landing-page`
+
+// ==================== PUBLICIDAD & ANUNCIOS ====================
+export const API_URL_ADS = `${BASE_URL}/ads`
+export const API_URL_ADS_LIST = `${API_URL_ADS}/all`
+export const API_URL_ADS_CREATE = `${API_URL_ADS}`
+export const API_URL_ADS_BY_ID = `${API_URL_ADS}/:id`
+export const API_URL_ADS_STATS = `${API_URL_ADS}/stats`
+export const API_URL_ADS_TOGGLE_STATUS = `${API_URL_ADS}/:id/toggle-status`
+
+// ==================== PREMIOS DIARIOS (COFRES) ====================
+export const API_URL_DAILY_REWARDS = `${BASE_URL}/daily-rewards`
+export const API_URL_DAILY_REWARDS_CONFIG = `${API_URL_DAILY_REWARDS}/config`
+export const API_URL_DAILY_REWARDS_CLAIM = `${API_URL_DAILY_REWARDS}/claim`
+export const API_URL_DAILY_REWARDS_HISTORY = `${API_URL_DAILY_REWARDS}/history`
+
+// ==================== RACHAS (STREAKS) ====================
+export const API_URL_STREAKS = `${BASE_URL}/streaks`
+export const API_URL_STREAKS_CONFIG = `${API_URL_STREAKS}/config`
+export const API_URL_STREAKS_USER = `${API_URL_STREAKS}/user/:userId`
+
+// ==================== PERFIL & PASS VIP ====================
+export const API_URL_VIP_PASS = `${BASE_URL}/vip-pass`
+export const API_URL_VIP_PASS_LEVELS = `${API_URL_VIP_PASS}/levels`
+export const API_URL_VIP_PASS_CONFIG = `${API_URL_VIP_PASS}/config`
+
+// ==================== PROMOCIONES & CATEGORÍAS ====================
+export const API_URL_PROMOTIONS_CATEGORIES = `${BASE_URL}/promotions/categories`
+
+// ==================== GAMIFICATION MATRIX ENDPOINTS ====================
+export const API_URL_GAMIFICATION_VIP_PASS = `${BASE_URL}/gamification/vip-pass`
+export const API_URL_GAMIFICATION_VIP_LEVELS = `${BASE_URL}/gamification/vip-levels`
+export const API_URL_GAMIFICATION_REWARDED_AD = `${BASE_URL}/gamification/rewarded-ad`
+export const API_URL_GAMIFICATION_CLAIM_REWARDED_AD = `${BASE_URL}/gamification/claim-rewarded-ad`
+export const API_URL_GAMIFICATION_DAILY_PRIZE = `${BASE_URL}/gamification/daily-prize`
+export const API_URL_GAMIFICATION_CLAIM_DAILY_PRIZE = `${BASE_URL}/gamification/claim-daily-prize`
+export const API_URL_GAMIFICATION_DAILY_PRIZE_CONFIG = `${BASE_URL}/gamification/daily-prize-config`
+export const API_URL_GAMIFICATION_DAILY_STREAK = `${BASE_URL}/gamification/daily-streak`
+export const API_URL_GAMIFICATION_CHECK_IN = `${BASE_URL}/gamification/check-in`
+

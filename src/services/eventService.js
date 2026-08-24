@@ -350,6 +350,9 @@ export const updateEvent = async (eventData) => {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          throw new Error('No autorizado: Tu sesión ha expirado o no tienes permisos para modificar este evento. Por favor, inicia sesión nuevamente.');
+        }
         throw new Error(errorData.message || `Error al actualizar evento: ${response.status}`);
       }
 
@@ -378,6 +381,9 @@ export const updateEvent = async (eventData) => {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          throw new Error('No autorizado: Tu sesión ha expirado o no tienes permisos para modificar este evento. Por favor, inicia sesión nuevamente.');
+        }
         throw new Error(errorData.message || `Error al actualizar evento: ${response.status}`);
       }
 

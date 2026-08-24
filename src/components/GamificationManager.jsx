@@ -37,6 +37,7 @@ import {
 import { getAllRules, createRule, updateRule, deleteRule } from '../services/rulesService';
 import { registerAction, getUserPoints, redeemReward, getUserHistory, getAllUsersHistory } from '../services/gamificationService';
 import { fetchWithAuth } from '../services/userService';
+import { API_URL_USERS_LIST } from '../services/config';
 import { getClaimableActions, claimPoints, getClaimedTransactions } from '../services/pointsService';
 import { getCurrentUserId } from '../services/authService';
 import { 
@@ -47,10 +48,10 @@ import {
   toggleOfferStatus 
 } from '../services/offerService';
 import { toast } from 'react-hot-toast';
-import { API_URL_USERS_LIST } from '../services/config';
+import PromotionsManager from './PromotionsManager';
 
-const GamificationManager = () => {
-  const [activeTab, setActiveTab] = useState('overview');
+const GamificationManager = ({ initialTab = 'overview' }) => {
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [pointsRules, setPointsRules] = useState([]);
   const [rewards, setRewards] = useState([]);
   const [gamificationActions, setGamificationActions] = useState([]);
@@ -1605,125 +1606,9 @@ const GamificationManager = () => {
           )}
         </TabsContent>
 
-        {/* Rewards Tab */}
+        {/* Rewards Tab - Usa el gestor unificado de Promociones y Recompensas */}
         <TabsContent value="rewards" className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-2xl font-bold text-white">Recompensas</h2>
-              <p className="text-zinc-400">Administra las recompensas disponibles</p>
-            </div>
-            <Dialog open={isCreateOfferModalOpen} onOpenChange={setIsCreateOfferModalOpen}>
-              <DialogTrigger asChild>
-            <Button className="bg-violet-600 hover:bg-violet-700">
-              <Plus className="h-4 w-4 mr-2" />
-              Nueva Recompensa
-            </Button>
-              </DialogTrigger>
-            </Dialog>
-          </div>
-
-          {isLoadingOffers ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
-            </div>
-          ) : (
-          <div className="grid gap-4 md:grid-cols-2">
-              {rewards.length > 0 ? (
-                rewards.map((reward) => (
-                  <Card key={reward.id || reward.offer_id} className="glass-panel border-zinc-800/50">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                        <div className="flex items-start space-x-4 flex-1">
-                          <div className="w-12 h-12 bg-violet-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                            {reward.image_url ? (
-                              <img 
-                                src={reward.image_url} 
-                                alt={reward.name || reward.title}
-                                className="w-full h-full object-cover rounded-lg"
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
-                                }}
-                              />
-                            ) : null}
-                            <div className={`w-full h-full rounded-lg flex items-center justify-center ${reward.image_url ? 'hidden' : ''}`}>
-                        <Gift className="h-6 w-6 text-zinc-400" />
-                      </div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h3 className="text-lg font-semibold text-white">{reward.name || reward.title}</h3>
-                            <p className="text-zinc-400 text-sm mt-1 line-clamp-2">{reward.description}</p>
-                            <div className="flex items-center flex-wrap gap-2 mt-3">
-                              {reward.discount_percentage && (
-                          <Badge className="bg-yellow-900/50 text-yellow-200 border-yellow-600/30">
-                                  {reward.discount_percentage}% OFF
-                          </Badge>
-                              )}
-                              {reward.discount_amount && (
-                                <Badge className="bg-yellow-900/50 text-yellow-200 border-yellow-600/30">
-                                  ${reward.discount_amount} OFF
-                                </Badge>
-                              )}
-                          <Badge className={getCategoryColor(reward.category)}>
-                                {reward.category || reward.offer_type || 'discounts'}
-                          </Badge>
-                          <span className="text-xs text-zinc-400">
-                                Canjeado {reward.times_redeemed || 0} veces
-                          </span>
-                              {reward.promo_code && (
-                                <Badge className="bg-zinc-800/50 text-zinc-300">
-                                  {reward.promo_code}
-                                </Badge>
-                              )}
-                        </div>
-                            {reward.final_price && (
-                              <p className="text-sm text-zinc-300 mt-2">
-                                Precio final: ${reward.final_price}
-                              </p>
-                            )}
-                      </div>
-                    </div>
-                        <div className="flex flex-col items-end space-y-2 ml-4">
-                      <Switch
-                        checked={reward.is_active}
-                            onCheckedChange={() => handleToggleReward(reward.id || reward.offer_id)}
-                      />
-                      <div className="flex space-x-1">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="text-zinc-400 hover:text-white"
-                              onClick={() => handleEditOffer(reward)}
-                            >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="text-red-400 hover:text-red-300"
-                              onClick={() => handleDeleteOffer(reward.id || reward.offer_id)}
-                            >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-                ))
-              ) : (
-                <Card className="glass-panel border-zinc-800/50">
-                  <CardContent className="pt-6">
-                    <div className="text-center py-8">
-                      <Gift className="h-16 w-16 text-zinc-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-white mb-2">No hay ofertas</h3>
-                      <p className="text-zinc-400">Crea tu primera oferta para comenzar</p>
-          </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
+          <PromotionsManager />
         </TabsContent>
 
         {/* Rankings Tab */}

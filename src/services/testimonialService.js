@@ -95,14 +95,13 @@ export const getAllTestimonials = async (options = {}) => {
     const url = `${API_URL_TESTIMONIALS}?${params}`;
     
     try {
-      // Usar fetchWithAuth que maneja correctamente la autenticación
-      const response = await fetchWithAuth(url, {
+      // Usar fetchWithAuth que maneja correctamente la autenticación y devuelve el JSON ya parseado
+      const data = await fetchWithAuth(url, {
         method: 'GET',
       });
 
-      const data = await response.json();
       console.log('✅ getAllTestimonials - Éxito, testimonios obtenidos:', data.testimonials?.length || 0);
-      return data.testimonials || data || [];
+      return data.testimonials || data.data || data || [];
     } catch (authError) {
       // Si falla con "ID de usuario inválido", devolver array vacío
       // El backend no puede validar el userId del token para este endpoint

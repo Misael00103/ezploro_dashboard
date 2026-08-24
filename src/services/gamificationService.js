@@ -460,3 +460,6 @@ export const getAllUsersHistory = async () => {
     return { actions: [], rewards: [], is_forbidden: true };
   }
 };
+
+export { dashboardGamificationService } from './dashboardGamificationService';
+
