@@ -359,25 +359,33 @@ const DailyRewardsManager = () => {
             </CardHeader>
             <CardContent className="p-6">
               <div className="space-y-3">
-                {history.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-4 glass-panel rounded-xl border border-zinc-800 bg-zinc-900/40">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400">
-                        <Gift className="h-5 w-5" />
+                {history.length > 0 ? (
+                  history.map((item) => (
+                    <div key={item.id || item.claimed_at} className="flex items-center justify-between p-4 glass-panel rounded-xl border border-zinc-800 bg-zinc-900/40">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400">
+                          <Gift className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-white">{item.user_name || item.username || item.user_email || 'Usuario'}</h4>
+                          <p className="text-xs text-zinc-400">{item.user_email || item.email || 'App Usuario'} • {item.chest_name || item.action_name || 'Cofre Místico de la Suerte'}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-white">{item.user_name}</h4>
-                        <p className="text-xs text-zinc-400">{item.user_email} • {item.chest_name}</p>
+                      <div className="text-right">
+                        <span className="text-sm font-bold text-amber-400">+{item.points_awarded || item.points || 0} PTS</span>
+                        <p className="text-[11px] text-zinc-500">
+                          {item.claimed_at ? new Date(item.claimed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Hoy'}
+                        </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-sm font-bold text-amber-400">+{item.points_awarded} PTS</span>
-                      <p className="text-[11px] text-zinc-500">
-                        {new Date(item.claimed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-10 text-zinc-400">
+                    <Gift className="h-12 w-12 mx-auto text-purple-400/50 mb-3" />
+                    <p className="font-semibold text-white">No hay reclamos de cofres registrados aún</p>
+                    <p className="text-xs text-zinc-500 mt-1">Los reclamos de cofres y premios diarios de los usuarios en la app aparecerán aquí en tiempo real.</p>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>

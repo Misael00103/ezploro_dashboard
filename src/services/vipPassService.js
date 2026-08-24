@@ -1,6 +1,11 @@
 import { fetchWithAuth } from './userService';
 import { getAuthToken } from './authService';
-import { API_URL_VIP_PASS_LEVELS, API_URL_VIP_PASS_CONFIG } from './config';
+import { 
+  API_URL_VIP_PASS_LEVELS, 
+  API_URL_VIP_PASS_CONFIG,
+  API_URL_GAMIFICATION_VIP_LEVELS,
+  API_URL_GAMIFICATION_VIP_PASS
+} from './config';
 
 const STORAGE_KEY_VIP_PASS = 'ezploro_vip_pass_config';
 

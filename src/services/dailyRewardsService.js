@@ -178,28 +178,46 @@ export const updateDailyChestConfig = async (newConfig) => {
 };
 
 /**
- * Obtener historial de reclamos de premios diarios
+ * Obtener historial de reclamos de premios diarios reales
  */
 export const getDailyRewardHistory = async () => {
   try {
     const token = getAuthToken();
     if (token) {
-      const response = await fetchWithAuth(API_URL_DAILY_REWARDS_HISTORY).catch(() => null);
-      if (response && Array.isArray(response)) {
-        return response;
+      // 1. Intentar endpoint de historial de premios diarios / daily-rewards/history
+      const response1 = await fetchWithAuth(API_URL_DAILY_REWARDS_HISTORY).catch(() => null);
+      const items1 = response1?.data || response1?.history || (Array.isArray(response1) ? response1 : null);
+      if (Array.isArray(items1) && items1.length > 0) {
+        return items1;
+      }
+
+      // 2. Intentar /api/gamification/daily-prize/history o /api/gamification/history
+      const response2 = await fetchWithAuth(`${API_URL_DAILY_REWARDS_HISTORY.replace('/daily-rewards/history', '/gamification/daily-prize/history')}`).catch(() => null);
+      const items2 = response2?.data || response2?.history || (Array.isArray(response2) ? response2 : null);
+      if (Array.isArray(items2) && items2.length > 0) {
+        return items2;
+      }
+
+      // 3. Intentar /api/gamification/history o reclamos generales
+      const response3 = await fetchWithAuth('/gamification/history').catch(() => null);
+      const items3 = response3?.data || response3?.history || (Array.isArray(response3) ? response3 : null);
+      if (Array.isArray(items3) && items3.length > 0) {
+        return items3;
       }
     }
   } catch (e) {
-    console.warn('⚠️ Usando historial local de premios diarios:', e);
+    console.warn('⚠️ Error al consultar historial de reclamos en backend:', e);
   }
 
   try {
     const cached = localStorage.getItem(STORAGE_KEY_DAILY_HISTORY);
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
   } catch (e) {
     console.error('Error reading daily history cache:', e);
   }
 
-  localStorage.setItem(STORAGE_KEY_DAILY_HISTORY, JSON.stringify(DEFAULT_HISTORY));
-  return DEFAULT_HISTORY;
+  return [];
 };
