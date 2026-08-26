@@ -23,14 +23,20 @@ import {
   Coins,
   History,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Building,
+  ShieldCheck,
+  QrCode,
+  RefreshCw
 } from 'lucide-react';
+
 import {
   getOffers,
   createOffer,
   updateOffer,
   deleteOffer,
-  toggleOfferStatus
+  toggleOfferStatus,
+  getOfferRedemptions
 } from '../services/offerService';
 import { toast } from 'react-hot-toast';
 
@@ -39,15 +45,18 @@ const DEFAULT_CATEGORIES = ['Bebidas', 'Entradas', 'Comida', 'Experiencias', 'VI
 const PromotionsManager = () => {
   const [activeTab, setActiveTab] = useState('catalog');
   const [offers, setOffers] = useState([]);
+  const [redemptions, setRedemptions] = useState([]);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [newCategoryInput, setNewCategoryInput] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [redemptionSearch, setRedemptionSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState(null);
   const [selectedImageFile, setSelectedImageFile] = useState(null);
+  const [selectedRedemptionModal, setSelectedRedemptionModal] = useState(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -65,6 +74,8 @@ const PromotionsManager = () => {
     terms_conditions: '',
     description: '',
     image_url: '',
+    merchant_name: '',
+    merchant_code: '',
     is_active: true
   });
 
@@ -73,7 +84,10 @@ const PromotionsManager = () => {
   const loadData = async () => {
     try {
       setIsLoading(true);
-      const offersList = await getOffers();
+      const [offersList, redemptionsList] = await Promise.all([
+        getOffers(),
+        getOfferRedemptions()
+      ]);
       
       // Filtrar cualquier duplicado existente por título o ID
       const uniqueOffers = [];
@@ -90,9 +104,10 @@ const PromotionsManager = () => {
       });
 
       setOffers(uniqueOffers);
+      setRedemptions(redemptionsList || []);
     } catch (error) {
-      console.error('Error cargando promociones:', error);
-      toast.error('Error al cargar las promociones');
+      console.error('Error al cargar ofertas en PromotionsManager:', error);
+      toast.error('No se pudieron cargar las promociones del backend');
     } finally {
       setIsLoading(false);
     }
@@ -155,6 +170,8 @@ const PromotionsManager = () => {
       terms_conditions: 'Válido de jueves a sábado hasta la medianoche.',
       description: 'Válido en Bares y Discotecas Afiliadas de la Ciudad.',
       image_url: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=600&auto=format&fit=crop&q=80',
+      merchant_name: 'Bar La Pasión',
+      merchant_code: 'PASION123',
       is_active: true
     });
     setActiveTab('create');
@@ -178,7 +195,9 @@ const PromotionsManager = () => {
       promo_code: offer.promo_code || '',
       terms_conditions: offer.terms_conditions || '',
       description: offer.description || '',
-      image_url: offer.image_url || '',
+      image_url: offer.image_url || offer.image || '',
+      merchant_name: offer.merchant_name || offer.merchantName || '',
+      merchant_code: offer.merchant_code || offer.merchantCode || offer.merchant_pin || '',
       is_active: offer.is_active !== undefined ? offer.is_active : true
     });
     setIsEditModalOpen(true);
@@ -606,6 +625,36 @@ const PromotionsManager = () => {
                   </div>
                 </div>
 
+                {/* 4b. Datos del Negocio y Código PIN de Validación */}
+                <div className="p-4 rounded-xl bg-purple-950/30 border border-purple-800/40 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Building className="h-4 w-4 text-purple-400" />
+                    <Label className="text-purple-300 font-bold text-xs uppercase tracking-wider">Negocio y PIN de Validación (Escáner QR)</Label>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-zinc-300 text-xs">Nombre del Negocio / Establecimiento</Label>
+                      <Input
+                        value={formData.merchant_name}
+                        onChange={(e) => setFormData({ ...formData, merchant_name: e.target.value })}
+                        placeholder="Ej: Bar La Pasión / Disco Club"
+                        className="bg-zinc-900 border-zinc-800 text-white text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-zinc-300 text-xs">Código / PIN Personalizado del Negocio</Label>
+                      <Input
+                        value={formData.merchant_code}
+                        onChange={(e) => setFormData({ ...formData, merchant_code: e.target.value.toUpperCase() })}
+                        placeholder="Ej: PASION123 o 7788"
+                        className="bg-zinc-900 border-zinc-800 text-white text-xs font-mono font-bold uppercase text-emerald-400"
+                      />
+                      <p className="text-[10px] text-zinc-400">Este PIN lo ingresa el encargado del local para desbloquear el escáner y validar el premio.</p>
+                    </div>
+                  </div>
+                </div>
+
+
                 {/* 5. Imagen */}
                 <div className="space-y-2">
                   <Label className="text-zinc-300 flex items-center justify-between">
@@ -744,37 +793,190 @@ const PromotionsManager = () => {
           </Card>
         </TabsContent>
 
-        {/* Tab 4: Redemptions */}
+        {/* Tab 4: Redemptions & Confirmations */}
         <TabsContent value="redemptions">
           <Card className="glass-panel border-zinc-800/50">
-            <CardHeader>
-              <CardTitle className="text-white">Historial de Canjes de Promociones</CardTitle>
-              <CardDescription className="text-zinc-400">
-                Registro de cupones y ofertas reclamadas por usuarios en la app.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-4 glass-panel rounded-xl border border-zinc-800 bg-zinc-900/40">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400">
-                      <Ticket className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-white">Happy Hour 2x1 en Mojitos & Tragos</h4>
-                      <p className="text-xs text-zinc-400">Usuario: Sofia Gomez • Código: EZP-MOJ-9921</p>
-                    </div>
+            <CardHeader className="border-b border-zinc-800/60 pb-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5 text-emerald-400" />
+                    Confirmaciones de Canje (Escáner QR & Portal Comercio)
+                  </CardTitle>
+                  <CardDescription className="text-zinc-400">
+                    Registro en tiempo real de cupones escaneados, validados y entregados en locales comerciales.
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="relative w-full md:w-64">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+                    <Input
+                      value={redemptionSearch}
+                      onChange={(e) => setRedemptionSearch(e.target.value)}
+                      placeholder="Buscar por RDM, usuario o negocio..."
+                      className="pl-9 bg-zinc-900 border-zinc-800 text-white text-xs"
+                    />
                   </div>
-                  <div className="text-right">
-                    <span className="text-xs font-bold px-2 py-1 rounded bg-emerald-500/20 text-emerald-300">Canjeado</span>
-                    <p className="text-[11px] text-zinc-500 mt-1">Hace 45 mins</p>
-                  </div>
+                  <Button
+                    onClick={() => loadData()}
+                    variant="outline"
+                    className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white text-xs"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isLoading ? 'animate-spin' : ''}`} />
+                    Sincronizar
+                  </Button>
                 </div>
               </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              {isLoading ? (
+                <div className="flex justify-center p-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                </div>
+              ) : (() => {
+                const filteredRedemptions = redemptions.filter(item => {
+                  if (!redemptionSearch.trim()) return true;
+                  const term = redemptionSearch.toLowerCase();
+                  const code = (item.redemptionCode || item.code || '').toLowerCase();
+                  const userName = (item.user?.name || item.user_name || '').toLowerCase();
+                  const merchantName = (item.offer?.merchantName || item.merchant_name || '').toLowerCase();
+                  const title = (item.offer?.title || item.title || '').toLowerCase();
+                  return code.includes(term) || userName.includes(term) || merchantName.includes(term) || title.includes(term);
+                });
+
+                if (filteredRedemptions.length === 0) {
+                  return (
+                    <div className="text-center p-12 text-zinc-500">
+                      No hay confirmaciones de canje registradas {redemptionSearch ? 'con ese filtro.' : 'aún.'}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3">
+                    {filteredRedemptions.map((item, idx) => {
+                      const isUsed = item.status === 'used' || item.status === 'completed';
+                      return (
+                        <div
+                          key={item.redemptionId || item.id || idx}
+                          onClick={() => setSelectedRedemptionModal(item)}
+                          className="glass-panel p-4 rounded-xl border border-zinc-800/80 bg-zinc-900/40 hover:border-emerald-500/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-3.5">
+                            <div className={`p-3 rounded-xl ${isUsed ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
+                              {isUsed ? <CheckCircle2 className="h-6 w-6" /> : <QrCode className="h-6 w-6" />}
+                            </div>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs font-bold text-amber-400 px-2 py-0.5 bg-amber-500/10 rounded border border-amber-500/20">
+                                  {item.redemptionCode || item.code || 'RDM-CONFIRM'}
+                                </span>
+                                <Badge className={isUsed ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'}>
+                                  {isUsed ? '🟢 VALIDADO Y USADO' : '🟡 PENDIENTE'}
+                                </Badge>
+                              </div>
+                              <h4 className="text-base font-bold text-white group-hover:text-blue-300 transition-colors">
+                                {item.offer?.title || item.title || 'Promoción Especial'}
+                              </h4>
+                              <p className="text-xs text-zinc-400">
+                                👤 Usuario: <strong className="text-white">{item.user?.name || item.user_name || 'Cliente Ezploro'}</strong> ({item.user?.email || 'email@ezploro.com'}) • 🏬 Negocio: <strong className="text-purple-300">{item.offer?.merchantName || item.merchant_name || 'Local Afiliado'}</strong>
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right flex flex-col items-end justify-center">
+                            <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
+                              <Coins className="h-3.5 w-3.5" /> {item.pointsSpent || item.points_required || 300} Coins
+                            </span>
+                            <span className="text-[11px] text-zinc-400 mt-1 flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-zinc-500" />
+                              {item.usedAt ? new Date(item.usedAt).toLocaleString() : (item.redeemedAt ? new Date(item.redeemedAt).toLocaleString() : 'Reciente')}
+                            </span>
+                            {item.notes && (
+                              <span className="text-[10px] text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/40 mt-1.5 line-clamp-1 max-w-[200px]">
+                                📝 {item.notes}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Confirmation Digital Proof Dialog */}
+      <Dialog open={!!selectedRedemptionModal} onOpenChange={() => setSelectedRedemptionModal(null)}>
+        <DialogContent className="glass-panel border-zinc-800 bg-zinc-950 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-400">
+              <ShieldCheck className="h-6 w-6" /> Comprobante Digital de Confirmación
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400 text-xs">
+              Detalles de la verificación y entrega autorizada en el comercio.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedRedemptionModal && (
+            <div className="space-y-4 my-2 text-xs">
+              <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 font-mono space-y-2.5">
+                <div className="flex justify-between border-b border-zinc-800 pb-2">
+                  <span className="text-zinc-400">Código de Canje (QR):</span>
+                  <span className="text-amber-400 font-bold">{selectedRedemptionModal.redemptionCode || selectedRedemptionModal.code}</span>
+                </div>
+                <div className="flex justify-between border-b border-zinc-800 pb-2">
+                  <span className="text-zinc-400">Estado de Validación:</span>
+                  <span className="text-emerald-400 font-bold">🟢 VALIDADO Y USADO</span>
+                </div>
+                <div className="flex justify-between border-b border-zinc-800 pb-2">
+                  <span className="text-zinc-400">Usuario Cliente:</span>
+                  <span className="text-white font-bold">{selectedRedemptionModal.user?.name || selectedRedemptionModal.user_name || 'Cliente Ezploro'}</span>
+                </div>
+                <div className="flex justify-between border-b border-zinc-800 pb-2">
+                  <span className="text-zinc-400">Email:</span>
+                  <span className="text-zinc-300">{selectedRedemptionModal.user?.email || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between border-b border-zinc-800 pb-2">
+                  <span className="text-zinc-400">Establecimiento / Comercio:</span>
+                  <span className="text-purple-300 font-bold">{selectedRedemptionModal.offer?.merchantName || selectedRedemptionModal.merchant_name || 'Local Afiliado'}</span>
+                </div>
+                <div className="flex justify-between border-b border-zinc-800 pb-2">
+                  <span className="text-zinc-400">PIN Autorización Comercio:</span>
+                  <span className="text-emerald-400 font-bold">{selectedRedemptionModal.offer?.merchantCode || 'PIN VALIDADO'}</span>
+                </div>
+                <div className="flex justify-between border-b border-zinc-800 pb-2">
+                  <span className="text-zinc-400">Ezploro Coins Descontados:</span>
+                  <span className="text-amber-400 font-bold">{selectedRedemptionModal.pointsSpent || 300} PTS</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Fecha y Hora de Entrega:</span>
+                  <span className="text-zinc-300">{selectedRedemptionModal.usedAt ? new Date(selectedRedemptionModal.usedAt).toLocaleString() : 'Reciente'}</span>
+                </div>
+              </div>
+
+              {selectedRedemptionModal.notes && (
+                <div className="p-3 bg-emerald-950/30 border border-emerald-800/40 rounded-xl text-emerald-300">
+                  <span className="font-bold block mb-1">Notas del Cajero / Encargado:</span>
+                  <p className="text-zinc-300 italic">&quot;{selectedRedemptionModal.notes}&quot;</p>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2">
+                <Button
+                  onClick={() => setSelectedRedemptionModal(null)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                >
+                  Cerrar Comprobante
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Dialog */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
@@ -925,6 +1127,34 @@ const PromotionsManager = () => {
                   onChange={(e) => setFormData({ ...formData, terms_conditions: e.target.value })}
                   className="bg-zinc-900 border-zinc-800 text-white text-xs"
                 />
+              </div>
+            </div>
+
+            {/* Negocio y PIN de Validación (Escáner QR) */}
+            <div className="p-3 rounded-xl bg-purple-950/30 border border-purple-800/40 space-y-2">
+              <div className="flex items-center gap-2">
+                <Building className="h-3.5 w-3.5 text-purple-400" />
+                <Label className="text-purple-300 font-bold text-xs uppercase tracking-wider">Negocio y PIN de Validación (Escáner QR)</Label>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-zinc-300 text-xs">Nombre del Negocio</Label>
+                  <Input
+                    value={formData.merchant_name}
+                    onChange={(e) => setFormData({ ...formData, merchant_name: e.target.value })}
+                    placeholder="Ej: Bar La Pasión"
+                    className="bg-zinc-900 border-zinc-800 text-white text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-zinc-300 text-xs">Código PIN Secreto Negocio</Label>
+                  <Input
+                    value={formData.merchant_code}
+                    onChange={(e) => setFormData({ ...formData, merchant_code: e.target.value.toUpperCase() })}
+                    placeholder="Ej: PASION123"
+                    className="bg-zinc-900 border-zinc-800 text-white text-xs font-mono font-bold uppercase text-emerald-400"
+                  />
+                </div>
               </div>
             </div>
 

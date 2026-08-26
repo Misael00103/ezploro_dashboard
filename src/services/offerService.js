@@ -152,66 +152,10 @@ export const getOffers = async (filters = {}) => {
       resultOffers = data.data;
     }
 
-    try {
-      const localOffersStr = localStorage.getItem('ezploro_offers_config');
-      const localOffers = localOffersStr ? JSON.parse(localOffersStr) : [];
-      
-      // Combinar ofertas del backend con locales para no perder creaciones
-      const combined = [...resultOffers];
-      localOffers.forEach(loc => {
-        if (!combined.some(o => (o.id || o.offer_id) === (loc.id || loc.offer_id))) {
-          combined.push(loc);
-        }
-      });
-      
-      if (combined.length > 0) {
-        localStorage.setItem('ezploro_offers_config', JSON.stringify(combined));
-        return combined;
-      }
-    } catch (e) {
-      console.warn('Error combinando ofertas locales:', e);
-    }
-
     return resultOffers;
   } catch (error) {
-    console.warn('⚠️ Error en getOffers backend, intentando respaldo local:', error);
-    try {
-      const localOffersStr = localStorage.getItem('ezploro_offers_config');
-      if (localOffersStr) {
-        const parsed = JSON.parse(localOffersStr);
-        if (parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Error leyendo backup local de ofertas:', e);
-    }
-
-    // Default promo items if everything is empty
-    const defaultOffers = [
-      {
-        offer_id: 'offer-1',
-        title: 'Happy Hour 2x1 en Mojitos & Tragos',
-        category: 'Bebidas',
-        points_required: 300,
-        cost: 300,
-        description: 'Válido en Bares y Discotecas Afiliadas de la Ciudad.',
-        image_url: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=600&auto=format&fit=crop&q=80',
-        is_active: true,
-        promo_code: 'MOJITO2X1'
-      },
-      {
-        offer_id: 'offer-2',
-        title: 'Entrada VIP a Festival',
-        category: 'Entradas',
-        points_required: 500,
-        cost: 500,
-        description: 'Acceso preferencial a zona VIP y bar exclusivo.',
-        image_url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600&auto=format&fit=crop&q=80',
-        is_active: true,
-        promo_code: 'VIPFEST2026'
-      }
-    ];
-    localStorage.setItem('ezploro_offers_config', JSON.stringify(defaultOffers));
-    return defaultOffers;
+    console.warn('⚠️ Error en getOffers backend:', error);
+    return [];
   }
 };
 
@@ -379,14 +323,19 @@ export const createOffer = async (offerData, imageFile = null) => {
       const url = API_URL_OFFERS_CREATE;
       let response;
 
+      const cleanData = {};
+      Object.keys(offerData).forEach(key => {
+        const val = offerData[key];
+        if (val !== null && val !== undefined && val !== '') {
+          cleanData[key] = val;
+        }
+      });
+
       if (imageFile) {
         const formData = new FormData();
         formData.append('image', imageFile);
-        Object.keys(offerData).forEach(key => {
-          const val = offerData[key];
-          if (val !== null && val !== undefined && val !== '') {
-            formData.append(key, val);
-          }
+        Object.keys(cleanData).forEach(key => {
+          formData.append(key, cleanData[key]);
         });
         response = await fetch(url, {
           method: 'POST',
@@ -400,7 +349,7 @@ export const createOffer = async (offerData, imageFile = null) => {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}` 
           },
-          body: JSON.stringify(offerData)
+          body: JSON.stringify(cleanData)
         }).catch(() => null);
       }
 
@@ -439,29 +388,33 @@ export const updateOffer = async (offerId, offerData, imageFile = null) => {
   }
   localStorage.setItem('ezploro_offers_config', JSON.stringify(localOffers));
 
-  try {
-    const token = getAuthToken();
-    if (token) {
-      const url = API_URL_OFFERS_UPDATE.replace(':offerId', offerId);
-      const formData = new FormData();
-      if (imageFile) {
-        formData.append('image', imageFile);
-      }
-      Object.keys(offerData).forEach(key => {
-        const val = offerData[key];
-        if (val !== null && val !== undefined && val !== '') {
-          formData.append(key, val);
+  // Solo enviar petición al backend si el ID es numérico (ID existente en BD PostgreSQL)
+  const isNumericId = /^\d+$/.test(String(offerId));
+  if (isNumericId) {
+    try {
+      const token = getAuthToken();
+      if (token) {
+        const url = API_URL_OFFERS_UPDATE.replace(':offerId', offerId);
+        const formData = new FormData();
+        if (imageFile) {
+          formData.append('image', imageFile);
         }
-      });
+        Object.keys(offerData).forEach(key => {
+          const val = offerData[key];
+          if (val !== null && val !== undefined && val !== '') {
+            formData.append(key, val);
+          }
+        });
 
-      await fetch(url, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      }).catch(() => null);
+        await fetch(url, {
+          method: 'PUT',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        }).catch(() => null);
+      }
+    } catch (error) {
+      console.warn('⚠️ Error al actualizar oferta en backend:', error);
     }
-  } catch (error) {
-    console.warn('⚠️ Error al actualizar oferta en backend:', error);
   }
 
   return updatedOffer;
@@ -473,14 +426,17 @@ export const deleteOffer = async (offerId) => {
   localOffers = localOffers.filter(o => (o.offer_id || o.id || o._id) !== offerId);
   localStorage.setItem('ezploro_offers_config', JSON.stringify(localOffers));
 
-  try {
-    const token = getAuthToken();
-    if (token) {
-      const url = API_URL_OFFERS_DELETE.replace(':offerId', offerId);
-      await fetchWithAuth(url, { method: 'DELETE' }).catch(() => null);
+  const isNumericId = /^\d+$/.test(String(offerId));
+  if (isNumericId) {
+    try {
+      const token = getAuthToken();
+      if (token) {
+        const url = API_URL_OFFERS_DELETE.replace(':offerId', offerId);
+        await fetchWithAuth(url, { method: 'DELETE' }).catch(() => null);
+      }
+    } catch (error) {
+      console.warn('⚠️ Error al eliminar oferta en backend:', error);
     }
-  } catch (error) {
-    console.warn('⚠️ Error al eliminar oferta en backend:', error);
   }
 
   return { success: true, message: 'Oferta eliminada' };
@@ -500,17 +456,20 @@ export const toggleOfferStatus = async (offerId, isActive) => {
     localStorage.setItem('ezploro_offers_config', JSON.stringify(localOffers));
   }
 
-  try {
-    const token = getAuthToken();
-    if (token) {
-      const url = API_URL_OFFERS_TOGGLE_STATUS.replace(':id', offerId);
-      await fetchWithAuth(url, {
-        method: 'PATCH',
-        body: JSON.stringify({ is_active: newStatus })
-      }).catch(() => null);
+  const isNumericId = /^\d+$/.test(String(offerId));
+  if (isNumericId) {
+    try {
+      const token = getAuthToken();
+      if (token) {
+        const url = API_URL_OFFERS_TOGGLE_STATUS.replace(':id', offerId);
+        await fetchWithAuth(url, {
+          method: 'PATCH',
+          body: JSON.stringify({ is_active: newStatus })
+        }).catch(() => null);
+      }
+    } catch (error) {
+      console.warn('⚠️ Error alternando estado de oferta en backend:', error);
     }
-  } catch (error) {
-    console.warn('⚠️ Error alternando estado de oferta en backend:', error);
   }
 
   return localOffers[index] || { offer_id: offerId, is_active: newStatus };
@@ -582,14 +541,49 @@ export const getOfferStats = async (filters = {}) => {
       headers,
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
     return await response.json();
   } catch (error) {
     console.error('Error en getOfferStats:', error);
     throw error;
   }
 };
+
+/**
+ * Obtener lista de confirmaciones de canje de ofertas usando el endpoint activo del servidor
+ */
+export const getOfferRedemptions = async () => {
+  try {
+    const token = getAuthToken();
+    if (token) {
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      };
+
+      // Consultar endpoint activo /offer/rewards/my-redemptions (HTTP 200 OK en la nube)
+      const response = await fetch(`${BASE_URL}/offer/rewards/my-redemptions`, { headers }).catch(() => null);
+
+      if (response && response.ok) {
+        const data = await response.json().catch(() => null);
+        const list = data?.redemptions || data?.data || (Array.isArray(data) ? data : null);
+        if (Array.isArray(list)) {
+          return list;
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('⚠️ Error al consultar confirmaciones de canjes en backend:', error);
+  }
+
+  try {
+    const cached = localStorage.getItem('ezploro_offer_redemptions');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {}
+
+  return [];
+};
+
 

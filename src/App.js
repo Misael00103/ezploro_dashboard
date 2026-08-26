@@ -3,6 +3,7 @@ import "./App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
+import MerchantQrValidator from "./components/MerchantQrValidator";
 import { Toaster } from "./components/ui/toaster";
 
 function App() {
@@ -72,7 +73,11 @@ function App() {
               )
             } 
           />
+          <Route path="/validate-qr" element={<MerchantQrValidator />} />
+          <Route path="/scan-qr" element={<MerchantQrValidator />} />
+          <Route path="/validar-cupon" element={<MerchantQrValidator />} />
         </Routes>
+
       </BrowserRouter>
       <Toaster />
     </div>

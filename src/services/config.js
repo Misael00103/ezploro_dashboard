@@ -397,6 +397,8 @@ export const API_URL_OFFERS_DELETE = `${API_URL_OFFERS}/:offerId` // DELETE /api
 export const API_URL_OFFERS_TOGGLE_STATUS = `${API_URL_OFFERS}/:id/toggle-status`
 export const API_URL_OFFERS_REDEEM = `${API_URL_OFFERS}/redeem/:offerId` // POST /api/offer/rewards/offers/redeem/:offerId
 export const API_URL_OFFERS_MY_REDEMPTIONS = `${BASE_URL}/offer/rewards/my-redemptions` // GET /api/offer/rewards/my-redemptions
+export const API_URL_OFFERS_VERIFY_CODE = `${BASE_URL}/offer/rewards/verify-code` // POST /api/offer/rewards/verify-code
+export const API_URL_OFFERS_USE_CODE = `${BASE_URL}/offer/rewards/use-code` // POST /api/offer/rewards/use-code
 
 // Configuración adicional
 export const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_PLACES_API_KEY || "";

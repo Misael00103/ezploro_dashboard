@@ -4,7 +4,8 @@ import {
   API_URL_VIP_PASS_LEVELS, 
   API_URL_VIP_PASS_CONFIG,
   API_URL_GAMIFICATION_VIP_LEVELS,
-  API_URL_GAMIFICATION_VIP_PASS
+  API_URL_GAMIFICATION_VIP_PASS,
+  BASE_URL
 } from './config';
 
 const STORAGE_KEY_VIP_PASS = 'ezploro_vip_pass_config';
@@ -71,6 +72,25 @@ export const saveVipConfig = (levels) => {
   }
 };
 
+const silentFetch = async (url) => {
+  try {
+    const token = getAuthToken();
+    if (!token) return null;
+    const fullUrl = url.startsWith('http') ? url : `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+    const res = await fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    }).catch(() => null);
+    if (res && res.ok) {
+      return await res.json().catch(() => null);
+    }
+  } catch (e) {}
+  return null;
+};
+
 /**
  * Obtener todos los niveles de Pass VIP configurados
  */
@@ -80,7 +100,7 @@ export const getVipPassLevels = async () => {
     const token = getAuthToken();
     if (token) {
       // 1. Intentar /api/gamification/vip-levels
-      const levelsRes = await fetchWithAuth(API_URL_GAMIFICATION_VIP_LEVELS).catch(() => null);
+      const levelsRes = await silentFetch(API_URL_GAMIFICATION_VIP_LEVELS);
       if (levelsRes && Array.isArray(levelsRes) && levelsRes.length > 0) {
         saveVipConfig(levelsRes);
         return levelsRes;
@@ -91,7 +111,7 @@ export const getVipPassLevels = async () => {
       }
 
       // 2. Intentar /api/gamification/vip-pass
-      const profileRes = await fetchWithAuth(API_URL_GAMIFICATION_VIP_PASS).catch(() => null);
+      const profileRes = await silentFetch(API_URL_GAMIFICATION_VIP_PASS);
       if (profileRes && (profileRes.level || profileRes.levelName)) {
         const index = stored.findIndex(l => l.level === (profileRes.level || 3));
         const backendLevel = {
@@ -114,7 +134,7 @@ export const getVipPassLevels = async () => {
       }
 
       // 3. Fallback /api/vip-pass/levels
-      const response = await fetchWithAuth(API_URL_VIP_PASS_LEVELS).catch(() => null);
+      const response = await silentFetch(API_URL_VIP_PASS_LEVELS);
       if (response && Array.isArray(response) && response.length > 0) {
         saveVipConfig(response);
         return response;

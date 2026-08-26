@@ -26,7 +26,9 @@ import {
   Clock,
   Zap,
   Award,
-  Upload
+  Upload,
+  RefreshCw,
+  Gift
 } from 'lucide-react';
 import {
   getAds,
@@ -34,7 +36,9 @@ import {
   updateAd,
   deleteAd,
   toggleAdStatus,
-  getAdStats
+  getAdStats,
+  getRewardedAdState,
+  saveRewardedAdConfig
 } from '../services/adsService';
 import { toast } from 'react-hot-toast';
 
@@ -42,8 +46,8 @@ const AdsManager = () => {
   const [activeTab, setActiveTab] = useState('ads');
   const [ads, setAds] = useState([]);
   const [stats, setStats] = useState({});
+  const [rewardedState, setRewardedState] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedAd, setSelectedAd] = useState(null);
 
@@ -81,10 +85,22 @@ const AdsManager = () => {
   const loadData = async () => {
     try {
       setIsLoading(true);
-      const adsList = await getAds();
+      // Purgar la caché residual del navegador si contenía contadores simulados legacy (1422 / 1282)
+      try {
+        const raw = localStorage.getItem('ezploro_ads_config');
+        if (raw && (raw.includes('1422') || raw.includes('1420') || raw.includes('1282') || raw.includes('1280'))) {
+          localStorage.removeItem('ezploro_ads_config');
+        }
+      } catch (e) {}
+
+      const [adsList, adStats, rewardedInfo] = await Promise.all([
+        getAds(),
+        getAdStats(),
+        getRewardedAdState()
+      ]);
       setAds(adsList);
-      const adStats = await getAdStats();
       setStats(adStats);
+      setRewardedState(rewardedInfo);
     } catch (error) {
       console.error('Error cargando anuncios:', error);
       toast.error('Error al cargar la información de publicidad');
@@ -135,7 +151,11 @@ const AdsManager = () => {
         toast.error('El título del anuncio es obligatorio');
         return;
       }
-      await createAd(formData);
+      if (formData.type === 'Rewarded Ad') {
+        await saveRewardedAdConfig(formData);
+      } else {
+        await createAd(formData);
+      }
       toast.success('📢 Anuncio creado exitosamente');
       setActiveTab('ads');
       loadData();
@@ -149,8 +169,12 @@ const AdsManager = () => {
     e.preventDefault();
     if (!selectedAd) return;
     try {
-      await updateAd(selectedAd.id || selectedAd._id, formData);
-      toast.success('✨ Anuncio actualizado correctamente');
+      if (formData.type === 'Rewarded Ad' || selectedAd.id === 'ad-rewarded-2x') {
+        await saveRewardedAdConfig({ ...selectedAd, ...formData });
+      } else {
+        await updateAd(selectedAd.id || selectedAd._id, formData);
+      }
+      toast.success('✨ Configuración guardada correctamente para la app móvil');
       setIsEditModalOpen(false);
       loadData();
     } catch (error) {
@@ -197,16 +221,26 @@ const AdsManager = () => {
             <h1 className="text-3xl font-bold text-white tracking-tight">Gestión de Publicidad & Ads</h1>
           </div>
           <p className="text-zinc-400 mt-2 max-w-2xl">
-            Configura los Rewarded Ads de &quot;Multiplica 2X tus Puntos&quot;, la duración del anuncio, límites diarios por usuario y consulta las estadísticas de visualizaciones.
+            Configura los Rewarded Ads de &quot;Multiplica 2X tus Puntos&quot;, la duración del anuncio, límites diarios por usuario y consulta las estadísticas de visualizaciones consumidas por la app móvil.
           </p>
         </div>
-        <Button
-          onClick={handleCreateOpen}
-          className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-zinc-950 font-bold shadow-lg shadow-amber-500/20"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Crear Anuncio
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => loadData()}
+            variant="outline"
+            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            Sincronizar
+          </Button>
+          <Button
+            onClick={handleCreateOpen}
+            className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-zinc-950 font-bold shadow-lg shadow-amber-500/20"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Crear Anuncio
+          </Button>
+        </div>
       </div>
 
       {/* Stats Quick Overview */}
@@ -239,7 +273,7 @@ const AdsManager = () => {
           <CardContent className="p-5 flex items-center justify-between">
             <div>
               <p className="text-xs text-zinc-400 font-medium uppercase tracking-wider">Vistas Totales</p>
-              <h3 className="text-2xl font-bold text-sky-400 mt-1">{stats.totalViews?.toLocaleString() || '1,420'}</h3>
+              <h3 className="text-2xl font-bold text-sky-400 mt-1">{(stats.totalViews || 0).toLocaleString()}</h3>
             </div>
             <div className="p-3 bg-sky-500/10 rounded-xl text-sky-400">
               <Eye className="h-6 w-6" />
@@ -251,7 +285,7 @@ const AdsManager = () => {
           <CardContent className="p-5 flex items-center justify-between">
             <div>
               <p className="text-xs text-zinc-400 font-medium uppercase tracking-wider">Tasa de Conversión</p>
-              <h3 className="text-2xl font-bold text-violet-400 mt-1">{stats.conversionRate || '90.1'}%</h3>
+              <h3 className="text-2xl font-bold text-violet-400 mt-1">{stats.conversionRate || '0.0'}%</h3>
             </div>
             <div className="p-3 bg-violet-500/10 rounded-xl text-violet-400">
               <TrendingUp className="h-6 w-6" />
@@ -282,16 +316,86 @@ const AdsManager = () => {
         </TabsList>
 
         {/* Tab 1: Ads List */}
-        <TabsContent value="ads">
+        <TabsContent value="ads" className="space-y-6">
+          {/* Featured Rewarded 2X Configuration Card */}
+          {rewardedState && (
+            <div className="glass-panel p-6 rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-950/30 via-zinc-900 to-zinc-950 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-6 pointer-events-none opacity-10">
+                <Zap className="h-48 w-48 text-amber-400" />
+              </div>
+              <div className="relative z-10 space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-amber-500/20 pb-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold uppercase tracking-wider">
+                        ⭐ Configuración Principal Rewarded Ad 2X
+                      </Badge>
+                      <Badge className={rewardedState.status === 'Activo' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800 text-zinc-400'}>
+                        {rewardedState.status}
+                      </Badge>
+                    </div>
+                    <h2 className="text-2xl font-extrabold text-white mt-1 flex items-center gap-2">
+                      {rewardedState.title || 'Multiplica 2X tus Puntos'}
+                      <span className="text-amber-400 text-lg font-mono font-bold bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/30">
+                        {rewardedState.multiplier || '2X'}
+                      </span>
+                    </h2>
+                  </div>
+
+                  <Button
+                    onClick={() => handleEditOpen(rewardedState)}
+                    className="bg-amber-500 hover:bg-amber-600 text-zinc-950 font-bold shadow-lg shadow-amber-500/20"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Editar Configuración
+                  </Button>
+                </div>
+
+                <p className="text-zinc-300 text-sm">{rewardedState.description}</p>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
+                  <div className="p-3 bg-zinc-950/70 rounded-xl border border-zinc-800/80">
+                    <span className="text-[11px] text-zinc-400 uppercase font-bold tracking-wider">Duración del Anuncio</span>
+                    <div className="flex items-center gap-2 mt-1 text-white font-bold text-lg">
+                      <Clock className="h-5 w-5 text-amber-400" />
+                      {parseInt(rewardedState.duration) || 30}s
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-zinc-950/70 rounded-xl border border-zinc-800/80">
+                    <span className="text-[11px] text-zinc-400 uppercase font-bold tracking-wider">Límite Diario / Usuario</span>
+                    <div className="flex items-center gap-2 mt-1 text-emerald-400 font-bold text-lg">
+                      <Sparkles className="h-5 w-5 text-emerald-400" />
+                      {parseInt(rewardedState.daily_limit) || 1} ad/día
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-zinc-950/70 rounded-xl border border-zinc-800/80">
+                    <span className="text-[11px] text-zinc-400 uppercase font-bold tracking-wider">Visualizaciones Móviles</span>
+                    <div className="flex items-center gap-2 mt-1 text-sky-400 font-bold text-lg">
+                      <Eye className="h-5 w-5 text-sky-400" />
+                      {rewardedState.views_count || 0}
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-zinc-950/70 rounded-xl border border-zinc-800/80">
+                    <span className="text-[11px] text-zinc-400 uppercase font-bold tracking-wider">Recompensas Reclamadas</span>
+                    <div className="flex items-center gap-2 mt-1 text-purple-400 font-bold text-lg">
+                      <Award className="h-5 w-5 text-purple-400" />
+                      {rewardedState.completions_count || 0}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <Card className="glass-panel border-zinc-800/50">
             <CardHeader className="border-b border-zinc-800/50">
               <CardTitle className="text-white flex items-center gap-2">
                 <PlayCircle className="h-5 w-5 text-amber-400" />
                 Catálogo de Anuncios Configurados
               </CardTitle>
-              <CardDescription className="text-zinc-400">
-                Estos anuncios son servidos al backend y a la app React Native para validar recompensas 2X de puntos.
-              </CardDescription>
             </CardHeader>
             <CardContent className="p-6">
               {isLoading ? (
@@ -300,7 +404,7 @@ const AdsManager = () => {
                 </div>
               ) : ads.length === 0 ? (
                 <div className="text-center p-12 text-zinc-500">
-                  No hay anuncios configurados. Presiona &quot;Crear Anuncio&quot; para agregar uno.
+                  No hay anuncios configurados.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -329,29 +433,10 @@ const AdsManager = () => {
                         </div>
 
                         <p className="text-zinc-400 text-sm mb-4 line-clamp-2">{ad.description}</p>
-
-                        <div className="grid grid-cols-2 gap-3 p-3 bg-zinc-950/60 rounded-lg text-xs border border-zinc-800/60 mb-4">
-                          <div className="flex items-center gap-1.5 text-zinc-300">
-                            <Clock className="h-3.5 w-3.5 text-amber-400" />
-                            <span>Duración: <strong>{ad.duration}s</strong></span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-zinc-300">
-                            <Zap className="h-3.5 w-3.5 text-amber-400" />
-                            <span>Multiplicador: <strong className="text-amber-400">{ad.multiplier}</strong></span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-zinc-300">
-                            <Award className="h-3.5 w-3.5 text-amber-400" />
-                            <span>Recompensa: <strong>{ad.reward}</strong></span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-zinc-300">
-                            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                            <span>Límite diario: <strong>{ad.daily_limit} ad/día</strong></span>
-                          </div>
-                        </div>
                       </div>
 
                       <div className="flex items-center justify-between pt-3 border-t border-zinc-800/60 text-xs text-zinc-400">
-                        <span>Vistas completadas: <strong className="text-white">{ad.completions_count || 0}</strong></span>
+                        <span>Vistas: <strong className="text-white">{ad.completions_count || 0}</strong></span>
                         <div className="flex items-center gap-2">
                           <Button
                             size="sm"
@@ -385,20 +470,12 @@ const AdsManager = () => {
           <Card className="glass-panel border-zinc-800/50">
             <CardHeader>
               <CardTitle className="text-white">Campañas Publicitarias Activas</CardTitle>
-              <CardDescription className="text-zinc-400">
-                Gestiona convenios con marcas y patrocinadores de eventos.
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 p-6">
               <div className="p-5 glass-panel rounded-xl border border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
                 <div className="space-y-1">
                   <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30">Campaña Oficial</Badge>
                   <h4 className="text-lg font-bold text-white">Multiplicador Doble Coins Ezploro</h4>
-                  <p className="text-xs text-zinc-400">Patrocinado por Ezploro Gamification System • Objetivo: 10,000 reproducciones</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-sm font-bold text-emerald-400">1,280 / 10,000</span>
-                  <p className="text-xs text-zinc-500">12.8% completado</p>
                 </div>
               </div>
             </CardContent>
@@ -410,9 +487,6 @@ const AdsManager = () => {
           <Card className="glass-panel border-zinc-800/50 max-w-2xl mx-auto">
             <CardHeader>
               <CardTitle className="text-white">Crear Nuevo Anuncio (Ad)</CardTitle>
-              <CardDescription className="text-zinc-400">
-                Define el título, tipo, duración y multiplicador de recompensas para la app.
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleCreateSubmit} className="space-y-4">
@@ -426,121 +500,19 @@ const AdsManager = () => {
                       <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
                         <SelectItem value="Rewarded Ad">Rewarded Ad (Con Premio)</SelectItem>
                         <SelectItem value="Banner">Banner Promocional</SelectItem>
-                        <SelectItem value="Interstitial">Interstitial (Pantalla Completa)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-
                   <div className="space-y-2">
                     <Label className="text-zinc-300">Título del Anuncio</Label>
                     <Input
                       value={formData.title}
                       onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                      placeholder="Ej: Multiplica 2X tus Puntos"
                       className="bg-zinc-900 border-zinc-800 text-white"
                     />
                   </div>
                 </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-zinc-300">Duración (segundos)</Label>
-                    <Input
-                      type="number"
-                      value={formData.duration}
-                      onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-                      className="bg-zinc-900 border-zinc-800 text-white"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-zinc-300">Multiplicador</Label>
-                    <Input
-                      value={formData.multiplier}
-                      onChange={(e) => setFormData({ ...formData, multiplier: e.target.value })}
-                      placeholder="Ej: 2X, 3X, 5X"
-                      className="bg-zinc-900 border-zinc-800 text-white"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-zinc-300">Límite Diario</Label>
-                    <Input
-                      type="number"
-                      value={formData.daily_limit}
-                      onChange={(e) => setFormData({ ...formData, daily_limit: e.target.value })}
-                      placeholder="1"
-                      className="bg-zinc-900 border-zinc-800 text-white"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-zinc-300">Descripción para el Usuario</Label>
-                  <Textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Ej: Duplica instantáneamente tus Ezploro Coins acumulados"
-                    rows={3}
-                    className="bg-zinc-900 border-zinc-800 text-white"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-zinc-300 flex items-center justify-between">
-                    <span>Imagen o Media del Anuncio</span>
-                    <span className="text-xs text-amber-400 font-normal">Selección Local / Archivo</span>
-                  </Label>
-
-                  {formData.media_url ? (
-                    <div className="relative w-full h-40 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 group">
-                      <img
-                        src={formData.media_url}
-                        alt="Ad Preview"
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                        <label className="cursor-pointer bg-amber-500 hover:bg-amber-600 text-zinc-950 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-lg">
-                          <Upload className="h-4 w-4" />
-                          Cambiar Archivo Local
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleLocalMediaChange}
-                            className="hidden"
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setFormData((prev) => ({ ...prev, media_url: '' }))}
-                          className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-lg"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Quitar
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-zinc-800 hover:border-amber-500/50 rounded-xl cursor-pointer bg-zinc-900/40 hover:bg-zinc-900/80 transition-all">
-                      <div className="flex flex-col items-center justify-center text-center">
-                        <Upload className="h-7 w-7 text-amber-400 mb-1.5 animate-bounce" />
-                        <p className="text-xs font-bold text-white mb-0.5">Haz clic para seleccionar imagen del anuncio</p>
-                        <p className="text-[11px] text-zinc-500">Selecciona desde tu equipo (PNG, JPG, WEBP)</p>
-                      </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleLocalMediaChange}
-                        className="hidden"
-                      />
-                    </label>
-                  )}
-                </div>
-
                 <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
-                  <Button type="button" variant="outline" onClick={() => setActiveTab('ads')} className="border-zinc-700 text-zinc-300">
-                    Cancelar
-                  </Button>
                   <Button type="submit" className="bg-amber-500 hover:bg-amber-600 text-zinc-950 font-bold">
                     Guardar Anuncio
                   </Button>
@@ -555,26 +527,29 @@ const AdsManager = () => {
           <Card className="glass-panel border-zinc-800/50">
             <CardHeader>
               <CardTitle className="text-white">Estadísticas de Publicidad</CardTitle>
-              <CardDescription className="text-zinc-400">
-                Rendimiento de reproducciones e impacto en la gamificación.
-              </CardDescription>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="p-5 glass-panel rounded-xl border border-zinc-800 bg-zinc-900/40 text-center">
                   <span className="text-xs text-zinc-400 uppercase tracking-wider font-bold">Coins Entregados por Ads</span>
-                  <h2 className="text-3xl font-extrabold text-amber-400 mt-2">128,400 PTS</h2>
-                  <p className="text-xs text-zinc-500 mt-1">Acumulado del mes</p>
+                  <h2 className="text-3xl font-extrabold text-amber-400 mt-2">
+                    {((stats.totalCompletions || 0) * 100).toLocaleString()} PTS
+                  </h2>
+                  <p className="text-xs text-zinc-500 mt-1">Calculado sobre reproducciones reales completadas</p>
                 </div>
                 <div className="p-5 glass-panel rounded-xl border border-zinc-800 bg-zinc-900/40 text-center">
-                  <span className="text-xs text-zinc-400 uppercase tracking-wider font-bold">Promedio de Anuncios / Usuario</span>
-                  <h2 className="text-3xl font-extrabold text-sky-400 mt-2">0.92 ad/día</h2>
-                  <p className="text-xs text-zinc-500 mt-1">Cerca del límite de 1 por día</p>
+                  <span className="text-xs text-zinc-400 uppercase tracking-wider font-bold">Uso Diario Configurado</span>
+                  <h2 className="text-3xl font-extrabold text-sky-400 mt-2">
+                    {rewardedState?.daily_limit || 1} ad/día
+                  </h2>
+                  <p className="text-xs text-zinc-500 mt-1">Límite por usuario consumible en la app</p>
                 </div>
                 <div className="p-5 glass-panel rounded-xl border border-zinc-800 bg-zinc-900/40 text-center">
-                  <span className="text-xs text-zinc-400 uppercase tracking-wider font-bold">Retención tras Anuncio</span>
-                  <h2 className="text-3xl font-extrabold text-emerald-400 mt-2">94.8%</h2>
-                  <p className="text-xs text-zinc-500 mt-1">Usuarios no abandonan la app</p>
+                  <span className="text-xs text-zinc-400 uppercase tracking-wider font-bold">Tasa de Conversión Real</span>
+                  <h2 className="text-3xl font-extrabold text-emerald-400 mt-2">
+                    {stats.conversionRate || '0.0'}%
+                  </h2>
+                  <p className="text-xs text-zinc-500 mt-1">Vistas completadas en la app móvil</p>
                 </div>
               </div>
             </CardContent>
@@ -586,25 +561,23 @@ const AdsManager = () => {
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="glass-panel border-zinc-800 bg-zinc-950 text-white max-w-lg">
           <DialogHeader>
-            <DialogTitle>Editar Anuncio</DialogTitle>
+            <DialogTitle>Editar Configuración de Anuncio</DialogTitle>
             <DialogDescription className="text-zinc-400">
-              Modifica la duración, multiplicador o límite diario.
+              Modifica la duración, multiplicador, límite diario por usuario y estado servido a la app móvil.
             </DialogDescription>
           </DialogHeader>
-
           <form onSubmit={handleEditSubmit} className="space-y-4 mt-2">
             <div className="space-y-2">
-              <Label>Título</Label>
+              <Label className="text-zinc-300">Título</Label>
               <Input
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 className="bg-zinc-900 border-zinc-800 text-white"
               />
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-2">
-                <Label>Duración (segundos)</Label>
+                <Label className="text-zinc-300 text-xs">Duración (segundos)</Label>
                 <Input
                   type="number"
                   value={formData.duration}
@@ -613,79 +586,24 @@ const AdsManager = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Multiplicador</Label>
+                <Label className="text-zinc-300 text-xs">Multiplicador</Label>
                 <Input
                   value={formData.multiplier}
                   onChange={(e) => setFormData({ ...formData, multiplier: e.target.value })}
                   className="bg-zinc-900 border-zinc-800 text-white"
                 />
               </div>
+              <div className="space-y-2">
+                <Label className="text-zinc-300 text-xs">Límite Diario</Label>
+                <Input
+                  type="number"
+                  value={formData.daily_limit}
+                  onChange={(e) => setFormData({ ...formData, daily_limit: e.target.value })}
+                  className="bg-zinc-900 border-zinc-800 text-white"
+                />
+              </div>
             </div>
-
-            <div className="space-y-2">
-              <Label className="text-zinc-300">Descripción</Label>
-              <Textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={3}
-                className="bg-zinc-900 border-zinc-800 text-white"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-zinc-300 flex items-center justify-between">
-                <span>Imagen / Media del Anuncio</span>
-                <span className="text-xs text-amber-400 font-normal">Selección Local</span>
-              </Label>
-
-              {formData.media_url ? (
-                <div className="relative w-full h-36 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 group">
-                  <img
-                    src={formData.media_url}
-                    alt="Ad Preview"
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                    <label className="cursor-pointer bg-amber-500 hover:bg-amber-600 text-zinc-950 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg">
-                      <Upload className="h-3.5 w-3.5" />
-                      Cambiar Imagen Local
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleLocalMediaChange}
-                        className="hidden"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setFormData((prev) => ({ ...prev, media_url: '' }))}
-                      className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Quitar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-zinc-800 hover:border-amber-500/50 rounded-xl cursor-pointer bg-zinc-900/40 hover:bg-zinc-900/80 transition-all">
-                  <div className="flex flex-col items-center justify-center text-center">
-                    <Upload className="h-6 w-6 text-amber-400 mb-1 animate-bounce" />
-                    <p className="text-xs font-bold text-white mb-0.5">Seleccionar imagen local</p>
-                  </div>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleLocalMediaChange}
-                    className="hidden"
-                  />
-                </label>
-              )}
-            </div>
-
             <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
-              <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)} className="border-zinc-700 text-zinc-300">
-                Cancelar
-              </Button>
               <Button type="submit" className="bg-amber-500 hover:bg-amber-600 text-zinc-950 font-bold">
                 Guardar Cambios
               </Button>
@@ -698,3 +616,4 @@ const AdsManager = () => {
 };
 
 export default AdsManager;
+
