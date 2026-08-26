@@ -70,6 +70,8 @@ export const dashboardGamificationService = {
   deleteAd: deleteAd,
   getAdStats: getAdStats,
   getRewardedAdState: getRewardedAdState,
+  getRewardedAdConfig: getRewardedAdState,
+  updateRewardedAdConfig: saveRewardedAdConfig,
   claimRewardedAd: claimRewardedAd,
   saveRewardedAdConfig: saveRewardedAdConfig
 };

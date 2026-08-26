@@ -46,16 +46,66 @@ const StreaksManager = () => {
     loadData();
   }, []);
 
+  const handleFieldChange = (field, value) => {
+    if (!streakConfig) return;
+    const updated = { ...streakConfig };
+
+    if (field === 'target' || field === 'target_days' || field === 'targetDays') {
+      const val = parseInt(value) || 0;
+      updated.target = val;
+      updated.target_days = val;
+      updated.targetDays = val;
+    } else if (field === 'basePointsPerDay' || field === 'base_points_per_day') {
+      const val = parseInt(value) || 0;
+      updated.basePointsPerDay = val;
+      updated.base_points_per_day = val;
+    } else if (field === 'freezeCostPoints' || field === 'freeze_streak_cost') {
+      const val = parseInt(value) || 0;
+      updated.freezeCostPoints = val;
+      updated.freeze_streak_cost = val;
+    } else if (field === 'rules_summary' || field === 'summary_rules') {
+      updated.rules_summary = value;
+      updated.summary_rules = value;
+    } else if (field === 'enabled' || field === 'is_active') {
+      updated.enabled = !!value;
+      updated.is_active = !!value;
+    } else {
+      updated[field] = value;
+    }
+
+    setStreakConfig(updated);
+  };
+
   const handleDayChange = (index, field, value) => {
-    if (!streakConfig || !streakConfig.days) return;
-    const updatedDays = [...streakConfig.days];
-    updatedDays[index] = {
-      ...updatedDays[index],
-      [field]: value
-    };
+    if (!streakConfig) return;
+    const daysList = streakConfig.days_config || streakConfig.daysConfig || streakConfig.days || streakConfig.daysOfWeek || [];
+    const updatedDays = [...daysList];
+    const dayItem = { ...updatedDays[index] };
+
+    if (field === 'bonus' || field === 'is_bonus' || field === 'isBonus' || field === 'bonusDay') {
+      const boolVal = !!value;
+      dayItem.bonus = boolVal;
+      dayItem.is_bonus = boolVal;
+      dayItem.isBonus = boolVal;
+      dayItem.bonusDay = boolVal;
+    } else if (field === 'points' || field === 'points_day' || field === 'pointsDay' || field === 'puntos') {
+      const numPts = parseInt(value) || 0;
+      dayItem.points = numPts;
+      dayItem.points_day = numPts;
+      dayItem.pointsDay = numPts;
+      dayItem.puntos = numPts;
+    } else {
+      dayItem[field] = value;
+    }
+
+    updatedDays[index] = dayItem;
+
     setStreakConfig({
       ...streakConfig,
-      days: updatedDays
+      days: updatedDays,
+      days_config: updatedDays,
+      daysConfig: updatedDays,
+      daysOfWeek: updatedDays
     });
   };
 
@@ -84,6 +134,8 @@ const StreaksManager = () => {
     );
   }
 
+  const isSystemEnabled = !!(streakConfig?.enabled ?? streakConfig?.is_active);
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -102,11 +154,11 @@ const StreaksManager = () => {
         <div className="flex items-center gap-3">
           <span className="text-xs text-zinc-400">Sistema de Rachas:</span>
           <Switch
-            checked={!!streakConfig.enabled}
-            onCheckedChange={(checked) => setStreakConfig({ ...streakConfig, enabled: checked })}
+            checked={isSystemEnabled}
+            onCheckedChange={(checked) => handleFieldChange('enabled', checked)}
           />
-          <Badge className={streakConfig.enabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800 text-zinc-400'}>
-            {streakConfig.enabled ? 'Activo' : 'Pausado'}
+          <Badge className={isSystemEnabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800 text-zinc-400'}>
+            {isSystemEnabled ? 'Activo' : 'Pausado'}
           </Badge>
         </div>
       </div>
@@ -129,8 +181,8 @@ const StreaksManager = () => {
                 <Label className="text-zinc-300">Target de Días (Meta)</Label>
                 <Input
                   type="number"
-                  value={streakConfig.target || 7}
-                  onChange={(e) => setStreakConfig({ ...streakConfig, target: e.target.value })}
+                  value={streakConfig.target ?? streakConfig.target_days ?? 7}
+                  onChange={(e) => handleFieldChange('target', e.target.value)}
                   className="bg-zinc-900 border-zinc-800 text-white font-bold text-orange-400"
                 />
               </div>
@@ -139,8 +191,8 @@ const StreaksManager = () => {
                 <Label className="text-zinc-300">Puntos Base por Día</Label>
                 <Input
                   type="number"
-                  value={streakConfig.basePointsPerDay || 10}
-                  onChange={(e) => setStreakConfig({ ...streakConfig, basePointsPerDay: e.target.value })}
+                  value={streakConfig.basePointsPerDay ?? streakConfig.base_points_per_day ?? 10}
+                  onChange={(e) => handleFieldChange('basePointsPerDay', e.target.value)}
                   className="bg-zinc-900 border-zinc-800 text-white font-bold"
                 />
               </div>
@@ -152,8 +204,8 @@ const StreaksManager = () => {
                 </Label>
                 <Input
                   type="number"
-                  value={streakConfig.freezeCostPoints || 50}
-                  onChange={(e) => setStreakConfig({ ...streakConfig, freezeCostPoints: e.target.value })}
+                  value={streakConfig.freezeCostPoints ?? streakConfig.freeze_streak_cost ?? 50}
+                  onChange={(e) => handleFieldChange('freezeCostPoints', e.target.value)}
                   className="bg-zinc-900 border-zinc-800 text-white font-bold"
                 />
               </div>
@@ -162,8 +214,8 @@ const StreaksManager = () => {
             <div className="space-y-2">
               <Label className="text-zinc-300">Resumen de Reglas</Label>
               <Textarea
-                value={streakConfig.rules_summary || ''}
-                onChange={(e) => setStreakConfig({ ...streakConfig, rules_summary: e.target.value })}
+                value={streakConfig.rules_summary ?? streakConfig.summary_rules ?? ''}
+                onChange={(e) => handleFieldChange('rules_summary', e.target.value)}
                 rows={2}
                 className="bg-zinc-900 border-zinc-800 text-white text-sm"
               />
@@ -184,43 +236,48 @@ const StreaksManager = () => {
           </CardHeader>
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
-              {streakConfig.days?.map((dayObj, idx) => (
-                <div
-                  key={dayObj.day || idx}
-                  className={`p-4 rounded-xl border flex flex-col justify-between transition-all ${
-                    dayObj.bonus
-                      ? 'bg-gradient-to-b from-amber-950/40 via-zinc-900 to-zinc-900 border-amber-500/50 shadow-lg shadow-amber-500/10'
-                      : 'bg-zinc-900/50 border-zinc-800'
-                  }`}
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-lg font-black text-white">{dayObj.day}</span>
-                      {dayObj.bonus && (
-                        <span className="text-amber-400 text-sm animate-pulse">⭐</span>
-                      )}
-                    </div>
+              {(streakConfig.days_config || streakConfig.daysConfig || streakConfig.days || streakConfig.daysOfWeek || []).map((dayObj, idx) => {
+                const isBonusActive = dayObj.is_bonus === true || dayObj.bonus === true || dayObj.isBonus === true || dayObj.bonusDay === true;
+                const currentPts = dayObj.points ?? dayObj.points_day ?? dayObj.puntos ?? dayObj.pointsDay ?? 10;
+                const dayLabel = dayObj.day || dayObj.name || `Día ${idx + 1}`;
+                return (
+                  <div
+                    key={dayLabel || idx}
+                    className={`p-4 rounded-xl border flex flex-col justify-between transition-all ${
+                      isBonusActive
+                        ? 'bg-gradient-to-b from-amber-950/40 via-zinc-900 to-zinc-900 border-amber-500/50 shadow-lg shadow-amber-500/10'
+                        : 'bg-zinc-900/50 border-zinc-800'
+                    }`}
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-lg font-black text-white">{dayLabel}</span>
+                        {isBonusActive && (
+                          <span className="text-amber-400 text-sm animate-pulse">⭐</span>
+                        )}
+                      </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-[11px] text-zinc-400">Puntos Día</Label>
-                      <Input
-                        type="number"
-                        value={dayObj.points || 10}
-                        onChange={(e) => handleDayChange(idx, 'points', parseInt(e.target.value) || 0)}
-                        className="bg-zinc-950 border-zinc-800 text-white h-8 text-xs font-bold text-center"
-                      />
-                    </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-zinc-400">Puntos Día</Label>
+                        <Input
+                          type="number"
+                          value={currentPts}
+                          onChange={(e) => handleDayChange(idx, 'points', e.target.value)}
+                          className="bg-zinc-950 border-zinc-800 text-white h-8 text-xs font-bold text-center"
+                        />
+                      </div>
 
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-[11px] text-zinc-400">Día Bonus</span>
-                      <Switch
-                        checked={!!dayObj.bonus}
-                        onCheckedChange={(checked) => handleDayChange(idx, 'bonus', checked)}
-                      />
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[11px] text-zinc-400">Día Bonus</span>
+                        <Switch
+                          checked={isBonusActive}
+                          onCheckedChange={(checked) => handleDayChange(idx, 'bonus', checked)}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>

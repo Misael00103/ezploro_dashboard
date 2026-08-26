@@ -459,10 +459,12 @@ export const API_URL_PROMOTIONS_CATEGORIES = `${BASE_URL}/promotions/categories`
 export const API_URL_GAMIFICATION_VIP_PASS = `${BASE_URL}/gamification/vip-pass`
 export const API_URL_GAMIFICATION_VIP_LEVELS = `${BASE_URL}/gamification/vip-levels`
 export const API_URL_GAMIFICATION_REWARDED_AD = `${BASE_URL}/gamification/rewarded-ad`
+export const API_URL_GAMIFICATION_REWARDED_AD_CONFIG = `${BASE_URL}/gamification/rewarded-ad-config`
 export const API_URL_GAMIFICATION_CLAIM_REWARDED_AD = `${BASE_URL}/gamification/claim-rewarded-ad`
 export const API_URL_GAMIFICATION_DAILY_PRIZE = `${BASE_URL}/gamification/daily-prize`
 export const API_URL_GAMIFICATION_CLAIM_DAILY_PRIZE = `${BASE_URL}/gamification/claim-daily-prize`
 export const API_URL_GAMIFICATION_DAILY_PRIZE_CONFIG = `${BASE_URL}/gamification/daily-prize-config`
 export const API_URL_GAMIFICATION_DAILY_STREAK = `${BASE_URL}/gamification/daily-streak`
+export const API_URL_GAMIFICATION_DAILY_STREAK_CONFIG = `${BASE_URL}/gamification/daily-streak-config`
 export const API_URL_GAMIFICATION_CHECK_IN = `${BASE_URL}/gamification/check-in`
 

@@ -7,6 +7,7 @@ import {
   API_URL_ADS_STATS,
   API_URL_ADS_TOGGLE_STATUS,
   API_URL_GAMIFICATION_REWARDED_AD,
+  API_URL_GAMIFICATION_REWARDED_AD_CONFIG,
   API_URL_GAMIFICATION_CLAIM_REWARDED_AD,
 } from './config';
 
@@ -250,22 +251,23 @@ export const saveRewardedAdConfig = async (configData) => {
         title: updatedAd.title,
         type: 'Rewarded Ad',
         duration: updatedAd.duration,
+        duration_seconds: updatedAd.duration,
         multiplier: updatedAd.multiplier,
         daily_limit: updatedAd.daily_limit,
         status: updatedAd.status,
-        is_active: updatedAd.status === 'Activo',
+        is_active: updatedAd.status === 'Activo' || updatedAd.is_active === true,
         description: updatedAd.description,
         media_url: updatedAd.media_url
       };
 
-      console.log('🔵 Guardando configuración rewarded ad en backend:', payload);
-      await fetchWithAuth(API_URL_GAMIFICATION_REWARDED_AD, {
-        method: 'POST',
+      console.log('🔵 Guardando configuración rewarded ad en backend (PUT /api/gamification/rewarded-ad-config):', payload);
+      await fetchWithAuth(API_URL_GAMIFICATION_REWARDED_AD_CONFIG, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       }).catch(async () => {
-        return fetchWithAuth(`${API_URL_GAMIFICATION_REWARDED_AD}`, {
-          method: 'PUT',
+        return fetchWithAuth(API_URL_GAMIFICATION_REWARDED_AD, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         }).catch(() => null);
