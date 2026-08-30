@@ -235,7 +235,7 @@ const AdsManager = () => {
       duration: matchedAd.duration || 30,
       multiplier: matchedAd.multiplier || '2X',
       reward: matchedAd.reward || 'Puntos',
-      reward_points: matchedAd.reward_points !== undefined ? matchedAd.reward_points : 100,
+      reward_points: matchedAd.reward_points !== undefined ? matchedAd.reward_points : (matchedAd.rewardPoints ?? 5),
       status: matchedAd.status || 'Activo',
       daily_limit: matchedAd.daily_limit || 1,
       campaign_name: matchedAd.campaign_name || campaigns[0]?.name || 'Multiplicador Doble Ezploro Coins',

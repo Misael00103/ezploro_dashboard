@@ -142,28 +142,45 @@ const saveStoredAds = (ads) => {
   } catch (e) {
     console.error('Error guardando anuncios:', e);
   }
-};const normalizeRewardedAd = (res, fallback = {}) => {
+};
+
+const normalizeRewardedAd = (res, fallback = {}) => {
   if (!res) return fallback;
-  const item = res.config || res.ad || res.data || res;
+  const item = (res && typeof res === 'object' && (res.config || res.ad || res.data)) ? (res.config || res.ad || res.data) : res;
   if (!item || typeof item !== 'object') return fallback;
 
-  const durationVal = parseInt(fallback.duration ?? item.duration_seconds ?? item.durationSeconds ?? item.duration ?? 30) || 30;
-  const dailyLimitVal = parseInt(fallback.daily_limit ?? item.daily_limit ?? item.dailyLimit ?? 1) || 1;
-  const rewardPointsVal = parseInt(fallback.reward_points ?? fallback.rewardPoints ?? item.reward_points ?? item.rewardPoints ?? item.points ?? 5) || 5;
+  const durationVal = parseInt(
+    item.duration ?? item.duration_seconds ?? item.durationSeconds ?? fallback.duration ?? fallback.duration_seconds ?? 30
+  ) || 30;
 
-  const titleVal = fallback.title || item.title || item.name || 'Multiplica 2X tus Puntos';
-  const typeVal = fallback.type || item.type || 'Rewarded Ad';
-  const campaignVal = fallback.campaign_name || item.campaign_name || 'Multiplicador Doble Ezploro Coins';
-  const multiplierVal = fallback.multiplier || item.multiplier || '2X';
-  const statusVal = fallback.status || (fallback.is_active !== undefined ? (fallback.is_active ? 'Activo' : 'Inactivo') : (item.status || 'Activo'));
+  const dailyLimitVal = parseInt(
+    item.daily_limit ?? item.dailyLimit ?? fallback.daily_limit ?? fallback.dailyLimit ?? 1
+  ) || 1;
+
+  const rewardPointsVal = parseInt(
+    item.reward_points ?? item.rewardPoints ?? item.points ?? fallback.reward_points ?? fallback.rewardPoints ?? fallback.points ?? 5
+  ) || 5;
+
+  const titleVal = item.title || item.name || fallback.title || fallback.name || 'Multiplica 2X tus Puntos';
+  const typeVal = item.type || fallback.type || 'Rewarded Ad';
+  const campaignVal = item.campaign_name || fallback.campaign_name || 'Multiplicador Doble Ezploro Coins';
+  const multiplierVal = item.multiplier || fallback.multiplier || '2X';
+
+  const statusVal = item.status !== undefined
+    ? item.status
+    : (item.is_active !== undefined
+      ? (item.is_active ? 'Activo' : 'Inactivo')
+      : (fallback.status || (fallback.is_active ? 'Activo' : 'Inactivo')));
   const isActiveVal = statusVal === 'Activo';
 
-  let mediaVal = fallback.media_url !== undefined ? fallback.media_url : (item.media_url || item.imageUrl || '');
+  const mediaVal = item.media_url !== undefined
+    ? item.media_url
+    : (item.mediaUrl || item.imageUrl || item.image_url || fallback.media_url || fallback.mediaUrl || '');
 
   return {
-    ...item,
     ...fallback,
-    id: fallback.id || item.id || item._id || 'ad-rewarded-2x',
+    ...item,
+    id: item.id || item._id || fallback.id || fallback._id || 'ad-rewarded-2x',
     title: titleVal,
     type: typeVal,
     campaign_name: campaignVal,
@@ -178,8 +195,8 @@ const saveStoredAds = (ads) => {
     status: statusVal,
     is_active: isActiveVal,
     daily_limit: dailyLimitVal,
-    daily_count: res.daily_count !== undefined ? res.daily_count : (item.daily_count ?? fallback.daily_count ?? 0),
-    description: fallback.description || item.description || 'Duplica instantáneamente tus Ezploro Coins acumulados.',
+    daily_count: item.daily_count !== undefined ? item.daily_count : (res.daily_count !== undefined ? res.daily_count : (fallback.daily_count ?? 0)),
+    description: item.description !== undefined ? item.description : (fallback.description || 'Duplica instantáneamente tus Ezploro Coins acumulados.'),
     views_count: item.views_count !== undefined ? item.views_count : (fallback.views_count || 0),
     completions_count: item.completions_count !== undefined ? item.completions_count : (fallback.completions_count || 0),
     media_url: mediaVal,
@@ -553,26 +570,38 @@ export const createAd = async (adData) => {
  */
 export const updateAd = async (id, updatedFields) => {
   const ads = getStoredAds();
-  let index = ads.findIndex(a => (a.id && String(a.id) === String(id)) || (a._id && String(a._id) === String(id)));
+  const targetIdStr = String(id || '').trim();
 
-  if (index === -1 && updatedFields.title) {
-    index = ads.findIndex(a => a.title === updatedFields.title);
+  let index = ads.findIndex(a => 
+    (a.id && String(a.id) === targetIdStr) || 
+    (a._id && String(a._id) === targetIdStr) ||
+    (updatedFields.title && a.title && a.title.trim().toLowerCase() === updatedFields.title.trim().toLowerCase())
+  );
+
+  if (index === -1 && (updatedFields.type === 'Rewarded Ad' || targetIdStr === 'ad-rewarded-2x')) {
+    index = ads.findIndex(a => a.type === 'Rewarded Ad' || a.id === 'ad-rewarded-2x');
   }
 
   if (index !== -1) {
-    const isAct = updatedFields.status ? updatedFields.status === 'Activo' : (updatedFields.is_active ?? ads[index].is_active);
-    const ptsVal = parseInt(updatedFields.reward_points ?? updatedFields.rewardPoints ?? updatedFields.points ?? ads[index].reward_points ?? 5) || 5;
-    const media = updatedFields.media_url !== undefined ? updatedFields.media_url : (ads[index].media_url || '');
+    const existing = ads[index];
+    const isAct = updatedFields.status !== undefined 
+      ? updatedFields.status === 'Activo' 
+      : (updatedFields.is_active !== undefined ? updatedFields.is_active : existing.is_active);
+    
+    const ptsVal = parseInt(updatedFields.reward_points ?? updatedFields.rewardPoints ?? updatedFields.points ?? existing.reward_points ?? 5) || 5;
+    const durationVal = parseInt(updatedFields.duration ?? updatedFields.duration_seconds ?? existing.duration ?? 30) || 30;
+    const dailyLimitVal = parseInt(updatedFields.daily_limit ?? updatedFields.dailyLimit ?? existing.daily_limit ?? 1) || 1;
+    const media = updatedFields.media_url !== undefined ? updatedFields.media_url : (existing.media_url || '');
 
-    ads[index] = {
-      ...ads[index],
+    const mergedAd = {
+      ...existing,
       ...updatedFields,
-      title: updatedFields.title || ads[index].title,
-      type: updatedFields.type || ads[index].type,
-      campaign_name: updatedFields.campaign_name || ads[index].campaign_name,
-      duration: parseInt(updatedFields.duration) || ads[index].duration || 30,
-      duration_seconds: parseInt(updatedFields.duration) || ads[index].duration || 30,
-      daily_limit: parseInt(updatedFields.daily_limit) || ads[index].daily_limit || 1,
+      title: updatedFields.title || existing.title,
+      type: updatedFields.type || existing.type,
+      campaign_name: updatedFields.campaign_name || existing.campaign_name,
+      duration: durationVal,
+      duration_seconds: durationVal,
+      daily_limit: dailyLimitVal,
       reward_points: ptsVal,
       rewardPoints: ptsVal,
       points: ptsVal,
@@ -590,6 +619,8 @@ export const updateAd = async (id, updatedFields) => {
       banner: media,
       updated_at: new Date().toISOString()
     };
+
+    ads[index] = mergedAd;
     saveStoredAds(ads);
 
     const primaryRewarded = getPrimaryAd(ads);
@@ -598,7 +629,40 @@ export const updateAd = async (id, updatedFields) => {
     return ads[index];
   }
 
-  return updatedFields;
+  const ptsVal = parseInt(updatedFields.reward_points ?? updatedFields.rewardPoints ?? updatedFields.points ?? 5) || 5;
+  const durationVal = parseInt(updatedFields.duration ?? updatedFields.duration_seconds ?? 30) || 30;
+  const dailyLimitVal = parseInt(updatedFields.daily_limit ?? updatedFields.dailyLimit ?? 1) || 1;
+  const isAct = updatedFields.status !== undefined ? updatedFields.status === 'Activo' : (updatedFields.is_active !== false);
+
+  const newAd = {
+    id: id || `ad-${Date.now()}`,
+    title: updatedFields.title || 'Anuncio Configurado',
+    type: updatedFields.type || 'Rewarded Ad',
+    campaign_name: updatedFields.campaign_name || 'Multiplicador Doble Ezploro Coins',
+    duration: durationVal,
+    duration_seconds: durationVal,
+    multiplier: updatedFields.multiplier || '2X',
+    reward: 'Puntos',
+    reward_points: ptsVal,
+    rewardPoints: ptsVal,
+    points: ptsVal,
+    status: isAct ? 'Activo' : 'Inactivo',
+    is_active: isAct,
+    daily_limit: dailyLimitVal,
+    daily_count: 0,
+    description: updatedFields.description || '',
+    media_url: updatedFields.media_url || '',
+    views_count: 0,
+    completions_count: 0,
+    created_at: new Date().toISOString()
+  };
+
+  ads.push(newAd);
+  saveStoredAds(ads);
+  const primaryRewarded = getPrimaryAd(ads);
+  await saveRewardedAdConfig(primaryRewarded).catch(() => null);
+
+  return newAd;
 };
 
 /**

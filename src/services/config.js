@@ -455,6 +455,13 @@ export const API_URL_VIP_PASS_CONFIG = `${API_URL_VIP_PASS}/config`
 // ==================== PROMOCIONES & CATEGORÍAS ====================
 export const API_URL_PROMOTIONS_CATEGORIES = `${BASE_URL}/promotions/categories`
 
+// ==================== ANUNCIOS & ADS ====================
+export const API_URL_ADS = `${BASE_URL}/ads`
+export const API_URL_ADS_LIST = `${API_URL_ADS}`
+export const API_URL_ADS_CREATE = `${API_URL_ADS}`
+export const API_URL_ADS_STATS = `${API_URL_ADS}/stats`
+export const API_URL_ADS_TOGGLE_STATUS = `${API_URL_ADS}/toggle-status`
+
 // ==================== GAMIFICATION MATRIX ENDPOINTS ====================
 export const API_URL_GAMIFICATION_VIP_PASS = `${BASE_URL}/gamification/vip-pass`
 export const API_URL_GAMIFICATION_VIP_LEVELS = `${BASE_URL}/gamification/vip-levels`
@@ -467,4 +474,5 @@ export const API_URL_GAMIFICATION_DAILY_PRIZE_CONFIG = `${BASE_URL}/gamification
 export const API_URL_GAMIFICATION_DAILY_STREAK = `${BASE_URL}/gamification/daily-streak`
 export const API_URL_GAMIFICATION_DAILY_STREAK_CONFIG = `${BASE_URL}/gamification/daily-streak-config`
 export const API_URL_GAMIFICATION_CHECK_IN = `${BASE_URL}/gamification/check-in`
+
 
