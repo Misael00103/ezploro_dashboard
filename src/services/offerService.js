@@ -445,7 +445,8 @@ export const deleteOffer = async (offerId) => {
 export const toggleOfferStatus = async (offerId, isActive) => {
   const localOffersStr = localStorage.getItem('ezploro_offers_config');
   let localOffers = localOffersStr ? JSON.parse(localOffersStr) : [];
-  const index = localOffers.findIndex(o => (o.offer_id || o.id || o._id) === offerId);
+  const targetIdStr = String(offerId || '').trim();
+  const index = localOffers.findIndex(o => String(o.offer_id || o.id || o._id || '').trim() === targetIdStr);
   
   let newStatus = isActive;
   if (index !== -1) {
@@ -453,15 +454,16 @@ export const toggleOfferStatus = async (offerId, isActive) => {
       newStatus = !localOffers[index].is_active;
     }
     localOffers[index].is_active = newStatus;
+    localOffers[index].status = newStatus ? 'Activa' : 'Inactiva';
     localStorage.setItem('ezploro_offers_config', JSON.stringify(localOffers));
   }
 
-  const isNumericId = /^\d+$/.test(String(offerId));
+  const isNumericId = /^\d+$/.test(targetIdStr);
   if (isNumericId) {
     try {
       const token = getAuthToken();
       if (token) {
-        const url = API_URL_OFFERS_TOGGLE_STATUS.replace(':id', offerId);
+        const url = API_URL_OFFERS_TOGGLE_STATUS.replace(':id', targetIdStr);
         await fetchWithAuth(url, {
           method: 'PATCH',
           body: JSON.stringify({ is_active: newStatus })
@@ -472,7 +474,7 @@ export const toggleOfferStatus = async (offerId, isActive) => {
     }
   }
 
-  return localOffers[index] || { offer_id: offerId, is_active: newStatus };
+  return localOffers[index] || { offer_id: offerId, is_active: newStatus, status: newStatus ? 'Activa' : 'Inactiva' };
 };
 
 /**

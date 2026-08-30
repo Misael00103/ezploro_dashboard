@@ -89,29 +89,38 @@ const getStoredAds = () => {
     const cached = localStorage.getItem(STORAGE_KEY_ADS);
     if (cached !== null) {
       const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         const seenIds = new Set();
         const deduplicated = [];
 
-        for (const item of parsed) {
+        for (let i = 0; i < parsed.length; i++) {
+          const item = parsed[i];
           if (!item || typeof item !== 'object') continue;
           if (isAdDeleted(item)) continue;
-          const idKey = String(item.id || item._id || '');
-          if (idKey && seenIds.has(idKey)) continue;
-          if (idKey) seenIds.add(idKey);
 
-          // Si la imagen no fue subida explicitamente por el usuario, asegurar cadena vacia
+          const stableId = String(item.id || item._id || (i === 0 ? 'ad-rewarded-2x' : (i === 1 ? 'ad-banner-ezploro' : `ad-custom-${i + 1}`)));
+          if (seenIds.has(stableId)) continue;
+          seenIds.add(stableId);
+
           const media = (item.media_url && (item.media_url.startsWith('data:image') || item.media_url.startsWith('http'))) ? item.media_url : '';
+          const pts = parseInt(item.reward_points ?? item.rewardPoints ?? item.points ?? 5) || 5;
+          const isAct = item.status !== undefined ? item.status === 'Activo' : (item.is_active !== false);
 
           deduplicated.push({
             ...item,
-            id: idKey || `ad-${Date.now()}-${deduplicated.length}`,
+            id: stableId,
+            _id: stableId,
             title: item.title || 'Anuncio Configurado',
-            type: item.type || (deduplicated.length === 0 ? 'Rewarded Ad' : 'Banner'),
-            reward_points: parseInt(item.reward_points ?? item.rewardPoints ?? 100) || 100,
+            type: item.type || (i === 0 ? 'Rewarded Ad' : 'Banner'),
+            reward_points: pts,
+            rewardPoints: pts,
+            points: pts,
             views_count: (item.views_count >= 1400 || item.views_count === 3200) ? 0 : (item.views_count || 0),
             completions_count: (item.completions_count >= 1200 || item.completions_count === 2950) ? 0 : (item.completions_count || 0),
             duration: typeof item.duration === 'string' ? (parseInt(item.duration) || 30) : (item.duration || 30),
+            daily_limit: parseInt(item.daily_limit ?? item.dailyLimit ?? 1) || 1,
+            status: isAct ? 'Activo' : 'Inactivo',
+            is_active: isAct,
             media_url: media,
             mediaUrl: media,
             imageUrl: media,
@@ -222,11 +231,10 @@ export const getPrimaryAd = (adsList = []) => {
       const parsedPrimary = JSON.parse(cachedPrimary);
       if (parsedPrimary && typeof parsedPrimary === 'object') {
         const found = ads.find(a => 
-          (parsedPrimary.id && (String(a.id) === String(parsedPrimary.id) || String(a._id) === String(parsedPrimary.id))) ||
+          (parsedPrimary.id && (String(a.id || a._id) === String(parsedPrimary.id || parsedPrimary._id))) ||
           (parsedPrimary.title && a.title === parsedPrimary.title)
         );
         if (found) return found;
-        return normalizeRewardedAd(parsedPrimary, ads[0] || DEFAULT_ADS[0]);
       }
     }
   } catch (e) {}
@@ -241,10 +249,14 @@ export const getRewardedAdState = async () => {
   try {
     const token = getAuthToken();
     if (token) {
-      // GET /api/gamification/rewarded-ad (Endpoint GET de NestJS)
       const stateRes = await fetchWithAuth(API_URL_GAMIFICATION_REWARDED_AD).catch(() => null);
       if (stateRes) {
-        return normalizeRewardedAd(stateRes, defaultRewarded);
+        const merged = normalizeRewardedAd(stateRes, defaultRewarded);
+        return {
+          ...merged,
+          status: defaultRewarded.status !== undefined ? defaultRewarded.status : merged.status,
+          is_active: defaultRewarded.is_active !== undefined ? defaultRewarded.is_active : merged.is_active
+        };
       }
     }
   } catch (error) {
@@ -671,28 +683,36 @@ export const updateAd = async (id, updatedFields) => {
 export const toggleAdStatus = async (idOrAd) => {
   const ads = getStoredAds();
   const targetObj = typeof idOrAd === 'object' ? idOrAd : {};
-  const targetId = String(targetObj.id || targetObj._id || (typeof idOrAd !== 'object' ? idOrAd : '') || '');
-  const targetTitle = targetObj.title || targetObj.name || null;
+  const targetId = String(targetObj.id || targetObj._id || (typeof idOrAd !== 'object' ? idOrAd : '') || '').trim();
+  const targetTitle = (targetObj.title || targetObj.name || '').trim().toLowerCase();
 
-  let index = ads.findIndex(a => {
-    const aId = String(a.id || a._id || '');
-    if (targetId && aId && aId === targetId) return true;
-    if (targetTitle && a.title && a.title.trim().toLowerCase() === targetTitle.trim().toLowerCase()) return true;
-    return false;
-  });
+  let index = -1;
+
+  if (targetId) {
+    index = ads.findIndex(a => String(a.id || a._id || '').trim() === targetId);
+  }
 
   if (index === -1 && targetTitle) {
-    index = ads.findIndex(a => a.title.toLowerCase().includes(targetTitle.toLowerCase()));
+    index = ads.findIndex(a => String(a.title || a.name || '').trim().toLowerCase() === targetTitle);
+  }
+
+  if (index === -1 && targetTitle) {
+    index = ads.findIndex(a => String(a.title || a.name || '').trim().toLowerCase().includes(targetTitle));
   }
 
   if (index !== -1) {
-    const newStatus = ads[index].status === 'Activo' ? 'Inactivo' : 'Activo';
+    const currentAd = ads[index];
+    const newStatus = currentAd.status === 'Activo' ? 'Inactivo' : 'Activo';
     const isAct = newStatus === 'Activo';
 
-    ads[index].status = newStatus;
-    ads[index].is_active = isAct;
+    ads[index] = {
+      ...currentAd,
+      status: newStatus,
+      is_active: isAct
+    };
 
-    // Si este anuncio es el principal seleccionado actualmente, actualizar su estado en cache
+    saveStoredAds(ads);
+
     try {
       const cachedPrimary = localStorage.getItem('ezploro_primary_rewarded_ad');
       if (cachedPrimary) {
@@ -702,8 +722,6 @@ export const toggleAdStatus = async (idOrAd) => {
         }
       }
     } catch (e) {}
-
-    saveStoredAds(ads);
 
     const primaryRewarded = getPrimaryAd(ads);
     await saveRewardedAdConfig(primaryRewarded).catch(() => null);
