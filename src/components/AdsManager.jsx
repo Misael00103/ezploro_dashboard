@@ -49,6 +49,10 @@ import {
   deleteCampaign,
   resetAdsCatalog
 } from '../services/adsService';
+import {
+  subscribeDashboardGamificationEvents,
+  subscribeAdsEvents
+} from '../services/gamificationService';
 import { toast } from 'react-hot-toast';
 
 const AdsManager = () => {
@@ -137,8 +141,39 @@ const AdsManager = () => {
     }
   };
 
+  const [isSocketActive, setIsSocketActive] = useState(false);
+
   useEffect(() => {
     loadData();
+
+    // Suscripción WebSocket a eventos de anuncios en tiempo real
+    const unsubscribeDashboard = subscribeDashboardGamificationEvents((eventData) => {
+      if (eventData.type === 'ad' || eventData.rewardedAd || eventData.adId) {
+        console.log('⚡ Evento en tiempo real de Anuncio recibido en AdsManager:', eventData);
+        setIsSocketActive(true);
+        toast.success(`⚡ Anuncio 2X completado/reclamado en tiempo real!`, { icon: '📺' });
+        loadData();
+      }
+    });
+
+    const unsubscribeAds = subscribeAdsEvents({
+      onRewardedAdClaimed: (data) => {
+        console.log('⚡ Evento rewardedAdClaimed:', data);
+        setIsSocketActive(true);
+        toast.success(`⚡ Recompensa de Anuncio 2X reclamada por Usuario #${data.userId || ''}`, { icon: '🎁' });
+        loadData();
+      },
+      onAdWatched: (data) => {
+        console.log('⚡ Evento adWatched:', data);
+        setIsSocketActive(true);
+        loadData();
+      }
+    });
+
+    return () => {
+      if (typeof unsubscribeDashboard === 'function') unsubscribeDashboard();
+      if (typeof unsubscribeAds === 'function') unsubscribeAds();
+    };
   }, []);
 
   const handleOpenCreateCampaign = () => {

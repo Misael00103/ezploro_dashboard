@@ -35,7 +35,7 @@ import {
   getRankingEventosMasLikes
 } from '../services/rankingService';
 import { getAllRules, createRule, updateRule, deleteRule } from '../services/rulesService';
-import { registerAction, getUserPoints, redeemReward, getUserHistory, getAllUsersHistory } from '../services/gamificationService';
+import { registerAction, getUserPoints, redeemReward, getUserHistory, getAllUsersHistory, subscribeDashboardGamificationEvents } from '../services/gamificationService';
 import { fetchWithAuth } from '../services/userService';
 import { API_URL_USERS_LIST } from '../services/config';
 import { getClaimableActions, claimPoints, getClaimedTransactions } from '../services/pointsService';
@@ -394,11 +394,21 @@ const GamificationManager = ({ initialTab = 'overview' }) => {
     }
   }, [activeTab]);
 
-  // Cargar actividad global cuando se abre la pestaña de actividad
+  // Cargar actividad global cuando se abre la pestaña de actividad y escuchar sockets realtime
   useEffect(() => {
     if (activeTab === 'activity') {
       loadGlobalActivity();
     }
+
+    const unsubscribeSocket = subscribeDashboardGamificationEvents((eventData) => {
+      console.log('⚡ Socket event received in GamificationManager:', eventData);
+      toast.success(`⚡ Actividad en tiempo real (Usuario #${eventData.userId || ''})`, { icon: '🏆' });
+      loadGlobalActivity();
+    });
+
+    return () => {
+      if (typeof unsubscribeSocket === 'function') unsubscribeSocket();
+    };
   }, [activeTab]);
 
   const loadUserData = async (userId, userObj = null) => {

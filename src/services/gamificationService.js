@@ -1,12 +1,20 @@
 import { fetchWithAuth } from './userService';
 import { getAuthToken } from './authService';
+import { io } from 'socket.io-client';
 import { 
   API_URL_GAMIFICATION,
   API_URL_GAMIFICATION_ACTION,
   API_URL_GAMIFICATION_POINTS,
   API_URL_GAMIFICATION_REDEEM,
   API_URL_GAMIFICATION_HISTORY,
-  API_URL_OFFERS_REDEEM
+  API_URL_OFFERS_REDEEM,
+  API_URL_DAILY_REWARDS,
+  API_URL_DAILY_REWARDS_CLAIM,
+  API_URL_DAILY_REWARDS_HISTORY,
+  API_URL_GAMIFICATION_DAILY_PRIZE_CONFIG,
+  API_URL_GAMIFICATION_VIP_PASS,
+  API_URL_GAMIFICATION_VIP_LEVELS,
+  SOCKET_URL
 } from './config';
 
 /**
@@ -459,6 +467,339 @@ export const getAllUsersHistory = async () => {
     console.warn('⚠️ Ocurrió un error en getAllUsersHistory:', error.message);
     return { actions: [], rewards: [], is_forbidden: true };
   }
+};
+
+/**
+ * 1. Obtener estado del Cofre Místico (App & Dashboard)
+ */
+export const getDailyPrize = async (authToken) => {
+  const token = authToken || getAuthToken();
+  const url = API_URL_DAILY_REWARDS;
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.warn('⚠️ getDailyPrize error:', error.message);
+    return { available: true, cooldownHours: 24 };
+  }
+};
+
+/**
+ * 2. Reclamar cofre místico (App Móvil)
+ */
+export const claimDailyPrize = async (authToken) => {
+  const token = authToken || getAuthToken();
+  const url = API_URL_DAILY_REWARDS_CLAIM;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({})
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('🔴 claimDailyPrize error:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * 3. Guardar configuración del cofre (Dashboard Admin)
+ */
+export const updateDailyPrizeConfig = async (configData, authToken) => {
+  const token = authToken || getAuthToken();
+  const url = API_URL_GAMIFICATION_DAILY_PRIZE_CONFIG;
+  try {
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(configData)
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('🔴 updateDailyPrizeConfig error:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * 4. Perfil Pass VIP del usuario (App Móvil & Dashboard)
+ */
+export const getVipPassProfile = async (authToken) => {
+  const token = authToken || getAuthToken();
+  const url = API_URL_GAMIFICATION_VIP_PASS;
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.warn('⚠️ getVipPassProfile fallback warning:', error.message);
+    return {
+      level: 1,
+      levelName: 'Explorador VIP',
+      points: 350,
+      nextReward: {
+        name: 'Entrada Gratis a Festival',
+        requiredPoints: 500
+      },
+      stats: {
+        events: 5,
+        streak: 3,
+        redemptions: 1
+      }
+    };
+  }
+};
+
+/**
+ * 5. Listar niveles VIP (Dashboard Admin)
+ */
+export const getVipLevels = async (authToken) => {
+  const token = authToken || getAuthToken();
+  const url = API_URL_GAMIFICATION_VIP_LEVELS;
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.warn('⚠️ getVipLevels warning:', error.message);
+    return [];
+  }
+};
+
+/**
+ * 6. Guardar/Editar Nivel VIP (Dashboard Admin)
+ */
+export const saveVipLevel = async (levelData, authToken) => {
+  const token = authToken || getAuthToken();
+  const url = API_URL_GAMIFICATION_VIP_LEVELS;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(levelData)
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('🔴 saveVipLevel error:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * 7. Historial de Entregas y Reclamos (App & Dashboard)
+ */
+export const getDailyRewardHistoryNew = async (authToken) => {
+  const token = authToken || getAuthToken();
+  const url = API_URL_DAILY_REWARDS_HISTORY;
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.warn('⚠️ getDailyRewardHistoryNew warning:', error.message);
+    return {
+      success: true,
+      historial: [],
+      resumen: {
+        total_ganado: 0,
+        total_gastado: 0,
+        balance_actual: 0,
+        total_acciones: 0,
+        total_canjes: 0
+      }
+    };
+  }
+};
+
+// ==================== WEBSOCKETS REAL-TIME (SOCKET.IO) ====================
+
+let gamificationSocket = null;
+
+export const initGamificationSocket = (authToken, options = {}) => {
+  const token = authToken || getAuthToken();
+  if (!token) return null;
+
+  try {
+    if (gamificationSocket && gamificationSocket.connected) {
+      return gamificationSocket;
+    }
+
+    const socketUrl = SOCKET_URL || 'http://localhost:3000';
+    gamificationSocket = io(socketUrl, {
+      auth: { token: token.startsWith('Bearer ') ? token : `Bearer ${token}` },
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 5,
+      ...options
+    });
+
+    gamificationSocket.on('connect', () => {
+      console.log('⚡ Socket Gamification conectado:', gamificationSocket.id);
+    });
+
+    gamificationSocket.on('connect_error', (err) => {
+      console.warn('⚠️ Error de conexión Gamification Socket:', err.message);
+    });
+
+    return gamificationSocket;
+  } catch (error) {
+    console.error('🔴 Error inicializando Gamification Socket:', error);
+    return null;
+  }
+};
+
+export const subscribeDashboardGamificationEvents = (callback, authToken) => {
+  const socket = initGamificationSocket(authToken);
+  if (!socket) return () => {};
+
+  const handler = (data) => {
+    console.log('⚡ Evento en tiempo real dashboardGamificationEvent:', data);
+    if (typeof callback === 'function') {
+      callback(data);
+    }
+  };
+
+  socket.on('dashboardGamificationEvent', handler);
+
+  return () => {
+    socket.off('dashboardGamificationEvent', handler);
+  };
+};
+
+export const joinUserGamificationRoom = (userId, authToken) => {
+  const socket = initGamificationSocket(authToken);
+  if (!socket) return;
+  socket.emit('joinUserGamificationRoom', { userId: userId?.toString() });
+};
+
+export const claimDailyPrizeSocket = (userId, authToken) => {
+  const socket = initGamificationSocket(authToken);
+  if (!socket) return;
+  socket.emit('claimDailyPrizeSocket', { userId: userId?.toString() });
+};
+
+export const subscribeUserGamificationEvents = ({ onClaimed, onUpdated }, authToken) => {
+  const socket = initGamificationSocket(authToken);
+  if (!socket) return () => {};
+
+  if (onClaimed) socket.on('dailyPrizeClaimed', onClaimed);
+  if (onUpdated) socket.on('gamificationUpdated', onUpdated);
+
+  return () => {
+    if (onClaimed) socket.off('dailyPrizeClaimed', onClaimed);
+    if (onUpdated) socket.off('gamificationUpdated', onUpdated);
+  };
+};
+
+export const claimRewardedAdSocket = (userId, adId, authToken) => {
+  const socket = initGamificationSocket(authToken);
+  if (!socket) return;
+  socket.emit('claimRewardedAdSocket', { userId: userId?.toString(), adId: adId?.toString() });
+};
+
+export const subscribeAdsEvents = ({ onRewardedAdClaimed, onAdWatched }, authToken) => {
+  const socket = initGamificationSocket(authToken);
+  if (!socket) return () => {};
+
+  if (onRewardedAdClaimed) socket.on('rewardedAdClaimed', onRewardedAdClaimed);
+  if (onAdWatched) socket.on('adWatched', onAdWatched);
+
+  return () => {
+    if (onRewardedAdClaimed) socket.off('rewardedAdClaimed', onRewardedAdClaimed);
+    if (onAdWatched) socket.off('adWatched', onAdWatched);
+  };
+};
+
+export const checkInStreakSocket = (userId, day, authToken) => {
+  const socket = initGamificationSocket(authToken);
+  if (!socket) return;
+  socket.emit('checkInStreakSocket', { userId: userId?.toString(), day });
+};
+
+export const subscribeStreakEvents = ({ onStreakUpdated, onCheckIn }, authToken) => {
+  const socket = initGamificationSocket(authToken);
+  if (!socket) return () => {};
+
+  if (onStreakUpdated) socket.on('dailyStreakUpdated', onStreakUpdated);
+  if (onCheckIn) socket.on('streakCheckIn', onCheckIn);
+
+  return () => {
+    if (onStreakUpdated) socket.off('dailyStreakUpdated', onStreakUpdated);
+    if (onCheckIn) socket.off('streakCheckIn', onCheckIn);
+  };
+};
+
+export const gamificationService = {
+  getDailyPrize,
+  claimDailyPrize,
+  updateDailyPrizeConfig,
+  getVipPassProfile,
+  getVipLevels,
+  saveVipLevel,
+  getUserHistory: getDailyRewardHistoryNew,
+  initSocket: initGamificationSocket,
+  subscribeDashboardGamificationEvents,
+  joinUserGamificationRoom,
+  claimDailyPrizeSocket,
+  subscribeUserGamificationEvents,
+  claimRewardedAdSocket,
+  subscribeAdsEvents,
+  checkInStreakSocket,
+  subscribeStreakEvents
 };
 
 export { dashboardGamificationService } from './dashboardGamificationService';

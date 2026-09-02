@@ -22,12 +22,17 @@ import {
   getStreakConfig,
   updateStreakConfig
 } from '../services/streakService';
+import {
+  subscribeDashboardGamificationEvents,
+  subscribeStreakEvents
+} from '../services/gamificationService';
 import { toast } from 'react-hot-toast';
 
 const StreaksManager = () => {
   const [streakConfig, setStreakConfig] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSocketActive, setIsSocketActive] = useState(false);
 
   const loadData = async () => {
     try {
@@ -44,6 +49,36 @@ const StreaksManager = () => {
 
   useEffect(() => {
     loadData();
+
+    // Suscripción WebSocket a eventos de rachas en tiempo real
+    const unsubscribeDashboard = subscribeDashboardGamificationEvents((eventData) => {
+      if (eventData.streak || eventData.type === 'streak') {
+        console.log('⚡ Evento en tiempo real de Racha recibido en StreaksManager:', eventData);
+        setIsSocketActive(true);
+        toast.success(`🔥 Racha diaria actualizada en tiempo real (Usuario #${eventData.userId || ''})`, { icon: '⚡' });
+        loadData();
+      }
+    });
+
+    const unsubscribeStreak = subscribeStreakEvents({
+      onStreakUpdated: (data) => {
+        console.log('⚡ Evento dailyStreakUpdated:', data);
+        setIsSocketActive(true);
+        toast.success(`🔥 Racha acumulada: ${data.current_streak || ''} días!`, { icon: '⚡' });
+        loadData();
+      },
+      onCheckIn: (data) => {
+        console.log('⚡ Evento streakCheckIn:', data);
+        setIsSocketActive(true);
+        toast.success(`🔥 Check-in diario registrado para Usuario #${data.userId || ''}`, { icon: '✅' });
+        loadData();
+      }
+    });
+
+    return () => {
+      if (typeof unsubscribeDashboard === 'function') unsubscribeDashboard();
+      if (typeof unsubscribeStreak === 'function') unsubscribeStreak();
+    };
   }, []);
 
   const handleFieldChange = (field, value) => {
@@ -151,15 +186,22 @@ const StreaksManager = () => {
             Controla los objetivos de rachas de 7 días, puntos base por día, días con bonus especial (⭐) y costo de protección de racha.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-zinc-400">Sistema de Rachas:</span>
-          <Switch
-            checked={isSystemEnabled}
-            onCheckedChange={(checked) => handleFieldChange('enabled', checked)}
-          />
-          <Badge className={isSystemEnabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800 text-zinc-400'}>
-            {isSystemEnabled ? 'Activo' : 'Pausado'}
-          </Badge>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <div className="flex items-center gap-2 bg-zinc-950/80 px-3 py-1.5 rounded-full border border-zinc-800">
+            <Zap className={`h-4 w-4 ${isSocketActive ? 'text-emerald-400 animate-pulse' : 'text-orange-400'}`} />
+            <span className="text-xs text-zinc-300 font-medium">Socket Realtime</span>
+            <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Live</Badge>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-zinc-400">Sistema de Rachas:</span>
+            <Switch
+              checked={isSystemEnabled}
+              onCheckedChange={(checked) => handleFieldChange('enabled', checked)}
+            />
+            <Badge className={isSystemEnabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800 text-zinc-400'}>
+              {isSystemEnabled ? 'Activo' : 'Pausado'}
+            </Badge>
+          </div>
         </div>
       </div>
 

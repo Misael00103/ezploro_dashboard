@@ -480,7 +480,7 @@ const Dashboard = ({ onLogout }) => {
           <div className="absolute w-24 h-24 bg-violet-600/20 rounded-full blur-2xl animate-pulse" />
           
           {/* Logo container */}
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-zinc-950 border border-zinc-800/80 shadow-2xl relative z-10 animate-bounce duration-[2000ms] ease-in-out">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-zinc-950 border border-zinc-800/80 shadow-2xl relative z-10 animate-bounce ease-in-out" style={{ animationDuration: '2000ms' }}>
             <img 
               src={require('../img/logoezploro.png')} 
               alt="Ezploro Logo" 

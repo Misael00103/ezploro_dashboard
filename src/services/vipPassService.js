@@ -200,3 +200,48 @@ export const saveVipPassLevel = async (levelData) => {
 
   return levels;
 };
+
+/**
+ * Obtener perfil y estado dinámico del Pass VIP del usuario
+ * Endpoint: GET /api/gamification/vip-pass
+ */
+export const getVipPassProfile = async () => {
+  try {
+    const profileRes = await silentFetch(API_URL_GAMIFICATION_VIP_PASS);
+    if (profileRes && (profileRes.level || profileRes.levelName)) {
+      return {
+        level: profileRes.level ?? 1,
+        levelName: profileRes.levelName || 'Explorador VIP',
+        points: profileRes.points ?? 350,
+        nextReward: {
+          name: profileRes.nextReward?.name || profileRes.nextReward || 'Entrada Gratis a Festival',
+          requiredPoints: profileRes.nextReward?.requiredPoints ?? profileRes.requiredPointsForNext ?? 500
+        },
+        stats: {
+          events: profileRes.stats?.events ?? 5,
+          streak: profileRes.stats?.streak ?? 3,
+          redemptions: profileRes.stats?.redemptions ?? 1
+        }
+      };
+    }
+  } catch (e) {
+    console.warn('⚠️ Error consultando GET /api/gamification/vip-pass:', e);
+  }
+
+  // Fallback por defecto según requerimientos
+  return {
+    level: 1,
+    levelName: 'Explorador VIP',
+    points: 350,
+    nextReward: {
+      name: 'Entrada Gratis a Festival',
+      requiredPoints: 500
+    },
+    stats: {
+      events: 5,
+      streak: 3,
+      redemptions: 1
+    }
+  };
+};
+
