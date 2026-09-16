@@ -118,12 +118,6 @@ const AdsManager = () => {
     try {
       setIsLoading(true);
       loadCampaignsList();
-      try {
-        const raw = localStorage.getItem('ezploro_ads_config');
-        if (raw && (raw.includes('1422') || raw.includes('1420') || raw.includes('1282') || raw.includes('1280'))) {
-          localStorage.removeItem('ezploro_ads_config');
-        }
-      } catch (e) {}
 
       const [adsList, adStats, rewardedInfo] = await Promise.all([
         getAds(),

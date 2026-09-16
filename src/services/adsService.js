@@ -27,18 +27,21 @@ const recordDeletedAd = (idOrTitle) => {
   if (!idOrTitle) return;
   try {
     const set = getDeletedAdIds();
-    set.add(String(idOrTitle).trim().toLowerCase());
+    const clean = String(idOrTitle).trim().toLowerCase();
+    if (clean) set.add(clean);
     localStorage.setItem(STORAGE_KEY_DELETED_ADS, JSON.stringify(Array.from(set)));
   } catch (e) {}
 };
 
 const isAdDeleted = (ad) => {
   if (!ad) return false;
-  const idStr = String(ad.id || ad._id || '').trim().toLowerCase();
-  if (idStr === 'ad-rewarded-2x' || idStr === 'ad-banner-ezploro') return false;
   const deletedSet = getDeletedAdIds();
+  if (deletedSet.size === 0) return false;
+
+  const idStr = String(ad.id || ad._id || '').trim().toLowerCase();
   const titleStr = String(ad.title || ad.name || '').trim().toLowerCase();
-  return (idStr && deletedSet.has(idStr)) || (titleStr && deletedSet.has(titleStr));
+
+  return (idStr !== '' && deletedSet.has(idStr)) || (titleStr !== '' && deletedSet.has(titleStr));
 };
 
 // Configuración inicial limpia sin datos falsos harcodeados
@@ -83,14 +86,13 @@ const DEFAULT_ADS = [
   }
 ];
 
-// Helper para obtener anuncios locales deduplicados por ID
 const getStoredAds = () => {
   try {
     const cached = localStorage.getItem(STORAGE_KEY_ADS);
     if (cached !== null) {
       const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const seenIds = new Set();
+      if (Array.isArray(parsed)) {
+        const seenKeys = new Set();
         const deduplicated = [];
 
         for (let i = 0; i < parsed.length; i++) {
@@ -98,9 +100,12 @@ const getStoredAds = () => {
           if (!item || typeof item !== 'object') continue;
           if (isAdDeleted(item)) continue;
 
-          const stableId = String(item.id || item._id || (i === 0 ? 'ad-rewarded-2x' : (i === 1 ? 'ad-banner-ezploro' : `ad-custom-${i + 1}`)));
-          if (seenIds.has(stableId)) continue;
-          seenIds.add(stableId);
+          const stableId = String(item.id || item._id || `ad-custom-${i + 1}`).trim();
+          const stableTitle = String(item.title || item.name || '').trim().toLowerCase();
+          const uniqueKey = stableId || stableTitle;
+
+          if (uniqueKey && seenKeys.has(uniqueKey)) continue;
+          if (uniqueKey) seenKeys.add(uniqueKey);
 
           const media = (item.media_url && (item.media_url.startsWith('data:image') || item.media_url.startsWith('http'))) ? item.media_url : '';
           const pts = parseInt(item.reward_points ?? item.rewardPoints ?? item.points ?? 5) || 5;
@@ -111,7 +116,7 @@ const getStoredAds = () => {
             id: stableId,
             _id: stableId,
             title: item.title || 'Anuncio Configurado',
-            type: item.type || (i === 0 ? 'Rewarded Ad' : 'Banner'),
+            type: item.type || 'Rewarded Ad',
             reward_points: pts,
             rewardPoints: pts,
             points: pts,
@@ -132,17 +137,17 @@ const getStoredAds = () => {
           });
         }
 
-        if (deduplicated.length > 0) {
-          localStorage.setItem(STORAGE_KEY_ADS, JSON.stringify(deduplicated));
-          return deduplicated;
-        }
+        localStorage.setItem(STORAGE_KEY_ADS, JSON.stringify(deduplicated));
+        return deduplicated;
       }
     }
   } catch (e) {
     console.error('Error cargando anuncios almacenados:', e);
   }
-  localStorage.setItem(STORAGE_KEY_ADS, JSON.stringify(DEFAULT_ADS));
-  return DEFAULT_ADS;
+
+  const initial = DEFAULT_ADS.filter(ad => !isAdDeleted(ad));
+  localStorage.setItem(STORAGE_KEY_ADS, JSON.stringify(initial));
+  return initial;
 };
 
 const saveStoredAds = (ads) => {
@@ -224,12 +229,15 @@ const normalizeRewardedAd = (res, fallback = {}) => {
  * Consulta el estado real del anuncio 2X y contador diario del backend
  */
 export const getPrimaryAd = (adsList = []) => {
-  const ads = adsList.length > 0 ? adsList : getStoredAds();
+  const stored = getStoredAds();
+  const ads = adsList.length > 0 ? adsList : stored;
+  if (!ads || ads.length === 0) return null;
+
   try {
     const cachedPrimary = localStorage.getItem('ezploro_primary_rewarded_ad');
     if (cachedPrimary) {
       const parsedPrimary = JSON.parse(cachedPrimary);
-      if (parsedPrimary && typeof parsedPrimary === 'object') {
+      if (parsedPrimary && typeof parsedPrimary === 'object' && !isAdDeleted(parsedPrimary)) {
         const found = ads.find(a => 
           (parsedPrimary.id && (String(a.id || a._id) === String(parsedPrimary.id || parsedPrimary._id))) ||
           (parsedPrimary.title && a.title === parsedPrimary.title)
@@ -239,12 +247,13 @@ export const getPrimaryAd = (adsList = []) => {
     }
   } catch (e) {}
 
-  return ads.find(a => a.is_active || a.status === 'Activo') || ads[0] || DEFAULT_ADS[0];
+  return ads.find(a => a.is_active || a.status === 'Activo') || ads[0] || null;
 };
 
 export const getRewardedAdState = async () => {
   const stored = getStoredAds();
   let defaultRewarded = getPrimaryAd(stored);
+  if (!defaultRewarded) return null;
 
   try {
     const token = getAuthToken();
@@ -515,15 +524,16 @@ export const getAds = async () => {
             }
           }
 
-          saveStoredAds(combined);
-          return combined;
+          const filtered = combined.filter(a => !isAdDeleted(a));
+          saveStoredAds(filtered);
+          return filtered;
         }
       }
     }
   } catch (error) {
     console.warn('⚠️ Error conectando al endpoint de anuncios:', error);
   }
-  return stored;
+  return stored.filter(a => !isAdDeleted(a));
 };
 
 /**
@@ -738,19 +748,46 @@ export const toggleAdStatus = async (idOrAd) => {
  */
 export const deleteAd = async (idOrAd) => {
   let ads = getStoredAds();
-  const targetId = typeof idOrAd === 'object' ? (idOrAd.id || idOrAd._id) : idOrAd;
-  const targetTitle = typeof idOrAd === 'object' ? idOrAd.title : null;
+  const targetObj = typeof idOrAd === 'object' ? idOrAd : {};
+  const targetId = String(targetObj.id || targetObj._id || (typeof idOrAd !== 'object' ? idOrAd : '') || '').trim();
+  const targetTitle = String(targetObj.title || targetObj.name || '').trim();
 
   if (targetId) recordDeletedAd(targetId);
   if (targetTitle) recordDeletedAd(targetTitle);
 
   ads = ads.filter(a => {
-    if (targetId && (String(a.id) === String(targetId) || String(a._id) === String(targetId))) return false;
-    if (targetTitle && a.title === targetTitle) return false;
+    if (isAdDeleted(a)) return false;
+    const aId = String(a.id || a._id || '').trim();
+    const aTitle = String(a.title || a.name || '').trim();
+
+    if (targetId && aId && aId.toLowerCase() === targetId.toLowerCase()) return false;
+    if (targetTitle && aTitle && aTitle.toLowerCase() === targetTitle.toLowerCase()) return false;
     return true;
   });
 
   saveStoredAds(ads);
+
+  try {
+    const cachedPrimary = localStorage.getItem('ezploro_primary_rewarded_ad');
+    if (cachedPrimary) {
+      const parsed = JSON.parse(cachedPrimary);
+      if (parsed) {
+        const pId = String(parsed.id || parsed._id || '').trim().toLowerCase();
+        const pTitle = String(parsed.title || parsed.name || '').trim().toLowerCase();
+        if (
+          (targetId && pId === targetId.toLowerCase()) ||
+          (targetTitle && pTitle === targetTitle.toLowerCase())
+        ) {
+          const nextPrimary = ads.find(a => a.is_active || a.status === 'Activo') || ads[0] || null;
+          if (nextPrimary) {
+            localStorage.setItem('ezploro_primary_rewarded_ad', JSON.stringify(nextPrimary));
+          } else {
+            localStorage.removeItem('ezploro_primary_rewarded_ad');
+          }
+        }
+      }
+    }
+  } catch (e) {}
 
   try {
     const token = getAuthToken();
@@ -771,23 +808,24 @@ export const deleteAd = async (idOrAd) => {
 
     if (token) {
       const activeAdsOnly = ads.filter(a => a.is_active !== false && a.status !== 'Inactivo');
-      const primaryRewarded = ads.find(a => (a.is_active || a.status === 'Activo') && (a.type === 'Rewarded Ad' || a.id === 'ad-rewarded-2x')) || ads[0] || DEFAULT_ADS[0];
+      const primaryRewarded = ads.find(a => (a.is_active || a.status === 'Activo') && (a.type === 'Rewarded Ad' || a.id === 'ad-rewarded-2x')) || ads[0] || null;
+
       const payload = {
-        title: primaryRewarded.title || 'Multiplica 2X tus Puntos',
-        type: primaryRewarded.type || 'Rewarded Ad',
-        duration: primaryRewarded.duration || 30,
-        duration_seconds: primaryRewarded.duration || 30,
-        multiplier: primaryRewarded.multiplier || '2X',
-        daily_limit: primaryRewarded.daily_limit || 1,
-        status: primaryRewarded.status || 'Activo',
-        is_active: primaryRewarded.is_active !== false,
-        description: primaryRewarded.description || '',
-        reward_points: primaryRewarded.reward_points || 100,
-        rewardPoints: primaryRewarded.reward_points || 100,
-        points: primaryRewarded.reward_points || 100,
-        points_awarded: primaryRewarded.reward_points || 100,
-        media_url: primaryRewarded.media_url || '',
-        ad_unit_id: primaryRewarded.ad_unit_id || '',
+        title: primaryRewarded ? (primaryRewarded.title || 'Multiplica 2X tus Puntos') : '',
+        type: primaryRewarded ? (primaryRewarded.type || 'Rewarded Ad') : 'Rewarded Ad',
+        duration: primaryRewarded ? (primaryRewarded.duration || 30) : 30,
+        duration_seconds: primaryRewarded ? (primaryRewarded.duration || 30) : 30,
+        multiplier: primaryRewarded ? (primaryRewarded.multiplier || '2X') : '2X',
+        daily_limit: primaryRewarded ? (primaryRewarded.daily_limit || 1) : 1,
+        status: primaryRewarded ? (primaryRewarded.status || 'Activo') : 'Inactivo',
+        is_active: primaryRewarded ? primaryRewarded.is_active !== false : false,
+        description: primaryRewarded ? (primaryRewarded.description || '') : '',
+        reward_points: primaryRewarded ? (primaryRewarded.reward_points || 5) : 5,
+        rewardPoints: primaryRewarded ? (primaryRewarded.reward_points || 5) : 5,
+        points: primaryRewarded ? (primaryRewarded.reward_points || 5) : 5,
+        points_awarded: primaryRewarded ? (primaryRewarded.reward_points || 5) : 5,
+        media_url: primaryRewarded ? (primaryRewarded.media_url || '') : '',
+        ad_unit_id: primaryRewarded ? (primaryRewarded.ad_unit_id || '') : '',
         ads: activeAdsOnly,
         ads_list: activeAdsOnly,
         all_ads: ads
