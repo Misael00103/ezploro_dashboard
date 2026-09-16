@@ -14,6 +14,15 @@ import {
 const STORAGE_KEY_ADS = 'ezploro_ads_config';
 const STORAGE_KEY_DELETED_ADS = 'ezploro_deleted_ad_ids';
 
+const cleanStringForComparison = (str) => {
+  if (!str) return '';
+  return String(str)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+};
+
 const getDeletedAdIds = () => {
   try {
     const cached = localStorage.getItem(STORAGE_KEY_DELETED_ADS);
@@ -27,8 +36,12 @@ const recordDeletedAd = (idOrTitle) => {
   if (!idOrTitle) return;
   try {
     const set = getDeletedAdIds();
-    const clean = String(idOrTitle).trim().toLowerCase();
-    if (clean) set.add(clean);
+    const raw = String(idOrTitle).trim().toLowerCase();
+    const cleaned = cleanStringForComparison(idOrTitle);
+
+    if (raw) set.add(raw);
+    if (cleaned) set.add(cleaned);
+
     localStorage.setItem(STORAGE_KEY_DELETED_ADS, JSON.stringify(Array.from(set)));
   } catch (e) {}
 };
@@ -38,10 +51,27 @@ const isAdDeleted = (ad) => {
   const deletedSet = getDeletedAdIds();
   if (deletedSet.size === 0) return false;
 
-  const idStr = String(ad.id || ad._id || '').trim().toLowerCase();
-  const titleStr = String(ad.title || ad.name || '').trim().toLowerCase();
+  const idRaw = String(ad.id || ad._id || '').trim().toLowerCase();
+  const idClean = cleanStringForComparison(ad.id || ad._id);
+  const titleRaw = String(ad.title || ad.name || '').trim().toLowerCase();
+  const titleClean = cleanStringForComparison(ad.title || ad.name);
 
-  return (idStr !== '' && deletedSet.has(idStr)) || (titleStr !== '' && deletedSet.has(titleStr));
+  if (idRaw && deletedSet.has(idRaw)) return true;
+  if (idClean && deletedSet.has(idClean)) return true;
+  if (titleRaw && deletedSet.has(titleRaw)) return true;
+  if (titleClean && deletedSet.has(titleClean)) return true;
+
+  if (titleClean && titleClean.length >= 4) {
+    for (const item of deletedSet) {
+      if (item && item.length >= 4) {
+        if (titleClean.includes(item) || item.includes(titleClean)) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
 };
 
 // Configuración inicial limpia sin datos falsos harcodeados
@@ -495,19 +525,24 @@ export const getAds = async () => {
       // Endpoint oficial de gamificación backend /api/gamification/rewarded-ad
       const rewardedRes = await fetchWithAuth(API_URL_GAMIFICATION_REWARDED_AD).catch(() => null);
       if (rewardedRes) {
-        const serverAds = rewardedRes.all_ads || rewardedRes.ads || rewardedRes.ads_list || rewardedRes.config?.ads || rewardedRes.data?.ads;
+        let serverAds = rewardedRes.all_ads || rewardedRes.ads || rewardedRes.ads_list || rewardedRes.config?.ads || rewardedRes.data?.ads;
+        if (!serverAds && rewardedRes && typeof rewardedRes === 'object' && (rewardedRes.title || rewardedRes.name || rewardedRes.id)) {
+          serverAds = [rewardedRes];
+        }
+
         if (Array.isArray(serverAds) && serverAds.length > 0) {
           const combined = [...stored];
 
           for (const sAd of serverAds) {
             if (!sAd || typeof sAd !== 'object') continue;
             if (isAdDeleted(sAd)) continue;
-            const sId = String(sAd.id || sAd._id || '');
-            const sTitle = sAd.title || sAd.name;
+            const sId = String(sAd.id || sAd._id || '').trim();
+            const sTitle = String(sAd.title || sAd.name || '').trim();
 
             const existingIndex = combined.findIndex(l => 
               (sId && (String(l.id) === sId || String(l._id) === sId)) ||
-              (sTitle && l.title === sTitle)
+              (sTitle && l.title === sTitle) ||
+              (sTitle && cleanStringForComparison(l.title) === cleanStringForComparison(sTitle))
             );
 
             if (existingIndex !== -1) {
@@ -843,6 +878,63 @@ export const deleteAd = async (idOrAd) => {
   }
 
   return true;
+};
+
+export const deleteAllAds = async () => {
+  const currentAds = getStoredAds();
+  for (const ad of currentAds) {
+    if (ad.id) recordDeletedAd(ad.id);
+    if (ad._id) recordDeletedAd(ad._id);
+    if (ad.title) recordDeletedAd(ad.title);
+    if (ad.name) recordDeletedAd(ad.name);
+  }
+
+  recordDeletedAd('ad-rewarded-2x');
+  recordDeletedAd('ad-banner-ezploro');
+  recordDeletedAd('Multiplica 2X tus Puntos');
+  recordDeletedAd('Banner Promocional Ezploro');
+
+  saveStoredAds([]);
+  try {
+    localStorage.removeItem('ezploro_primary_rewarded_ad');
+  } catch (e) {}
+
+  try {
+    const token = getAuthToken();
+    if (token) {
+      const payload = {
+        title: '',
+        type: 'Rewarded Ad',
+        duration: 30,
+        duration_seconds: 30,
+        multiplier: '2X',
+        daily_limit: 0,
+        status: 'Inactivo',
+        is_active: false,
+        description: '',
+        reward_points: 0,
+        rewardPoints: 0,
+        points: 0,
+        points_awarded: 0,
+        media_url: '',
+        ad_unit_id: '',
+        ads: [],
+        ads_list: [],
+        all_ads: []
+      };
+
+      console.log('🔵 PUT /api/gamification/rewarded-ad-config - Vaciando catálogo por completo:', payload);
+      await fetchWithAuth(API_URL_GAMIFICATION_REWARDED_AD_CONFIG, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(() => null);
+    }
+  } catch (e) {
+    console.warn('⚠️ Error al vaciar catálogo en backend:', e);
+  }
+
+  return [];
 };
 
 export const resetAdsCatalog = async () => {

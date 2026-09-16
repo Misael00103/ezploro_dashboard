@@ -38,6 +38,7 @@ import {
   createAd,
   updateAd,
   deleteAd,
+  deleteAllAds,
   toggleAdStatus,
   getAdStats,
   getRewardedAdState,
@@ -368,6 +369,21 @@ const AdsManager = () => {
     }
   };
 
+  const handleDeleteAllAds = async () => {
+    if (window.confirm('¿Estás seguro de ELIMINAR TODOS los anuncios publicitarios del catálogo?')) {
+      try {
+        setIsLoading(true);
+        await deleteAllAds();
+        toast.success('🗑️ Todos los anuncios fueron eliminados permanentemente');
+        await loadData();
+      } catch (error) {
+        toast.error('Error al vaciar catálogo de anuncios');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
   const handleResetAds = async () => {
     if (window.confirm('¿Restablecer el catálogo de anuncios a los 2 anuncios limpios por defecto?')) {
       try {
@@ -399,6 +415,14 @@ const AdsManager = () => {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            onClick={handleDeleteAllAds}
+            variant="ghost"
+            className="border border-rose-900/50 text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 text-xs font-semibold"
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1 text-rose-400" />
+            Vaciar Catálogo
+          </Button>
           <Button
             onClick={handleResetAds}
             variant="ghost"

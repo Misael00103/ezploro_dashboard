@@ -34,6 +34,7 @@ import {
   createAd,
   toggleAdStatus,
   deleteAd,
+  deleteAllAds,
   getAdStats,
   getRewardedAdState,
   claimRewardedAd,
@@ -68,6 +69,7 @@ export const dashboardGamificationService = {
   createAd: createAd,
   toggleAdStatus: toggleAdStatus,
   deleteAd: deleteAd,
+  deleteAllAds: deleteAllAds,
   getAdStats: getAdStats,
   getRewardedAdState: getRewardedAdState,
   getRewardedAdConfig: getRewardedAdState,
@@ -94,6 +96,7 @@ export {
   createAd,
   toggleAdStatus,
   deleteAd,
+  deleteAllAds,
   getRewardedAdState,
   claimRewardedAd,
   saveRewardedAdConfig
