@@ -675,15 +675,19 @@ export const initGamificationSocket = (authToken, options = {}) => {
   if (!token) return null;
 
   try {
-    if (gamificationSocket && gamificationSocket.connected) {
+    // Reutilizar la instancia singleton si ya existe
+    if (gamificationSocket) {
       return gamificationSocket;
     }
 
     const socketUrl = SOCKET_URL || 'https://api-v5-backend-ezploro.apps.ezploro.com';
     gamificationSocket = io(socketUrl, {
       auth: { token: token.startsWith('Bearer ') ? token : `Bearer ${token}` },
-      transports: ['polling', 'websocket'],
-      reconnectionAttempts: 5,
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 10000,
+      timeout: 10000,
       ...options
     });
 
@@ -692,7 +696,7 @@ export const initGamificationSocket = (authToken, options = {}) => {
     });
 
     gamificationSocket.on('connect_error', (err) => {
-      console.warn('⚠️ Error de conexión Gamification Socket:', err.message);
+      console.warn('⚠️ Error de conexión Gamification Socket (servidor en espera o no disponible):', err.message);
     });
 
     return gamificationSocket;
