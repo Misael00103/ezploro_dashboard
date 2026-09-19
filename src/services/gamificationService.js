@@ -679,10 +679,10 @@ export const initGamificationSocket = (authToken, options = {}) => {
       return gamificationSocket;
     }
 
-    const socketUrl = SOCKET_URL || 'http://localhost:3000';
+    const socketUrl = SOCKET_URL || 'https://api-v5-backend-ezploro.apps.ezploro.com';
     gamificationSocket = io(socketUrl, {
       auth: { token: token.startsWith('Bearer ') ? token : `Bearer ${token}` },
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnectionAttempts: 5,
       ...options
     });
