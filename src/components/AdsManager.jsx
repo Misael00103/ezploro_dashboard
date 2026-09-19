@@ -301,8 +301,21 @@ const AdsManager = () => {
       }
       await createAd(formData);
       toast.success('📢 Anuncio creado exitosamente');
+      setFormData({
+        title: '',
+        type: 'Rewarded Ad',
+        reward_points: 5,
+        duration: 30,
+        status: 'Activo',
+        daily_limit: 1,
+        campaign_name: campaigns[0]?.name || 'Multiplicador Doble Ezploro Coins',
+        placement: 'Pantalla de Recompensas',
+        ad_unit_id: '',
+        description: '',
+        media_url: ''
+      });
       setActiveTab('ads');
-      loadData();
+      await loadData();
     } catch (error) {
       console.error('Error al crear anuncio:', error);
       toast.error('Ocurrió un error al guardar el anuncio');

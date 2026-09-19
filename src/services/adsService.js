@@ -37,12 +37,20 @@ const recordDeletedAd = (idOrTitle) => {
   try {
     const set = getDeletedAdIds();
     const raw = String(idOrTitle).trim().toLowerCase();
-    const cleaned = cleanStringForComparison(idOrTitle);
-
     if (raw) set.add(raw);
-    if (cleaned) set.add(cleaned);
-
     localStorage.setItem(STORAGE_KEY_DELETED_ADS, JSON.stringify(Array.from(set)));
+  } catch (e) {}
+};
+
+const unrecordDeletedAd = (idOrTitle) => {
+  if (!idOrTitle) return;
+  try {
+    const set = getDeletedAdIds();
+    const raw = String(idOrTitle).trim().toLowerCase();
+    if (set.has(raw)) {
+      set.delete(raw);
+      localStorage.setItem(STORAGE_KEY_DELETED_ADS, JSON.stringify(Array.from(set)));
+    }
   } catch (e) {}
 };
 
@@ -52,24 +60,7 @@ const isAdDeleted = (ad) => {
   if (deletedSet.size === 0) return false;
 
   const idRaw = String(ad.id || ad._id || '').trim().toLowerCase();
-  const idClean = cleanStringForComparison(ad.id || ad._id);
-  const titleRaw = String(ad.title || ad.name || '').trim().toLowerCase();
-  const titleClean = cleanStringForComparison(ad.title || ad.name);
-
   if (idRaw && deletedSet.has(idRaw)) return true;
-  if (idClean && deletedSet.has(idClean)) return true;
-  if (titleRaw && deletedSet.has(titleRaw)) return true;
-  if (titleClean && deletedSet.has(titleClean)) return true;
-
-  if (titleClean && titleClean.length >= 4) {
-    for (const item of deletedSet) {
-      if (item && item.length >= 4) {
-        if (titleClean.includes(item) || item.includes(titleClean)) {
-          return true;
-        }
-      }
-    }
-  }
 
   return false;
 };
@@ -399,9 +390,12 @@ export const claimRewardedAd = async (adId = 'ad-rewarded-2x') => {
  */
 export const saveRewardedAdConfig = async (configData) => {
   const ads = getStoredAds();
-  let index = ads.findIndex(a => (a.id && configData.id && String(a.id) === String(configData.id)) || (a._id && configData._id && String(a._id) === String(configData._id)));
+  const targetId = String(configData?.id || configData?._id || '').trim();
 
-  if (index === -1) {
+  let index = -1;
+  if (targetId) {
+    index = ads.findIndex(a => String(a.id || a._id) === targetId);
+  } else {
     index = ads.findIndex(a => a.id === 'ad-rewarded-2x' || a.type === 'Rewarded Ad');
   }
 
@@ -500,7 +494,7 @@ export const saveRewardedAdConfig = async (configData) => {
 
       if (res) {
         console.log('🟢 Backend respondió tras guardar rewarded-ad-config:', res);
-        const serverAds = res.ads || res.ads_list || res.config?.ads || res.data?.ads;
+        const serverAds = res.ads || res.ads_list || res.config?.ads || res.data?.ads || res.catalog;
         if (Array.isArray(serverAds) && serverAds.length > 0) {
           const merged = currentStored.map(localAd => {
             const match = serverAds.find(s => String(s.id || s._id) === String(localAd.id || localAd._id));
@@ -525,7 +519,7 @@ export const getAds = async () => {
       // Endpoint oficial de gamificación backend /api/gamification/rewarded-ad
       const rewardedRes = await fetchWithAuth(API_URL_GAMIFICATION_REWARDED_AD).catch(() => null);
       if (rewardedRes) {
-        let serverAds = rewardedRes.all_ads || rewardedRes.ads || rewardedRes.ads_list || rewardedRes.config?.ads || rewardedRes.data?.ads;
+        let serverAds = rewardedRes.all_ads || rewardedRes.ads || rewardedRes.ads_list || rewardedRes.config?.ads || rewardedRes.data?.ads || rewardedRes.catalog;
         if (!serverAds && rewardedRes && typeof rewardedRes === 'object' && (rewardedRes.title || rewardedRes.name || rewardedRes.id)) {
           serverAds = [rewardedRes];
         }
@@ -541,8 +535,7 @@ export const getAds = async () => {
 
             const existingIndex = combined.findIndex(l => 
               (sId && (String(l.id) === sId || String(l._id) === sId)) ||
-              (sTitle && l.title === sTitle) ||
-              (sTitle && cleanStringForComparison(l.title) === cleanStringForComparison(sTitle))
+              (sTitle && l.title === sTitle)
             );
 
             if (existingIndex !== -1) {
@@ -577,9 +570,11 @@ export const getAds = async () => {
 export const createAd = async (adData) => {
   const ptsVal = parseInt(adData.reward_points ?? adData.rewardPoints ?? adData.points ?? 100) || 100;
   const mediaVal = adData.media_url || adData.imageUrl || adData.bannerUrl || '';
+  const newId = adData.id || `ad-${Date.now()}`;
 
   const newAd = {
-    id: `ad-${Date.now()}`,
+    id: newId,
+    _id: newId,
     title: adData.title || 'Nuevo Anuncio',
     type: adData.type || 'Rewarded Ad',
     campaign_name: adData.campaign_name || 'Multiplicador Doble Ezploro Coins',
@@ -611,13 +606,15 @@ export const createAd = async (adData) => {
     created_at: new Date().toISOString()
   };
 
+  unrecordDeletedAd(newId);
+  unrecordDeletedAd(newAd.title);
+
   const ads = getStoredAds();
   ads.unshift(newAd);
   saveStoredAds(ads);
 
   // Sincronizar el catálogo actualizado con NestJS
-  const primaryRewarded = getPrimaryAd(ads);
-  await saveRewardedAdConfig(primaryRewarded).catch(() => null);
+  await saveRewardedAdConfig(newAd).catch(() => null);
 
   return newAd;
 };
