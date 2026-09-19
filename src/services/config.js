@@ -127,7 +127,7 @@ export const formatImageUrl = (url) => {
 };
 
 // Base URL for socket connection (without /api) - Fixed URL construction
-export const SOCKET_URL = normalizeUrl(BASE_URL.replace('/api', ''))
+export const SOCKET_URL = normalizeUrl(BASE_URL.replace(/\/api\/?$/, '')) || "https://api-v5-backend-ezploro.apps.ezploro.com";
 
 // Debug logging (remove in production)
 console.log('🔧 Config Debug:', {

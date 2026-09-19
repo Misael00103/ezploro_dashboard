@@ -134,7 +134,7 @@ export default function PersonalChatsListScreen({ navigation }) {
 
     // Si es una ruta relativa, construir la URL completa
     if (relativePath.startsWith("/")) {
-      return `${BASE_URL.replace('/api', '')}${relativePath}`
+      return `${BASE_URL.replace(/\/api\/?$/, '')}${relativePath}`
     }
 
     // Usar la función normalizeImageUrl como fallback

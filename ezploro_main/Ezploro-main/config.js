@@ -19,7 +19,7 @@ export const BASE_URL_IMAGE = normalizeUrl(baseImageUrl)
 
 // Base URL for socket connection - Socket está en el mismo servidor, puerto 3000
 // Usar la misma URL base que la API pero sin /api
-const socketBaseUrl = BASE_URL.replace('/api', '')
+const socketBaseUrl = BASE_URL.replace(/\/api\/?$/, '')
 export const SOCKET_URL = normalizeUrl(socketBaseUrl)
 
 // Debug logging (remove in production)
