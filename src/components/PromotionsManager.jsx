@@ -218,7 +218,7 @@ const PromotionsManager = () => {
       await loadData();
     } catch (error) {
       console.error('Error al crear promoción:', error);
-      toast.error('No se pudo guardar la promoción');
+      toast.error(error.message || 'No se pudo guardar la promoción');
     } finally {
       setIsSubmitting(false);
     }
@@ -235,7 +235,7 @@ const PromotionsManager = () => {
       loadData();
     } catch (error) {
       console.error('Error al actualizar promoción:', error);
-      toast.error('Error al actualizar la promoción');
+      toast.error(error.message || 'Error al actualizar la promoción');
     }
   };
 

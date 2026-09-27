@@ -1,4 +1,4 @@
-import { getAuthToken } from './authService';
+import { getAuthToken, getCurrentUserId } from './authService';
 import { fetchWithAuth, uploadProfilePicture } from './userService';
 import {
   API_URL_OFFERS,
@@ -239,6 +239,132 @@ export const getOfferById = async (offerId) => {
 };
 
 /**
+ * Helper para construir FormData para crear o actualizar oferta en el backend NestJS.
+ * Compatible con FileInterceptor('image') y los DTOs CreateOfferDto / UpdateOfferDto.
+ */
+const buildOfferFormData = async (offerData, imageFile = null) => {
+  const formData = new FormData();
+
+  // 1. Manejo de imagen: archivo File/Blob o string base64 / URL
+  if (imageFile instanceof File || imageFile instanceof Blob) {
+    formData.append('image', imageFile);
+  } else if (typeof offerData.image_url === 'string' && offerData.image_url.startsWith('data:')) {
+    // Si viene en base64 de FileReader (vista previa local), convertir a Blob para que el servidor lo procese como archivo
+    try {
+      const res = await fetch(offerData.image_url);
+      const blob = await res.blob();
+      formData.append('image', blob, 'offer-image.jpg');
+    } catch (e) {
+      console.warn('⚠️ No se pudo convertir base64 a blob:', e);
+    }
+  } else if (typeof offerData.image_url === 'string' && (offerData.image_url.startsWith('http://') || offerData.image_url.startsWith('https://'))) {
+    formData.append('image_url', offerData.image_url.trim());
+  } else if (typeof offerData.image === 'string' && (offerData.image.startsWith('http://') || offerData.image.startsWith('https://'))) {
+    formData.append('image_url', offerData.image.trim());
+  }
+
+  // 2. Título (requerido en create)
+  const title = String(offerData.title || offerData.name || '').trim();
+  if (title) {
+    formData.append('title', title);
+  }
+
+  // 3. Puntos requeridos (entero requerido en create)
+  const pointsRequired = parseInt(offerData.points_required ?? offerData.cost ?? 0, 10);
+  if (!isNaN(pointsRequired)) {
+    formData.append('points_required', String(pointsRequired));
+  }
+
+  // 4. is_active (debe ser estrictamente 'true' o 'false', NUNCA string vacío o null)
+  const isActive = offerData.is_active !== undefined ? Boolean(offerData.is_active) : true;
+  formData.append('is_active', String(isActive));
+
+  // 5. Campos de texto opcionales (sólo agregar si tienen contenido real)
+  if (offerData.category && String(offerData.category).trim()) {
+    formData.append('category', String(offerData.category).trim());
+  }
+  if (offerData.description && String(offerData.description).trim()) {
+    formData.append('description', String(offerData.description).trim());
+  }
+  if (offerData.offer_type && String(offerData.offer_type).trim()) {
+    formData.append('offer_type', String(offerData.offer_type).trim());
+  }
+  if (offerData.target_audience && String(offerData.target_audience).trim()) {
+    formData.append('target_audience', String(offerData.target_audience).trim());
+  }
+  if (offerData.promo_code && String(offerData.promo_code).trim()) {
+    formData.append('promo_code', String(offerData.promo_code).trim().toUpperCase());
+  }
+  const terms = offerData.terms_conditions || offerData.terms_and_conditions;
+  if (terms && String(terms).trim()) {
+    formData.append('terms_and_conditions', String(terms).trim());
+    formData.append('terms_conditions', String(terms).trim());
+  }
+  const mName = offerData.merchant_name || offerData.merchantName;
+  if (mName && String(mName).trim()) {
+    formData.append('merchant_name', String(mName).trim());
+  }
+  const mCode = offerData.merchant_code || offerData.merchantCode || offerData.merchant_pin || offerData.merchantPin;
+  if (mCode && String(mCode).trim()) {
+    formData.append('merchant_code', String(mCode).trim());
+    formData.append('merchant_pin', String(mCode).trim());
+  }
+
+  // 6. Fechas en formato ISO (sólo si son válidas)
+  if (offerData.start_date && String(offerData.start_date).trim()) {
+    const d = new Date(offerData.start_date);
+    if (!isNaN(d.getTime())) {
+      formData.append('start_date', d.toISOString());
+    }
+  }
+  if (offerData.end_date && String(offerData.end_date).trim()) {
+    const d = new Date(offerData.end_date);
+    if (!isNaN(d.getTime())) {
+      if (typeof offerData.end_date === 'string' && offerData.end_date.length === 10) {
+        d.setHours(23, 59, 59, 999);
+      }
+      formData.append('end_date', d.toISOString());
+    }
+  }
+
+  // 7. Campos numéricos (sólo si son números válidos, NUNCA strings vacíos ni NaN)
+  if (offerData.discount_percentage !== '' && offerData.discount_percentage !== null && offerData.discount_percentage !== undefined) {
+    const num = parseFloat(offerData.discount_percentage);
+    if (!isNaN(num) && num >= 0 && num <= 100) {
+      formData.append('discount_percentage', String(num));
+    }
+  }
+  const discountFix = offerData.discount_amount ?? offerData.discount_fixed;
+  if (discountFix !== '' && discountFix !== null && discountFix !== undefined) {
+    const num = parseFloat(discountFix);
+    if (!isNaN(num)) {
+      formData.append('discount_fixed', String(num));
+      formData.append('discount_amount', String(num));
+    }
+  }
+  if (offerData.original_price !== '' && offerData.original_price !== null && offerData.original_price !== undefined) {
+    const num = parseFloat(offerData.original_price);
+    if (!isNaN(num)) {
+      formData.append('original_price', String(num));
+    }
+  }
+  if (offerData.final_price !== '' && offerData.final_price !== null && offerData.final_price !== undefined) {
+    const num = parseFloat(offerData.final_price);
+    if (!isNaN(num)) {
+      formData.append('final_price', String(num));
+    }
+  }
+  if (offerData.max_uses !== '' && offerData.max_uses !== null && offerData.max_uses !== undefined) {
+    const num = parseInt(offerData.max_uses, 10);
+    if (!isNaN(num)) {
+      formData.append('max_uses', String(num));
+    }
+  }
+
+  return formData;
+};
+
+/**
  * Subir imagen de oferta
  * @param {File} imageFile - Archivo de imagen
  * @returns {Promise<string>} URL de la imagen subida
@@ -250,43 +376,13 @@ export const uploadOfferImage = async (imageFile) => {
       throw new Error('No hay sesión activa');
     }
 
-    const formData = new FormData();
-    formData.append('image', imageFile);
-
-    console.log('🔵 uploadOfferImage - Subiendo imagen de oferta...');
-    console.log('🔵 uploadOfferImage - Archivo:', imageFile.name, imageFile.size, 'bytes');
-
-    // Primero intentar con el endpoint de ofertas si existe
-    let response = await fetch(`${BASE_URL}/offer/upload-image`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      body: formData,
-    });
-
-    // Si no existe ese endpoint, usar el genérico
-    if (!response.ok && response.status === 404) {
-      console.log('🔵 uploadOfferImage - Endpoint de ofertas no disponible, usando endpoint genérico');
-      response = await fetch(`${BASE_URL}/upload/image`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
+    console.log('🔵 uploadOfferImage - Subiendo imagen...');
+    const imageUrl = await uploadProfilePicture(imageFile);
+    if (!imageUrl) {
+      throw new Error('El servidor no devolvió una URL válida para la imagen');
     }
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Error al subir imagen: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log('✅ uploadOfferImage - Imagen subida:', data);
-    
-    // Retornar la URL de la imagen
-    return data.url || data.image_url || data.secure_url || data.data?.url;
+    console.log('✅ uploadOfferImage - Imagen subida exitosamente:', imageUrl);
+    return imageUrl;
   } catch (error) {
     console.error('🔴 Error en uploadOfferImage:', error);
     throw error;
@@ -294,130 +390,125 @@ export const uploadOfferImage = async (imageFile) => {
 };
 
 export const createOffer = async (offerData, imageFile = null) => {
-  const localOffersStr = localStorage.getItem('ezploro_offers_config');
-  let localOffers = localOffersStr ? JSON.parse(localOffersStr) : [];
-  
-  const tempId = `offer-${Date.now()}`;
-  const newOffer = {
-    offer_id: tempId,
-    id: tempId,
-    title: offerData.title || 'Nueva Promoción',
-    category: offerData.category || 'Bebidas',
-    points_required: parseInt(offerData.points_required || offerData.cost) || 300,
-    cost: parseInt(offerData.points_required || offerData.cost) || 300,
-    description: offerData.description || '',
-    image_url: offerData.image_url || 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=600&auto=format&fit=crop&q=80',
-    is_active: offerData.is_active !== undefined ? offerData.is_active : true,
-    promo_code: offerData.promo_code || `EZP-${Date.now().toString().slice(-4)}`,
-    terms_conditions: offerData.terms_conditions || '',
-    created_at: new Date().toISOString()
-  };
-
-  // Guardar en local storage de inmediato para respuesta instantánea
-  localOffers.unshift(newOffer);
-  localStorage.setItem('ezploro_offers_config', JSON.stringify(localOffers));
-
-  try {
-    const token = getAuthToken();
-    if (token) {
-      const url = API_URL_OFFERS_CREATE;
-      let response;
-
-      const cleanData = {};
-      Object.keys(offerData).forEach(key => {
-        const val = offerData[key];
-        if (val !== null && val !== undefined && val !== '') {
-          cleanData[key] = val;
-        }
-      });
-
-      if (imageFile) {
-        const formData = new FormData();
-        formData.append('image', imageFile);
-        Object.keys(cleanData).forEach(key => {
-          formData.append(key, cleanData[key]);
-        });
-        response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` },
-          body: formData
-        }).catch(() => null);
-      } else {
-        response = await fetch(url, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}` 
-          },
-          body: JSON.stringify(cleanData)
-        }).catch(() => null);
-      }
-
-      if (response && response.ok) {
-        const result = await response.json();
-        const serverOffer = result.offer || result.data || result;
-        if (serverOffer && (serverOffer.id || serverOffer.offer_id)) {
-          const finalId = serverOffer.id || serverOffer.offer_id;
-          const merged = { ...newOffer, ...serverOffer, offer_id: finalId, id: finalId };
-          
-          // Reemplazar la oferta temporal creada
-          localOffers = localOffers.map(o => (o.id === tempId || o.offer_id === tempId) ? merged : o);
-          localStorage.setItem('ezploro_offers_config', JSON.stringify(localOffers));
-          return merged;
-        }
-      }
-    }
-  } catch (error) {
-    console.warn('⚠️ Error al enviar promoción a backend API, guardada en respaldo local:', error);
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error('No hay sesión activa. Por favor, inicia sesión nuevamente.');
   }
 
-  return newOffer;
+  const formData = await buildOfferFormData(offerData, imageFile);
+  const url = API_URL_OFFERS_CREATE;
+
+  console.log('🔵 createOffer - Enviando petición multipart a', url);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`
+      // No incluir Content-Type: el navegador lo genera con el multipart boundary
+    },
+    body: formData
+  });
+
+  const responseText = await response.text();
+  let result;
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    result = { message: responseText };
+  }
+
+  if (!response.ok) {
+    console.error('🔴 createOffer - Error respuesta del servidor:', response.status, result);
+    const errMsg = Array.isArray(result.message)
+      ? result.message.join(', ')
+      : (result.message || result.error || `Error ${response.status}`);
+    throw new Error(errMsg);
+  }
+
+  console.log('✅ createOffer - Oferta creada con éxito:', result);
+  const serverOffer = result.offer || result.data || result;
+  const created = {
+    ...serverOffer,
+    offer_id: serverOffer.offer_id || serverOffer.id,
+    id: serverOffer.offer_id || serverOffer.id,
+  };
+
+  try {
+    const localOffersStr = localStorage.getItem('ezploro_offers_config');
+    let localOffers = localOffersStr ? JSON.parse(localOffersStr) : [];
+    localOffers.unshift(created);
+    localStorage.setItem('ezploro_offers_config', JSON.stringify(localOffers));
+  } catch (e) {
+    console.warn('⚠️ Error guardando en local storage:', e);
+  }
+
+  return created;
 };
 
 export const updateOffer = async (offerId, offerData, imageFile = null) => {
-  const localOffersStr = localStorage.getItem('ezploro_offers_config');
-  let localOffers = localOffersStr ? JSON.parse(localOffersStr) : [];
-  
-  const index = localOffers.findIndex(o => (o.offer_id || o.id) === offerId);
-  let updatedOffer = { ...offerData, offer_id: offerId, id: offerId };
-  if (index !== -1) {
-    updatedOffer = { ...localOffers[index], ...offerData };
-    localOffers[index] = updatedOffer;
-  } else {
-    localOffers.push(updatedOffer);
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error('No hay sesión activa. Por favor, inicia sesión nuevamente.');
   }
-  localStorage.setItem('ezploro_offers_config', JSON.stringify(localOffers));
 
-  // Solo enviar petición al backend si el ID es numérico (ID existente en BD PostgreSQL)
-  const isNumericId = /^\d+$/.test(String(offerId));
-  if (isNumericId) {
-    try {
-      const token = getAuthToken();
-      if (token) {
-        const url = API_URL_OFFERS_UPDATE.replace(':offerId', offerId);
-        const formData = new FormData();
-        if (imageFile) {
-          formData.append('image', imageFile);
-        }
-        Object.keys(offerData).forEach(key => {
-          const val = offerData[key];
-          if (val !== null && val !== undefined && val !== '') {
-            formData.append(key, val);
-          }
-        });
+  const targetId = String(offerId || offerData.offer_id || offerData.id || '').trim();
+  if (!targetId) {
+    throw new Error('ID de oferta inválido');
+  }
 
-        await fetch(url, {
-          method: 'PUT',
-          headers: { 'Authorization': `Bearer ${token}` },
-          body: formData
-        }).catch(() => null);
-      }
-    } catch (error) {
-      console.warn('⚠️ Error al actualizar oferta en backend:', error);
+  const formData = await buildOfferFormData(offerData, imageFile);
+  const url = API_URL_OFFERS_UPDATE.replace(':offerId', targetId);
+
+  console.log('🔵 updateOffer - Enviando petición multipart PUT a', url);
+
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    },
+    body: formData
+  });
+
+  const responseText = await response.text();
+  let result;
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    result = { message: responseText };
+  }
+
+  if (!response.ok) {
+    console.error('🔴 updateOffer - Error respuesta del servidor:', response.status, result);
+    const errMsg = Array.isArray(result.message)
+      ? result.message.join(', ')
+      : (result.message || result.error || `Error ${response.status}`);
+    throw new Error(errMsg);
+  }
+
+  console.log('✅ updateOffer - Oferta actualizada con éxito:', result);
+  const serverOffer = result.offer || result.data || result;
+  const updated = {
+    ...offerData,
+    ...serverOffer,
+    offer_id: targetId,
+    id: targetId,
+  };
+
+  try {
+    const localOffersStr = localStorage.getItem('ezploro_offers_config');
+    let localOffers = localOffersStr ? JSON.parse(localOffersStr) : [];
+    const index = localOffers.findIndex(o => String(o.offer_id || o.id) === targetId);
+    if (index !== -1) {
+      localOffers[index] = { ...localOffers[index], ...updated };
+    } else {
+      localOffers.unshift(updated);
     }
+    localStorage.setItem('ezploro_offers_config', JSON.stringify(localOffers));
+  } catch (e) {
+    console.warn('⚠️ Error guardando en local storage:', e);
   }
 
-  return updatedOffer;
+  return updated;
 };
 
 export const deleteOffer = async (offerId) => {
