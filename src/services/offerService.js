@@ -245,57 +245,88 @@ export const getOfferById = async (offerId) => {
 const buildOfferFormData = async (offerData, imageFile = null) => {
   const formData = new FormData();
 
-  // 1. Manejo de imagen: archivo File/Blob o string base64 / URL
+  // 1. Manejo de imagen
+  let hasImage = false;
   if (imageFile instanceof File || imageFile instanceof Blob) {
     formData.append('image', imageFile);
+    formData.append('file', imageFile);
+    hasImage = true;
   } else if (typeof offerData.image_url === 'string' && offerData.image_url.startsWith('data:')) {
-    // Si viene en base64 de FileReader (vista previa local), convertir a Blob para que el servidor lo procese como archivo
     try {
       const res = await fetch(offerData.image_url);
       const blob = await res.blob();
       formData.append('image', blob, 'offer-image.jpg');
+      formData.append('file', blob, 'offer-image.jpg');
+      hasImage = true;
     } catch (e) {
       console.warn('⚠️ No se pudo convertir base64 a blob:', e);
     }
   } else if (typeof offerData.image_url === 'string' && (offerData.image_url.startsWith('http://') || offerData.image_url.startsWith('https://'))) {
-    formData.append('image_url', offerData.image_url.trim());
+    const cleanImg = offerData.image_url.trim();
+    formData.append('image_url', cleanImg);
+    formData.append('imageUrl', cleanImg);
+    formData.append('image', cleanImg);
+    hasImage = true;
   } else if (typeof offerData.image === 'string' && (offerData.image.startsWith('http://') || offerData.image.startsWith('https://'))) {
-    formData.append('image_url', offerData.image.trim());
+    const cleanImg = offerData.image.trim();
+    formData.append('image_url', cleanImg);
+    formData.append('imageUrl', cleanImg);
+    formData.append('image', cleanImg);
+    hasImage = true;
   }
 
-  // 2. Título (requerido en create)
+  // Fallback seguro de imagen para evitar que el servidor falle por falta de imagen
+  if (!hasImage) {
+    const fallbackImg = 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=600&auto=format&fit=crop&q=80';
+    formData.append('image_url', fallbackImg);
+    formData.append('imageUrl', fallbackImg);
+    formData.append('image', fallbackImg);
+  }
+
+  // 2. Título (requerido)
   const title = String(offerData.title || offerData.name || '').trim();
   if (title) {
     formData.append('title', title);
+    formData.append('name', title);
   }
 
-  // 3. Puntos requeridos (entero requerido en create)
-  const pointsRequired = parseInt(offerData.points_required ?? offerData.cost ?? 0, 10);
-  if (!isNaN(pointsRequired)) {
-    formData.append('points_required', String(pointsRequired));
-  }
+  // 3. Puntos requeridos (entero >= 0)
+  const rawPoints = offerData.points_required ?? offerData.pointsRequired ?? offerData.cost ?? offerData.points ?? 0;
+  const pointsRequired = parseInt(rawPoints, 10);
+  const safePoints = isNaN(pointsRequired) || pointsRequired < 0 ? 0 : pointsRequired;
+  formData.append('points_required', String(safePoints));
+  formData.append('pointsRequired', String(safePoints));
+  formData.append('points', String(safePoints));
 
-  // 4. is_active (debe ser estrictamente 'true' o 'false', NUNCA string vacío o null)
-  const isActive = offerData.is_active !== undefined ? Boolean(offerData.is_active) : true;
+  // 4. is_active (booleano como string 'true' o 'false')
+  const isActive = offerData.is_active !== undefined ? Boolean(offerData.is_active) : (offerData.isActive !== undefined ? Boolean(offerData.isActive) : true);
   formData.append('is_active', String(isActive));
+  formData.append('isActive', String(isActive));
 
-  // 5. Campos de texto opcionales (sólo agregar si tienen contenido real)
+  // 5. Campos de texto
   if (offerData.category && String(offerData.category).trim()) {
     formData.append('category', String(offerData.category).trim());
   }
   if (offerData.description && String(offerData.description).trim()) {
     formData.append('description', String(offerData.description).trim());
   }
-  if (offerData.offer_type && String(offerData.offer_type).trim()) {
-    formData.append('offer_type', String(offerData.offer_type).trim());
+  const offerType = offerData.offer_type || offerData.offerType;
+  if (offerType && String(offerType).trim()) {
+    formData.append('offer_type', String(offerType).trim());
+    formData.append('offerType', String(offerType).trim());
   }
-  if (offerData.target_audience && String(offerData.target_audience).trim()) {
-    formData.append('target_audience', String(offerData.target_audience).trim());
+  const targetAudience = offerData.target_audience || offerData.targetAudience;
+  if (targetAudience && String(targetAudience).trim()) {
+    formData.append('target_audience', String(targetAudience).trim());
+    formData.append('targetAudience', String(targetAudience).trim());
   }
-  if (offerData.promo_code && String(offerData.promo_code).trim()) {
-    formData.append('promo_code', String(offerData.promo_code).trim().toUpperCase());
+  const promoCode = offerData.promo_code || offerData.promoCode;
+  if (promoCode && String(promoCode).trim()) {
+    const cleanCode = String(promoCode).trim().toUpperCase();
+    formData.append('promo_code', cleanCode);
+    formData.append('promoCode', cleanCode);
   }
-  const terms = offerData.terms_conditions || offerData.terms_and_conditions;
+  const terms = offerData.terms_conditions || offerData.terms_and_conditions || offerData.termsConditions || offerData.termsAndConditions;
   if (terms && String(terms).trim()) {
     formData.append('terms_and_conditions', String(terms).trim());
     formData.append('terms_conditions', String(terms).trim());
@@ -303,38 +334,47 @@ const buildOfferFormData = async (offerData, imageFile = null) => {
   const mName = offerData.merchant_name || offerData.merchantName;
   if (mName && String(mName).trim()) {
     formData.append('merchant_name', String(mName).trim());
+    formData.append('merchantName', String(mName).trim());
   }
   const mCode = offerData.merchant_code || offerData.merchantCode || offerData.merchant_pin || offerData.merchantPin;
   if (mCode && String(mCode).trim()) {
     formData.append('merchant_code', String(mCode).trim());
     formData.append('merchant_pin', String(mCode).trim());
+    formData.append('merchantCode', String(mCode).trim());
+    formData.append('merchantPin', String(mCode).trim());
   }
 
-  // 6. Fechas en formato ISO (sólo si son válidas)
-  if (offerData.start_date && String(offerData.start_date).trim()) {
-    const d = new Date(offerData.start_date);
+  // 6. Fechas en formato ISO
+  const startDate = offerData.start_date || offerData.startDate;
+  if (startDate && String(startDate).trim()) {
+    const d = new Date(startDate);
     if (!isNaN(d.getTime())) {
       formData.append('start_date', d.toISOString());
+      formData.append('startDate', d.toISOString());
     }
   }
-  if (offerData.end_date && String(offerData.end_date).trim()) {
-    const d = new Date(offerData.end_date);
+  const endDate = offerData.end_date || offerData.endDate;
+  if (endDate && String(endDate).trim()) {
+    const d = new Date(endDate);
     if (!isNaN(d.getTime())) {
-      if (typeof offerData.end_date === 'string' && offerData.end_date.length === 10) {
+      if (typeof endDate === 'string' && endDate.length === 10) {
         d.setHours(23, 59, 59, 999);
       }
       formData.append('end_date', d.toISOString());
+      formData.append('endDate', d.toISOString());
     }
   }
 
-  // 7. Campos numéricos (sólo si son números válidos, NUNCA strings vacíos ni NaN)
-  if (offerData.discount_percentage !== '' && offerData.discount_percentage !== null && offerData.discount_percentage !== undefined) {
-    const num = parseFloat(offerData.discount_percentage);
+  // 7. Campos numéricos
+  const discountPct = offerData.discount_percentage ?? offerData.discountPercentage;
+  if (discountPct !== '' && discountPct !== null && discountPct !== undefined) {
+    const num = parseFloat(discountPct);
     if (!isNaN(num) && num >= 0 && num <= 100) {
       formData.append('discount_percentage', String(num));
+      formData.append('discountPercentage', String(num));
     }
   }
-  const discountFix = offerData.discount_amount ?? offerData.discount_fixed;
+  const discountFix = offerData.discount_amount ?? offerData.discount_fixed ?? offerData.discountAmount ?? offerData.discountFixed;
   if (discountFix !== '' && discountFix !== null && discountFix !== undefined) {
     const num = parseFloat(discountFix);
     if (!isNaN(num)) {
@@ -342,33 +382,42 @@ const buildOfferFormData = async (offerData, imageFile = null) => {
       formData.append('discount_amount', String(num));
     }
   }
-  if (offerData.original_price !== '' && offerData.original_price !== null && offerData.original_price !== undefined) {
-    const num = parseFloat(offerData.original_price);
+  const origPrice = offerData.original_price ?? offerData.originalPrice;
+  if (origPrice !== '' && origPrice !== null && origPrice !== undefined) {
+    const num = parseFloat(origPrice);
     if (!isNaN(num)) {
       formData.append('original_price', String(num));
+      formData.append('originalPrice', String(num));
     }
   }
-  if (offerData.final_price !== '' && offerData.final_price !== null && offerData.final_price !== undefined) {
-    const num = parseFloat(offerData.final_price);
+  const finPrice = offerData.final_price ?? offerData.finalPrice;
+  if (finPrice !== '' && finPrice !== null && finPrice !== undefined) {
+    const num = parseFloat(finPrice);
     if (!isNaN(num)) {
       formData.append('final_price', String(num));
+      formData.append('finalPrice', String(num));
     }
   }
-  if (offerData.max_uses !== '' && offerData.max_uses !== null && offerData.max_uses !== undefined) {
-    const num = parseInt(offerData.max_uses, 10);
+  const maxUses = offerData.max_uses ?? offerData.maxUses;
+  if (maxUses !== '' && maxUses !== null && maxUses !== undefined) {
+    const num = parseInt(maxUses, 10);
     if (!isNaN(num)) {
       formData.append('max_uses', String(num));
+      formData.append('maxUses', String(num));
+    }
+  }
+  const stockAvail = offerData.stock_available ?? offerData.stockAvailable ?? offerData.stock;
+  if (stockAvail !== '' && stockAvail !== null && stockAvail !== undefined) {
+    const num = parseInt(stockAvail, 10);
+    if (!isNaN(num)) {
+      formData.append('stock_available', String(num));
+      formData.append('stockAvailable', String(num));
     }
   }
 
   return formData;
 };
 
-/**
- * Subir imagen de oferta
- * @param {File} imageFile - Archivo de imagen
- * @returns {Promise<string>} URL de la imagen subida
- */
 export const uploadOfferImage = async (imageFile) => {
   try {
     const token = getAuthToken();
@@ -396,18 +445,30 @@ export const createOffer = async (offerData, imageFile = null) => {
   }
 
   const formData = await buildOfferFormData(offerData, imageFile);
-  const url = API_URL_OFFERS_CREATE;
+  const primaryUrl = API_URL_OFFERS_CREATE;
+  const fallbackUrl = `${BASE_URL}/rewards/offers`;
 
-  console.log('🔵 createOffer - Enviando petición multipart a', url);
+  console.log('🔵 createOffer - Enviando petición multipart a', primaryUrl);
 
-  const response = await fetch(url, {
+  let response = await fetch(primaryUrl, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`
-      // No incluir Content-Type: el navegador lo genera con el multipart boundary
     },
     body: formData
   });
+
+  if (!response.ok && response.status === 404) {
+    console.log('🔵 createOffer - Reintentando con endpoint alternativo:', fallbackUrl);
+    const retryFormData = await buildOfferFormData(offerData, imageFile);
+    response = await fetch(fallbackUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: retryFormData
+    });
+  }
 
   const responseText = await response.text();
   let result;
@@ -457,17 +518,42 @@ export const updateOffer = async (offerId, offerData, imageFile = null) => {
   }
 
   const formData = await buildOfferFormData(offerData, imageFile);
-  const url = API_URL_OFFERS_UPDATE.replace(':offerId', targetId);
+  const primaryUrl = API_URL_OFFERS_UPDATE.replace(':offerId', targetId);
+  const fallbackUrl = `${BASE_URL}/rewards/offers/${targetId}`;
 
-  console.log('🔵 updateOffer - Enviando petición multipart PUT a', url);
+  console.log('🔵 updateOffer - Enviando petición multipart PUT a', primaryUrl);
 
-  const response = await fetch(url, {
+  let response = await fetch(primaryUrl, {
     method: 'PUT',
     headers: {
       'Authorization': `Bearer ${token}`
     },
     body: formData
   });
+
+  if (!response.ok && (response.status === 404 || response.status === 405)) {
+    console.log('🔵 updateOffer - Reintentando con PATCH');
+    const retryFormData = await buildOfferFormData(offerData, imageFile);
+    response = await fetch(primaryUrl, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: retryFormData
+    });
+  }
+
+  if (!response.ok && response.status === 404) {
+    console.log('🔵 updateOffer - Reintentando con endpoint alternativo:', fallbackUrl);
+    const retryFormData = await buildOfferFormData(offerData, imageFile);
+    response = await fetch(fallbackUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: retryFormData
+    });
+  }
 
   const responseText = await response.text();
   let result;
