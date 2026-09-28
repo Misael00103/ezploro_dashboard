@@ -245,42 +245,23 @@ export const getOfferById = async (offerId) => {
 const buildOfferFormData = async (offerData, imageFile = null) => {
   const formData = new FormData();
 
-  // 1. Manejo de imagen
-  let hasImage = false;
+  // 1. Manejo de imagen: archivo File/Blob en 'image' o URL en 'image_url' (previene Multer Unexpected field)
   if (imageFile instanceof File || imageFile instanceof Blob) {
     formData.append('image', imageFile);
-    formData.append('file', imageFile);
-    hasImage = true;
   } else if (typeof offerData.image_url === 'string' && offerData.image_url.startsWith('data:')) {
     try {
       const res = await fetch(offerData.image_url);
       const blob = await res.blob();
       formData.append('image', blob, 'offer-image.jpg');
-      formData.append('file', blob, 'offer-image.jpg');
-      hasImage = true;
     } catch (e) {
-      console.warn('⚠️ No se pudo convertir base64 a blob:', e);
+      console.warn('No se pudo convertir base64 a blob:', e);
     }
   } else if (typeof offerData.image_url === 'string' && (offerData.image_url.startsWith('http://') || offerData.image_url.startsWith('https://'))) {
-    const cleanImg = offerData.image_url.trim();
-    formData.append('image_url', cleanImg);
-    formData.append('imageUrl', cleanImg);
-    formData.append('image', cleanImg);
-    hasImage = true;
+    formData.append('image_url', offerData.image_url.trim());
   } else if (typeof offerData.image === 'string' && (offerData.image.startsWith('http://') || offerData.image.startsWith('https://'))) {
-    const cleanImg = offerData.image.trim();
-    formData.append('image_url', cleanImg);
-    formData.append('imageUrl', cleanImg);
-    formData.append('image', cleanImg);
-    hasImage = true;
-  }
-
-  // Fallback seguro de imagen para evitar que el servidor falle por falta de imagen
-  if (!hasImage) {
-    const fallbackImg = 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=600&auto=format&fit=crop&q=80';
-    formData.append('image_url', fallbackImg);
-    formData.append('imageUrl', fallbackImg);
-    formData.append('image', fallbackImg);
+    formData.append('image_url', offerData.image.trim());
+  } else {
+    formData.append('image_url', 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=600&auto=format&fit=crop&q=80');
   }
 
   // 2. Título (requerido)
