@@ -65,8 +65,8 @@ export const createRule = async (ruleData) => {
     }
 
     const points = parseInt(ruleData.points);
-    if (isNaN(points) || points < 1 || points > 5) {
-      throw new Error('points debe estar entre 1 y 5');
+    if (isNaN(points) || points < 1) {
+      throw new Error('Los puntos deben ser un número mayor o igual a 1');
     }
 
     // Construir payload exactamente como lo espera el backend
@@ -153,8 +153,8 @@ export const updateRule = async (ruleId, ruleData) => {
     }
     if (ruleData.points !== undefined) {
       const points = parseInt(ruleData.points);
-      if (isNaN(points) || points < 1 || points > 5) {
-        throw new Error('points debe estar entre 1 y 5');
+      if (isNaN(points) || points < 1) {
+        throw new Error('Los puntos deben ser un número mayor o igual a 1');
       }
       payload.points = points;
     }

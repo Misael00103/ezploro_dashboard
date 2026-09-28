@@ -678,8 +678,8 @@ const GamificationManager = ({ initialTab = 'overview' }) => {
         return;
       }
 
-      if (formData.points < 1 || formData.points > 5) {
-        toast.error('Los puntos deben estar entre 1 y 5');
+      if (formData.points < 1) {
+        toast.error('Los puntos deben ser al menos 1');
         return;
       }
 
@@ -722,8 +722,8 @@ const GamificationManager = ({ initialTab = 'overview' }) => {
         return;
       }
 
-      if (formData.points < 1 || formData.points > 5) {
-        toast.error('Los puntos deben estar entre 1 y 5');
+      if (formData.points < 1) {
+        toast.error('Los puntos deben ser al menos 1');
         return;
       }
 
@@ -2005,12 +2005,11 @@ const GamificationManager = ({ initialTab = 'overview' }) => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="points" className="text-zinc-300">Puntos (1-5) *</Label>
+              <Label htmlFor="points" className="text-zinc-300">Puntos *</Label>
               <Input
                 id="points"
                 type="number"
                 min="1"
-                max="5"
                 value={formData.points}
                 onChange={(e) => setFormData({ ...formData, points: parseInt(e.target.value) || 1 })}
                 className="bg-zinc-900/50 border-zinc-800/60 text-white"
@@ -2097,12 +2096,11 @@ const GamificationManager = ({ initialTab = 'overview' }) => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit_points" className="text-zinc-300">Puntos (1-5) *</Label>
+              <Label htmlFor="edit_points" className="text-zinc-300">Puntos *</Label>
               <Input
                 id="edit_points"
                 type="number"
                 min="1"
-                max="5"
                 value={formData.points}
                 onChange={(e) => setFormData({ ...formData, points: parseInt(e.target.value) || 1 })}
                 className="bg-zinc-900/50 border-zinc-800/60 text-white"
