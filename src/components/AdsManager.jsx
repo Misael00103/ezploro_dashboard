@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -541,7 +541,7 @@ const AdsManager = () => {
 
         {/* Tab: Unity Ads Configuration */}
         <TabsContent value="unity" className="space-y-6">
-          <UnityAdsConfigCard onConfigUpdated={() => loadAllAdsData()} />
+          <UnityAdsConfigCard onConfigUpdated={() => loadData()} />
         </TabsContent>
 
         {/* Tab 1: Ads List */}

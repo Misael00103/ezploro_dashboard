@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -90,7 +90,13 @@ export default function UnityAdsConfigCard({ onConfigUpdated }) {
     try {
       await saveUnityAdsConfig(config);
       toast.success('Configuración de Unity Ads guardada exitosamente');
-      if (onConfigUpdated) onConfigUpdated(config);
+      if (typeof onConfigUpdated === 'function') {
+        try {
+          onConfigUpdated(config);
+        } catch (callbackErr) {
+          console.warn('Error en callback onConfigUpdated:', callbackErr);
+        }
+      }
     } catch (e) {
       toast.error('Error guardando configuración: ' + (e.message || 'Error del servidor'));
     } finally {
