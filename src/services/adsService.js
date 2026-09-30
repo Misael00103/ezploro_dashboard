@@ -9,6 +9,8 @@ import {
   API_URL_GAMIFICATION_REWARDED_AD,
   API_URL_GAMIFICATION_REWARDED_AD_CONFIG,
   API_URL_GAMIFICATION_CLAIM_REWARDED_AD,
+  API_URL_GAMIFICATION_UNITY_STATS,
+  API_URL_GAMIFICATION_UNITY_CALLBACK,
 } from './config';
 
 const STORAGE_KEY_ADS = 'ezploro_ads_config';
@@ -1105,3 +1107,97 @@ export const deleteCampaign = async (id) => {
   saveCampaigns(campaigns);
   return true;
 };
+
+/**
+ * ============================================================================
+ * UNITY ADS - MONETIZATION & REWARDS CONFIGURATION (S2S HMAC)
+ * ============================================================================
+ */
+
+/**
+ * Obtener configuración activa de Unity Ads
+ */
+export const getUnityAdsConfig = async () => {
+  try {
+    const res = await fetchWithAuth(API_URL_GAMIFICATION_REWARDED_AD);
+    if (res) {
+      return {
+        isActive: res.is_active ?? res.isActive ?? true,
+        pointsReward: Number(res.points_reward ?? res.points ?? 100) || 100,
+        dailyLimit: Number(res.daily_limit ?? res.dailyLimit ?? 10) || 10,
+        gameIdAndroid: res.gameIdAndroid || res.game_id_android || res.android?.gameId || '',
+        gameIdIos: res.gameIdIos || res.game_id_ios || res.ios?.gameId || '',
+        placementAndroid: res.placementAndroid || res.placement_android || res.android?.placementId || 'Rewarded_Android',
+        placementIos: res.placementIos || res.placement_ios || res.ios?.placementId || 'Rewarded_iOS',
+        provider: 'unity',
+        s2sCallbackUrl: res.ssvCallbackUrl || res.unityCallbackUrl || '/api/gamification/unity-callback',
+      };
+    }
+  } catch (error) {
+    console.warn('Error obteniendo configuración de Unity Ads:', error);
+  }
+
+  return {
+    isActive: true,
+    pointsReward: 100,
+    dailyLimit: 10,
+    gameIdAndroid: '',
+    gameIdIos: '',
+    placementAndroid: 'Rewarded_Android',
+    placementIos: 'Rewarded_iOS',
+    provider: 'unity',
+    s2sCallbackUrl: '/api/gamification/unity-callback',
+  };
+};
+
+/**
+ * Guardar configuración de Unity Ads
+ */
+export const saveUnityAdsConfig = async (config) => {
+  const payload = {
+    provider: 'unity',
+    is_active: config.isActive,
+    isActive: config.isActive,
+    status: config.isActive ? 'Activo' : 'Inactivo',
+    points_reward: Number(config.pointsReward) || 100,
+    points: Number(config.pointsReward) || 100,
+    reward_points: Number(config.pointsReward) || 100,
+    daily_limit: Number(config.dailyLimit) || 10,
+    dailyLimit: Number(config.dailyLimit) || 10,
+    gameIdAndroid: config.gameIdAndroid || '',
+    game_id_android: config.gameIdAndroid || '',
+    gameIdIos: config.gameIdIos || '',
+    game_id_ios: config.gameIdIos || '',
+    placementAndroid: config.placementAndroid || 'Rewarded_Android',
+    placement_android: config.placementAndroid || 'Rewarded_Android',
+    placementIos: config.placementIos || 'Rewarded_iOS',
+    placement_ios: config.placementIos || 'Rewarded_iOS',
+    type: 'Rewarded Ad',
+    ad_type: 'rewarded',
+  };
+
+  try {
+    const res = await fetchWithAuth(API_URL_GAMIFICATION_REWARDED_AD, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return res || payload;
+  } catch (error) {
+    console.error('Error guardando configuración de Unity Ads:', error);
+    throw error;
+  }
+};
+
+/**
+ * Obtener estadísticas de monetización en tiempo real desde Unity Cloud API
+ */
+export const getUnityMonetizationStats = async () => {
+  try {
+    const res = await fetchWithAuth(API_URL_GAMIFICATION_UNITY_STATS);
+    return res;
+  } catch (error) {
+    console.warn('Error obteniendo métricas de Unity Ads:', error);
+    return { success: false, error: error.message };
+  }
+};
+

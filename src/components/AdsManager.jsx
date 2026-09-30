@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -31,8 +31,10 @@ import {
   Gift,
   Layers,
   Target,
-  Coins
+  Coins,
+  Gamepad2
 } from 'lucide-react';
+import UnityAdsConfigCard from './UnityAdsConfigCard';
 import {
   getAds,
   createAd,
@@ -248,7 +250,7 @@ const AdsManager = () => {
       daily_limit: 1,
       campaign_name: campaigns[0]?.name || 'Multiplicador Doble Ezploro Coins',
       placement: 'Pantalla de Recompensas',
-      ad_unit_id: 'ca-app-pub-3940256099942544/5224354917',
+      ad_unit_id: 'Rewarded_Android',
       description: 'Duplica instantáneamente tus Ezploro Coins acumulados al ver este anuncio completo.',
       media_url: ''
     });
@@ -514,7 +516,11 @@ const AdsManager = () => {
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 glass-panel border-zinc-800/50 bg-zinc-950/80 p-1">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 glass-panel border-zinc-800/50 bg-zinc-950/80 p-1">
+          <TabsTrigger value="unity" className="data-[state=active]:bg-violet-600/30 data-[state=active]:text-violet-300 text-zinc-400 font-semibold">
+            <Gamepad2 className="h-4 w-4 mr-2 text-violet-400" />
+            Unity Ads (S2S)
+          </TabsTrigger>
           <TabsTrigger value="ads" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-300 text-zinc-400">
             <Tv className="h-4 w-4 mr-2" />
             Anuncios (Rewarded Ads)
@@ -533,8 +539,39 @@ const AdsManager = () => {
           </TabsTrigger>
         </TabsList>
 
+        {/* Tab: Unity Ads Configuration */}
+        <TabsContent value="unity" className="space-y-6">
+          <UnityAdsConfigCard onConfigUpdated={() => loadAllAdsData()} />
+        </TabsContent>
+
         {/* Tab 1: Ads List */}
         <TabsContent value="ads" className="space-y-6">
+          {/* Unity Ads Integration Banner */}
+          <div className="glass-panel p-4 rounded-xl border border-violet-500/30 bg-gradient-to-r from-violet-950/30 via-zinc-900 to-zinc-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-violet-600/20 text-violet-400 border border-violet-500/30">
+                <Gamepad2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  Sistema de Monetización Migrado a Unity Ads (S2S Callback)
+                  <Badge className="bg-emerald-500/20 text-emerald-300 text-[10px] border-emerald-500/40 font-mono">HMAC SHA-256 Activo</Badge>
+                </h4>
+                <p className="text-xs text-zinc-400">
+                  La app móvil EzploroV2 acredita puntos de forma segura a través de los servidores de Unity Cloud sin intermediarios.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setActiveTab('unity')}
+              className="bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs shrink-0 shadow-sm"
+            >
+              Configurar Unity Ads
+            </Button>
+          </div>
+
           {/* Featured Rewarded 2X Configuration Card */}
           {rewardedState && (
             <div className="glass-panel p-6 rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-950/30 via-zinc-900 to-zinc-950 relative overflow-hidden">
@@ -1055,11 +1092,11 @@ const AdsManager = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-zinc-300">Google AdMob Ad Unit ID (Opcional)</Label>
+                    <Label className="text-zinc-300">Unity Ads Placement ID (Opcional)</Label>
                     <Input
                       value={formData.ad_unit_id || ''}
                       onChange={(e) => setFormData({ ...formData, ad_unit_id: e.target.value })}
-                      placeholder="ca-app-pub-3940256099942544/5224354917"
+                      placeholder="Rewarded_Android"
                       className="bg-zinc-900 border-zinc-800 text-white font-mono text-xs"
                     />
                   </div>
@@ -1283,11 +1320,11 @@ const AdsManager = () => {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-zinc-300 text-xs">AdMob Unit ID</Label>
+                <Label className="text-zinc-300 text-xs">Unity Ads Placement ID</Label>
                 <Input
                   value={formData.ad_unit_id || ''}
                   onChange={(e) => setFormData({ ...formData, ad_unit_id: e.target.value })}
-                  placeholder="ca-app-pub-..."
+                  placeholder="Rewarded_Android"
                   className="bg-zinc-900 border-zinc-800 text-white font-mono text-xs"
                 />
               </div>

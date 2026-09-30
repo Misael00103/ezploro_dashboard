@@ -467,5 +467,7 @@ export const API_URL_GAMIFICATION_DAILY_PRIZE_CONFIG = `${BASE_URL}/gamification
 export const API_URL_GAMIFICATION_DAILY_STREAK = `${BASE_URL}/gamification/daily-streak`
 export const API_URL_GAMIFICATION_DAILY_STREAK_CONFIG = `${BASE_URL}/gamification/daily-streak-config`
 export const API_URL_GAMIFICATION_CHECK_IN = `${BASE_URL}/gamification/check-in`
+export const API_URL_GAMIFICATION_UNITY_CALLBACK = `${BASE_URL}/gamification/unity-callback`
+export const API_URL_GAMIFICATION_UNITY_STATS = `${BASE_URL}/gamification/unity-stats`
 
 
