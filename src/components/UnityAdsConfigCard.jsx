@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -37,10 +37,10 @@ export default function UnityAdsConfigCard({ onConfigUpdated }) {
     isActive: true,
     pointsReward: 100,
     dailyLimit: 10,
-    gameIdAndroid: '',
-    gameIdIos: '',
-    placementAndroid: 'Rewarded_Android',
-    placementIos: 'Rewarded_iOS',
+    gameIdAndroid: '800372496',
+    gameIdIos: '800372495',
+    placementAndroid: 'BP_Rewarded_Android',
+    placementIos: 'BP_Rewarded_iOS',
     s2sCallbackUrl: 'https://api-v5-backend-ezploro.apps.ezploro.com/api/gamification/unity-callback?sid={user_id}&oid={order_id}&hmac={hash}',
   });
   const [stats, setStats] = useState(null);
@@ -61,8 +61,8 @@ export default function UnityAdsConfigCard({ onConfigUpdated }) {
           dailyLimit: Number(data.dailyLimit ?? data.daily_limit ?? 10) || 10,
           gameIdAndroid: data.gameIdAndroid || data.game_id_android || data.android?.gameId || '',
           gameIdIos: data.gameIdIos || data.game_id_ios || data.ios?.gameId || '',
-          placementAndroid: data.placementAndroid || data.placement_android || data.android?.placementId || 'Rewarded_Android',
-          placementIos: data.placementIos || data.placement_ios || data.ios?.placementId || 'Rewarded_iOS',
+          placementAndroid: data.placementAndroid || data.placement_android || data.android?.placementId || 'BP_Rewarded_Android',
+          placementIos: data.placementIos || data.placement_ios || data.ios?.placementId || 'BP_Rewarded_iOS',
           s2sCallbackUrl: 'https://api-v5-backend-ezploro.apps.ezploro.com/api/gamification/unity-callback?sid={user_id}&oid={order_id}&hmac={hash}',
         }));
       }
@@ -163,7 +163,7 @@ export default function UnityAdsConfigCard({ onConfigUpdated }) {
                 type="text"
                 value={config.gameIdAndroid}
                 onChange={(e) => setConfig({ ...config, gameIdAndroid: e.target.value })}
-                placeholder="Ej: 5891234"
+                placeholder="800372496"
                 className="bg-zinc-900 border-zinc-800 text-white font-mono text-xs focus:border-purple-500"
               />
               <span className="text-[10px] text-zinc-500">Obtenido en Unity Cloud Dashboard &gt; Monetization</span>
@@ -178,7 +178,7 @@ export default function UnityAdsConfigCard({ onConfigUpdated }) {
                 type="text"
                 value={config.gameIdIos}
                 onChange={(e) => setConfig({ ...config, gameIdIos: e.target.value })}
-                placeholder="Ej: 5891235"
+                placeholder="800372495"
                 className="bg-zinc-900 border-zinc-800 text-white font-mono text-xs focus:border-purple-500"
               />
               <span className="text-[10px] text-zinc-500">Identificador del proyecto Unity para dispositivos Apple</span>
@@ -193,7 +193,7 @@ export default function UnityAdsConfigCard({ onConfigUpdated }) {
                 type="text"
                 value={config.placementAndroid}
                 onChange={(e) => setConfig({ ...config, placementAndroid: e.target.value })}
-                placeholder="Rewarded_Android"
+                placeholder="BP_Rewarded_Android"
                 className="bg-zinc-900 border-zinc-800 text-white font-mono text-xs focus:border-purple-500"
               />
               <span className="text-[10px] text-zinc-500">Nombre del Ad Unit Recompensado en Unity Console</span>
@@ -208,7 +208,7 @@ export default function UnityAdsConfigCard({ onConfigUpdated }) {
                 type="text"
                 value={config.placementIos}
                 onChange={(e) => setConfig({ ...config, placementIos: e.target.value })}
-                placeholder="Rewarded_iOS"
+                placeholder="BP_Rewarded_iOS"
                 className="bg-zinc-900 border-zinc-800 text-white font-mono text-xs focus:border-purple-500"
               />
               <span className="text-[10px] text-zinc-500">Nombre del Ad Unit Recompensado para iOS</span>

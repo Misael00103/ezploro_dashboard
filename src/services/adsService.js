@@ -1,4 +1,4 @@
-import { fetchWithAuth } from './userService';
+﻿import { fetchWithAuth } from './userService';
 import { getAuthToken } from './authService';
 import {
   API_URL_ADS,
@@ -1127,8 +1127,8 @@ export const getUnityAdsConfig = async () => {
         dailyLimit: Number(res.daily_limit ?? res.dailyLimit ?? 10) || 10,
         gameIdAndroid: res.gameIdAndroid || res.game_id_android || res.android?.gameId || '',
         gameIdIos: res.gameIdIos || res.game_id_ios || res.ios?.gameId || '',
-        placementAndroid: res.placementAndroid || res.placement_android || res.android?.placementId || 'Rewarded_Android',
-        placementIos: res.placementIos || res.placement_ios || res.ios?.placementId || 'Rewarded_iOS',
+        placementAndroid: res.placementAndroid || res.placement_android || res.android?.placementId || 'BP_Rewarded_Android',
+        placementIos: res.placementIos || res.placement_ios || res.ios?.placementId || 'BP_Rewarded_iOS',
         provider: 'unity',
         s2sCallbackUrl: res.ssvCallbackUrl || res.unityCallbackUrl || '/api/gamification/unity-callback',
       };
@@ -1141,10 +1141,10 @@ export const getUnityAdsConfig = async () => {
     isActive: true,
     pointsReward: 100,
     dailyLimit: 10,
-    gameIdAndroid: '',
-    gameIdIos: '',
-    placementAndroid: 'Rewarded_Android',
-    placementIos: 'Rewarded_iOS',
+    gameIdAndroid: '800372496',
+    gameIdIos: '800372495',
+    placementAndroid: 'BP_Rewarded_Android',
+    placementIos: 'BP_Rewarded_iOS',
     provider: 'unity',
     s2sCallbackUrl: '/api/gamification/unity-callback',
   };
@@ -1168,10 +1168,10 @@ export const saveUnityAdsConfig = async (config) => {
     game_id_android: config.gameIdAndroid || '',
     gameIdIos: config.gameIdIos || '',
     game_id_ios: config.gameIdIos || '',
-    placementAndroid: config.placementAndroid || 'Rewarded_Android',
-    placement_android: config.placementAndroid || 'Rewarded_Android',
-    placementIos: config.placementIos || 'Rewarded_iOS',
-    placement_ios: config.placementIos || 'Rewarded_iOS',
+    placementAndroid: config.placementAndroid || 'BP_Rewarded_Android',
+    placement_android: config.placementAndroid || 'BP_Rewarded_Android',
+    placementIos: config.placementIos || 'BP_Rewarded_iOS',
+    placement_ios: config.placementIos || 'BP_Rewarded_iOS',
     type: 'Rewarded Ad',
     ad_type: 'rewarded',
   };
