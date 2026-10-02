@@ -1138,18 +1138,19 @@ export const DEFAULT_MONETIZATION_CONFIG = {
   },
   admobConfig: {
     isActive: true,
-    publisherId: 'pub-3940256099942544',
-    appIdAndroid: 'ca-app-pub-3940256099942544~3347511713',
-    appIdIos: 'ca-app-pub-3940256099942544~1458002511',
-    rewardedUnitIdAndroid: 'ca-app-pub-3940256099942544/5224354917',
-    rewardedUnitIdIos: 'ca-app-pub-3940256099942544/1712485313',
-    interstitialUnitIdAndroid: 'ca-app-pub-3940256099942544/1033173712',
-    interstitialUnitIdIos: 'ca-app-pub-3940256099942544/4411468910',
-    bannerUnitIdAndroid: 'ca-app-pub-3940256099942544/6300978111',
-    bannerUnitIdIos: 'ca-app-pub-3940256099942544/2934735716',
-    testMode: true,
+    publisherId: '',
+    appIdAndroid: '',
+    appIdIos: '',
+    rewardedUnitIdAndroid: '',
+    rewardedUnitIdIos: '',
+    interstitialUnitIdAndroid: '',
+    interstitialUnitIdIos: '',
+    bannerUnitIdAndroid: '',
+    bannerUnitIdIos: '',
+    testMode: false,
   }
 };
+
 
 /**
  * Obtener la configuración completa unificada de monetización
@@ -1373,19 +1374,29 @@ export const saveAdMobConfig = async (admobData) => {
 export const getUnityMonetizationStats = async () => {
   try {
     const res = await fetchWithAuth(API_URL_GAMIFICATION_UNITY_STATS);
-    if (res && res.success !== false) return res;
+    if (res && res.success !== false) {
+      const d = res.data || res;
+      return {
+        success: true,
+        data: {
+          impressions: Number(d.impressions ?? d.adImpressions ?? d.totalImpressions ?? 0),
+          completions: Number(d.completions ?? d.totalCompletions ?? 0),
+          revenue: Number(d.revenue ?? d.totalRevenue ?? 0),
+          ecpm: Number(d.ecpm ?? d.eCPM ?? 0)
+        }
+      };
+    }
   } catch (error) {
     console.warn('Error obteniendo métricas de Unity Ads:', error);
   }
 
-  // Fallback seguro de métricas
   return {
     success: true,
     data: {
-      impressions: 1420,
-      completions: 1280,
-      revenue: 38.40,
-      ecpm: 27.04
+      impressions: 0,
+      completions: 0,
+      revenue: 0,
+      ecpm: 0
     }
   };
 };
@@ -1396,22 +1407,33 @@ export const getUnityMonetizationStats = async () => {
 export const getAdMobMonetizationStats = async () => {
   try {
     const res = await fetchWithAuth(API_URL_GAMIFICATION_ADMOB_STATS);
-    if (res && res.success !== false) return res;
+    if (res && res.success !== false) {
+      const d = res.data || res;
+      return {
+        success: true,
+        data: {
+          impressions: Number(d.impressions ?? d.adImpressions ?? d.totalImpressions ?? 0),
+          completions: Number(d.completions ?? d.totalCompletions ?? 0),
+          revenue: Number(d.revenue ?? d.totalRevenue ?? 0),
+          ecpm: Number(d.ecpm ?? d.eCPM ?? 0)
+        }
+      };
+    }
   } catch (error) {
     console.warn('Error obteniendo métricas de AdMob:', error);
   }
 
-  // Fallback seguro de métricas AdMob
   return {
     success: true,
     data: {
-      impressions: 1890,
-      completions: 1650,
-      revenue: 49.50,
-      ecpm: 26.19
+      impressions: 0,
+      completions: 0,
+      revenue: 0,
+      ecpm: 0
     }
   };
 };
+
 
 /**
  * Obtener estadísticas combinadas Híbridas (Unity Ads + Google AdMob)

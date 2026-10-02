@@ -33,14 +33,14 @@ export default function AdMobConfigCard({ onConfigUpdated }) {
     isActive: true,
     pointsReward: 100,
     dailyLimit: 10,
-    publisherId: 'pub-3940256099942544',
-    appIdAndroid: 'ca-app-pub-3940256099942544~3347511713',
-    appIdIos: 'ca-app-pub-3940256099942544~1458002511',
-    rewardedUnitIdAndroid: 'ca-app-pub-3940256099942544/5224354917',
-    rewardedUnitIdIos: 'ca-app-pub-3940256099942544/1712485313',
-    interstitialUnitIdAndroid: 'ca-app-pub-3940256099942544/1033173712',
-    bannerUnitIdAndroid: 'ca-app-pub-3940256099942544/6300978111',
-    testMode: true,
+    publisherId: '',
+    appIdAndroid: '',
+    appIdIos: '',
+    rewardedUnitIdAndroid: '',
+    rewardedUnitIdIos: '',
+    interstitialUnitIdAndroid: '',
+    bannerUnitIdAndroid: '',
+    testMode: false,
   });
   const [stats, setStats] = useState(null);
 
@@ -58,20 +58,21 @@ export default function AdMobConfigCard({ onConfigUpdated }) {
           isActive: data.isActive ?? true,
           pointsReward: Number(data.pointsReward ?? 100) || 100,
           dailyLimit: Number(data.dailyLimit ?? 10) || 10,
-          publisherId: data.publisherId || 'pub-3940256099942544',
-          appIdAndroid: data.appIdAndroid || 'ca-app-pub-3940256099942544~3347511713',
-          appIdIos: data.appIdIos || 'ca-app-pub-3940256099942544~1458002511',
-          rewardedUnitIdAndroid: data.rewardedUnitIdAndroid || 'ca-app-pub-3940256099942544/5224354917',
-          rewardedUnitIdIos: data.rewardedUnitIdIos || 'ca-app-pub-3940256099942544/1712485313',
-          interstitialUnitIdAndroid: data.interstitialUnitIdAndroid || 'ca-app-pub-3940256099942544/1033173712',
-          bannerUnitIdAndroid: data.bannerUnitIdAndroid || 'ca-app-pub-3940256099942544/6300978111',
-          testMode: data.testMode !== undefined ? data.testMode : true,
+          publisherId: data.publisherId || '',
+          appIdAndroid: data.appIdAndroid || '',
+          appIdIos: data.appIdIos || '',
+          rewardedUnitIdAndroid: data.rewardedUnitIdAndroid || '',
+          rewardedUnitIdIos: data.rewardedUnitIdIos || '',
+          interstitialUnitIdAndroid: data.interstitialUnitIdAndroid || '',
+          bannerUnitIdAndroid: data.bannerUnitIdAndroid || '',
+          testMode: data.testMode !== undefined ? data.testMode : false,
         }));
       }
     } catch (e) {
       console.error('Error cargando configuración de AdMob:', e);
     }
   };
+
 
   const loadStats = async () => {
     setStatsLoading(true);
