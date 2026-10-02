@@ -32,9 +32,12 @@ import {
   Layers,
   Target,
   Coins,
-  Gamepad2
+  Gamepad2,
+  ArrowRightLeft
 } from 'lucide-react';
 import UnityAdsConfigCard from './UnityAdsConfigCard';
+import AdMobConfigCard from './AdMobConfigCard';
+import HybridAdsConfigCard from './HybridAdsConfigCard';
 import {
   getAds,
   createAd,
@@ -45,7 +48,9 @@ import {
   getAdStats,
   getRewardedAdState,
   saveRewardedAdConfig,
+  getMonetizationConfig,
   getCampaigns,
+
   createCampaign,
   updateCampaign,
   toggleCampaignStatus,
@@ -516,61 +521,82 @@ const AdsManager = () => {
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 glass-panel border-zinc-800/50 bg-zinc-950/80 p-1">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-7 glass-panel border-zinc-800/50 bg-zinc-950/80 p-1">
+          <TabsTrigger value="monetization" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-purple-600/30 data-[state=active]:text-amber-300 text-zinc-400 font-bold">
+            <Zap className="h-4 w-4 mr-1 text-amber-400" />
+            Red Monetización
+          </TabsTrigger>
           <TabsTrigger value="unity" className="data-[state=active]:bg-violet-600/30 data-[state=active]:text-violet-300 text-zinc-400 font-semibold">
-            <Gamepad2 className="h-4 w-4 mr-2 text-violet-400" />
-            Unity Ads (S2S)
+            <Gamepad2 className="h-4 w-4 mr-1 text-violet-400" />
+            Unity Ads
           </TabsTrigger>
-          <TabsTrigger value="ads" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-300 text-zinc-400">
-            <Tv className="h-4 w-4 mr-2" />
-            Anuncios (Rewarded Ads)
+          <TabsTrigger value="admob" className="data-[state=active]:bg-amber-500/30 data-[state=active]:text-amber-300 text-zinc-400 font-semibold">
+            <Tv className="h-4 w-4 mr-1 text-amber-400" />
+            Google AdMob
           </TabsTrigger>
-          <TabsTrigger value="campaigns" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-300 text-zinc-400">
-            <Calendar className="h-4 w-4 mr-2" />
+          <TabsTrigger value="ads" className="data-[state=active]:bg-zinc-800 data-[state=active]:text-zinc-200 text-zinc-400">
+            <Layers className="h-4 w-4 mr-1" />
+            Catálogo Ads
+          </TabsTrigger>
+          <TabsTrigger value="campaigns" className="data-[state=active]:bg-zinc-800 data-[state=active]:text-zinc-200 text-zinc-400">
+            <Calendar className="h-4 w-4 mr-1" />
             Campañas
           </TabsTrigger>
-          <TabsTrigger value="create" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-300 text-zinc-400">
-            <Plus className="h-4 w-4 mr-2" />
+          <TabsTrigger value="create" className="data-[state=active]:bg-zinc-800 data-[state=active]:text-zinc-200 text-zinc-400">
+            <Plus className="h-4 w-4 mr-1" />
             Crear Anuncio
           </TabsTrigger>
-          <TabsTrigger value="stats" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-300 text-zinc-400">
-            <BarChart2 className="h-4 w-4 mr-2" />
+          <TabsTrigger value="stats" className="data-[state=active]:bg-zinc-800 data-[state=active]:text-zinc-200 text-zinc-400">
+            <BarChart2 className="h-4 w-4 mr-1" />
             Estadísticas
           </TabsTrigger>
         </TabsList>
+
+        {/* Tab: Unified Hybrid Monetization Hub */}
+        <TabsContent value="monetization" className="space-y-6">
+          <HybridAdsConfigCard onConfigUpdated={() => loadData()} />
+        </TabsContent>
 
         {/* Tab: Unity Ads Configuration */}
         <TabsContent value="unity" className="space-y-6">
           <UnityAdsConfigCard onConfigUpdated={() => loadData()} />
         </TabsContent>
 
-        {/* Tab 1: Ads List */}
+        {/* Tab: Google AdMob Configuration */}
+        <TabsContent value="admob" className="space-y-6">
+          <AdMobConfigCard onConfigUpdated={() => loadData()} />
+        </TabsContent>
+
+        {/* Tab: Ads List & Rewarded Config */}
         <TabsContent value="ads" className="space-y-6">
-          {/* Unity Ads Integration Banner */}
-          <div className="glass-panel p-4 rounded-xl border border-violet-500/30 bg-gradient-to-r from-violet-950/30 via-zinc-900 to-zinc-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Dual Monetization Integration Banner */}
+          <div className="glass-panel p-4 rounded-xl border border-amber-500/30 bg-gradient-to-r from-purple-950/40 via-amber-950/30 to-zinc-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-lg bg-violet-600/20 text-violet-400 border border-violet-500/30">
-                <Gamepad2 className="h-5 w-5" />
+              <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                <Zap className="h-5 w-5" />
               </div>
               <div>
                 <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                  Sistema de Monetización Migrado a Unity Ads (S2S Callback)
-                  <Badge className="bg-emerald-500/20 text-emerald-300 text-[10px] border-emerald-500/40 font-mono">HMAC SHA-256 Activo</Badge>
+                  Sistema Monetización Dual: Unity Ads + Google AdMob
+                  <Badge className="bg-emerald-500/20 text-emerald-300 text-[10px] border-emerald-500/40 font-mono">Modo Híbrido Activo</Badge>
                 </h4>
                 <p className="text-xs text-zinc-400">
-                  La app móvil EzploroV2 acredita puntos de forma segura a través de los servidores de Unity Cloud sin intermediarios.
+                  Ambas redes funcionan separadas o integradas mediante cascada Waterfall conservando su configuración individual.
                 </p>
               </div>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setActiveTab('unity')}
-              className="bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs shrink-0 shadow-sm"
-            >
-              Configurar Unity Ads
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setActiveTab('monetization')}
+                className="bg-amber-500 hover:bg-amber-600 text-zinc-950 font-bold text-xs shadow-sm"
+              >
+                Estrategia Redes
+              </Button>
+            </div>
           </div>
+
 
           {/* Featured Rewarded 2X Configuration Card */}
           {rewardedState && (
