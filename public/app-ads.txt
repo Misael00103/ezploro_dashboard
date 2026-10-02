@@ -1,0 +1,6 @@
+# App-Ads.txt for Ezploro
+# Unity Ads
+unity.com, 149353520, DIRECT, 96cabb5fbdde37a7
+
+# Google AdMob
+google.com, pub-1682595508078257, RESELLER, f08c47fec0942fa0
