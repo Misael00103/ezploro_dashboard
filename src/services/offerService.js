@@ -163,15 +163,18 @@ export const getOffers = async (filters = {}) => {
           );
           if (localMatch) {
             return {
-              ...localMatch,
               ...offer,
-              location: offer.location || localMatch.location || localMatch.address || '',
-              address: offer.address || localMatch.address || '',
-              city: offer.city || localMatch.city || '',
-              state: offer.state || localMatch.state || '',
-              country: offer.country || localMatch.country || '',
-              latitude: offer.latitude || offer.lat || localMatch.latitude || localMatch.lat || '',
-              longitude: offer.longitude || offer.lng || localMatch.longitude || localMatch.lng || ''
+              ...localMatch,
+              // Los datos actualizados por el usuario en localMatch tienen prioridad sobre los datos anteriores del backend
+              location: localMatch.location || offer.location || localMatch.address || '',
+              address: localMatch.address !== undefined ? localMatch.address : (offer.address || ''),
+              city: localMatch.city !== undefined ? localMatch.city : (offer.city || ''),
+              state: localMatch.state !== undefined ? localMatch.state : (offer.state || ''),
+              country: localMatch.country !== undefined ? localMatch.country : (offer.country || ''),
+              latitude: localMatch.latitude || localMatch.lat || offer.latitude || offer.lat || '',
+              longitude: localMatch.longitude || localMatch.lng || offer.longitude || offer.lng || '',
+              offer_id: offerId,
+              id: offerId
             };
           }
           return offer;
@@ -723,15 +726,15 @@ export const updateOffer = async (offerId, offerData, imageFile = null) => {
   console.log('✅ updateOffer - Oferta actualizada con éxito:', result);
   const serverOffer = result.offer || result.data || result || {};
   const updated = {
-    ...offerData,
     ...serverOffer,
+    ...offerData,
     location: offerData.location || serverOffer.location || offerData.address || '',
-    address: offerData.address || serverOffer.address || '',
-    city: offerData.city || serverOffer.city || '',
-    state: offerData.state || serverOffer.state || '',
-    country: offerData.country || serverOffer.country || '',
-    latitude: offerData.latitude || serverOffer.latitude || offerData.lat || '',
-    longitude: offerData.longitude || serverOffer.longitude || offerData.lng || '',
+    address: offerData.address !== undefined ? offerData.address : (serverOffer.address || ''),
+    city: offerData.city !== undefined ? offerData.city : (serverOffer.city || ''),
+    state: offerData.state !== undefined ? offerData.state : (serverOffer.state || ''),
+    country: offerData.country !== undefined ? offerData.country : (serverOffer.country || ''),
+    latitude: offerData.latitude || offerData.lat || serverOffer.latitude || serverOffer.lat || '',
+    longitude: offerData.longitude || offerData.lng || serverOffer.longitude || serverOffer.lng || '',
     offer_id: targetId,
     id: targetId,
   };
