@@ -162,15 +162,26 @@ export const getOffers = async (filters = {}) => {
             (l) => String(l.offer_id || l.id || l._id || '') === offerId
           );
           if (localMatch) {
+            const locAddress = (localMatch.address || offer.address || '').trim();
+            const locCountry = (localMatch.country || offer.country || '').trim();
+            let locLocation = (localMatch.location || offer.location || '').trim();
+
+            if (locAddress && locCountry && !locCountry.toLowerCase().includes('dominicana') && locLocation.toLowerCase().includes('dominicana')) {
+              locLocation = locAddress;
+            }
+
+            const effectiveLocation = locLocation || locAddress || offer.location || '';
+            const effectiveAddress = locAddress || locLocation || offer.address || '';
+
             return {
               ...offer,
               ...localMatch,
               // Los datos actualizados por el usuario en localMatch tienen prioridad sobre los datos anteriores del backend
-              location: localMatch.location || offer.location || localMatch.address || '',
-              address: localMatch.address !== undefined ? localMatch.address : (offer.address || ''),
+              location: effectiveLocation,
+              address: effectiveAddress,
               city: localMatch.city !== undefined ? localMatch.city : (offer.city || ''),
               state: localMatch.state !== undefined ? localMatch.state : (offer.state || ''),
-              country: localMatch.country !== undefined ? localMatch.country : (offer.country || ''),
+              country: locCountry || (offer.country || ''),
               latitude: localMatch.latitude || localMatch.lat || offer.latitude || offer.lat || '',
               longitude: localMatch.longitude || localMatch.lng || offer.longitude || offer.lng || '',
               offer_id: offerId,
@@ -573,7 +584,25 @@ export const updateOffer = async (offerId, offerData, imageFile = null) => {
     throw new Error('ID de oferta inválido');
   }
 
-  const formData = await buildOfferFormData(offerData, imageFile);
+  // Normalizar y sincronizar address y location
+  const effectiveAddress = (offerData.address || '').trim();
+  const rawLocation = (typeof offerData.location === 'string' ? offerData.location : '').trim();
+  const offerCountry = (offerData.country || '').trim();
+
+  let resolvedLoc = rawLocation;
+  if (effectiveAddress && offerCountry && !offerCountry.toLowerCase().includes('dominicana') && rawLocation.toLowerCase().includes('dominicana')) {
+    resolvedLoc = effectiveAddress;
+  } else if (!resolvedLoc && effectiveAddress) {
+    resolvedLoc = effectiveAddress;
+  }
+
+  const normalizedOfferData = {
+    ...offerData,
+    location: resolvedLoc || effectiveAddress,
+    address: effectiveAddress || resolvedLoc
+  };
+
+  const formData = await buildOfferFormData(normalizedOfferData, imageFile);
   const primaryUrl = API_URL_OFFERS_UPDATE.replace(':offerId', targetId);
   const fallbackUrl = `${BASE_URL}/rewards/offers/${targetId}`;
 
@@ -582,7 +611,7 @@ export const updateOffer = async (offerId, offerData, imageFile = null) => {
   // Si hay un archivo de imagen nuevo, enviar multipart/form-data
   if (imageFile instanceof File || imageFile instanceof Blob) {
     console.log('🔵 updateOffer - Enviando petición multipart PUT a', primaryUrl);
-    const formData = await buildOfferFormData(offerData, imageFile);
+    const formData = await buildOfferFormData(normalizedOfferData, imageFile);
     response = await fetch(primaryUrl, {
       method: 'PUT',
       headers: {
@@ -593,7 +622,7 @@ export const updateOffer = async (offerId, offerData, imageFile = null) => {
 
     if (!response.ok && (response.status === 404 || response.status === 405)) {
       console.log('🔵 updateOffer - Reintentando multipart con PATCH');
-      const retryFormData = await buildOfferFormData(offerData, imageFile);
+      const retryFormData = await buildOfferFormData(normalizedOfferData, imageFile);
       response = await fetch(primaryUrl, {
         method: 'PATCH',
         headers: {
@@ -605,7 +634,7 @@ export const updateOffer = async (offerId, offerData, imageFile = null) => {
 
     if (!response.ok && response.status === 404) {
       console.log('🔵 updateOffer - Reintentando multipart con endpoint alternativo:', fallbackUrl);
-      const retryFormData = await buildOfferFormData(offerData, imageFile);
+      const retryFormData = await buildOfferFormData(normalizedOfferData, imageFile);
       response = await fetch(fallbackUrl, {
         method: 'PUT',
         headers: {
@@ -617,46 +646,46 @@ export const updateOffer = async (offerId, offerData, imageFile = null) => {
   } else {
     // Si no hay archivo nuevo, enviar JSON para compatibilidad con NestJS UpdateOfferDto (@Body)
     const jsonPayload = {
-      ...offerData,
-      title: offerData.title || offerData.name,
-      name: offerData.title || offerData.name,
-      description: offerData.description || '',
-      category: offerData.category || 'Bebidas',
-      points_required: offerData.points_required !== '' ? Number(offerData.points_required) : 300,
-      cost: offerData.points_required !== '' ? Number(offerData.points_required) : 300,
-      offer_type: offerData.offer_type || 'percentage',
-      discount_percentage: offerData.discount_percentage !== '' ? Number(offerData.discount_percentage) : undefined,
-      discount_amount: offerData.discount_amount !== '' ? Number(offerData.discount_amount) : undefined,
-      original_price: offerData.original_price !== '' ? Number(offerData.original_price) : undefined,
-      final_price: offerData.final_price !== '' ? Number(offerData.final_price) : undefined,
-      start_date: offerData.start_date ? new Date(offerData.start_date).toISOString() : undefined,
-      end_date: offerData.end_date ? new Date(offerData.end_date).toISOString() : undefined,
-      max_uses: offerData.max_uses !== '' ? Number(offerData.max_uses) : undefined,
-      promo_code: offerData.promo_code ? String(offerData.promo_code).toUpperCase() : undefined,
-      terms_conditions: offerData.terms_conditions || '',
-      terms_and_conditions: offerData.terms_conditions || '',
-      merchant_name: offerData.merchant_name || '',
-      merchantName: offerData.merchant_name || '',
-      merchant_code: offerData.merchant_code || '',
-      merchantCode: offerData.merchant_code || '',
-      merchant_pin: offerData.merchant_code || '',
-      merchantPin: offerData.merchant_code || '',
-      image_url: offerData.image_url || offerData.image || '',
-      image: offerData.image_url || offerData.image || '',
-      is_active: offerData.is_active !== undefined ? offerData.is_active : true,
+      ...normalizedOfferData,
+      title: normalizedOfferData.title || normalizedOfferData.name,
+      name: normalizedOfferData.title || normalizedOfferData.name,
+      description: normalizedOfferData.description || '',
+      category: normalizedOfferData.category || 'Bebidas',
+      points_required: normalizedOfferData.points_required !== '' ? Number(normalizedOfferData.points_required) : 300,
+      cost: normalizedOfferData.points_required !== '' ? Number(normalizedOfferData.points_required) : 300,
+      offer_type: normalizedOfferData.offer_type || 'percentage',
+      discount_percentage: normalizedOfferData.discount_percentage !== '' ? Number(normalizedOfferData.discount_percentage) : undefined,
+      discount_amount: normalizedOfferData.discount_amount !== '' ? Number(normalizedOfferData.discount_amount) : undefined,
+      original_price: normalizedOfferData.original_price !== '' ? Number(normalizedOfferData.original_price) : undefined,
+      final_price: normalizedOfferData.final_price !== '' ? Number(normalizedOfferData.final_price) : undefined,
+      start_date: normalizedOfferData.start_date ? new Date(normalizedOfferData.start_date).toISOString() : undefined,
+      end_date: normalizedOfferData.end_date ? new Date(normalizedOfferData.end_date).toISOString() : undefined,
+      max_uses: normalizedOfferData.max_uses !== '' ? Number(normalizedOfferData.max_uses) : undefined,
+      promo_code: normalizedOfferData.promo_code ? String(normalizedOfferData.promo_code).toUpperCase() : undefined,
+      terms_conditions: normalizedOfferData.terms_conditions || '',
+      terms_and_conditions: normalizedOfferData.terms_conditions || '',
+      merchant_name: normalizedOfferData.merchant_name || '',
+      merchantName: normalizedOfferData.merchant_name || '',
+      merchant_code: normalizedOfferData.merchant_code || '',
+      merchantCode: normalizedOfferData.merchant_code || '',
+      merchant_pin: normalizedOfferData.merchant_code || '',
+      merchantPin: normalizedOfferData.merchant_code || '',
+      image_url: normalizedOfferData.image_url || normalizedOfferData.image || '',
+      image: normalizedOfferData.image_url || normalizedOfferData.image || '',
+      is_active: normalizedOfferData.is_active !== undefined ? normalizedOfferData.is_active : true,
 
       // Ubicación y Coordenadas geográficas
-      location: offerData.location || '',
-      address: offerData.address || '',
-      city: offerData.city || '',
-      state: offerData.state || '',
-      country: offerData.country || '',
-      latitude: offerData.latitude ? Number(offerData.latitude) : (offerData.lat ? Number(offerData.lat) : undefined),
-      longitude: offerData.longitude ? Number(offerData.longitude) : (offerData.lng ? Number(offerData.lng) : undefined),
-      lat: offerData.latitude ? Number(offerData.latitude) : (offerData.lat ? Number(offerData.lat) : undefined),
-      lng: offerData.longitude ? Number(offerData.longitude) : (offerData.lng ? Number(offerData.lng) : undefined),
-      coordinates: (offerData.latitude && offerData.longitude)
-        ? [Number(offerData.longitude), Number(offerData.latitude)]
+      location: normalizedOfferData.location || '',
+      address: normalizedOfferData.address || '',
+      city: normalizedOfferData.city || '',
+      state: normalizedOfferData.state || '',
+      country: normalizedOfferData.country || '',
+      latitude: normalizedOfferData.latitude ? Number(normalizedOfferData.latitude) : (normalizedOfferData.lat ? Number(normalizedOfferData.lat) : undefined),
+      longitude: normalizedOfferData.longitude ? Number(normalizedOfferData.longitude) : (normalizedOfferData.lng ? Number(normalizedOfferData.lng) : undefined),
+      lat: normalizedOfferData.latitude ? Number(normalizedOfferData.latitude) : (normalizedOfferData.lat ? Number(normalizedOfferData.lat) : undefined),
+      lng: normalizedOfferData.longitude ? Number(normalizedOfferData.longitude) : (normalizedOfferData.lng ? Number(normalizedOfferData.lng) : undefined),
+      coordinates: (normalizedOfferData.latitude && normalizedOfferData.longitude)
+        ? [Number(normalizedOfferData.longitude), Number(normalizedOfferData.latitude)]
         : undefined
     };
 
@@ -727,14 +756,14 @@ export const updateOffer = async (offerId, offerData, imageFile = null) => {
   const serverOffer = result.offer || result.data || result || {};
   const updated = {
     ...serverOffer,
-    ...offerData,
-    location: offerData.location || serverOffer.location || offerData.address || '',
-    address: offerData.address !== undefined ? offerData.address : (serverOffer.address || ''),
-    city: offerData.city !== undefined ? offerData.city : (serverOffer.city || ''),
-    state: offerData.state !== undefined ? offerData.state : (serverOffer.state || ''),
-    country: offerData.country !== undefined ? offerData.country : (serverOffer.country || ''),
-    latitude: offerData.latitude || offerData.lat || serverOffer.latitude || serverOffer.lat || '',
-    longitude: offerData.longitude || offerData.lng || serverOffer.longitude || serverOffer.lng || '',
+    ...normalizedOfferData,
+    location: normalizedOfferData.location || serverOffer.location || '',
+    address: normalizedOfferData.address || serverOffer.address || '',
+    city: normalizedOfferData.city || serverOffer.city || '',
+    state: normalizedOfferData.state || serverOffer.state || '',
+    country: normalizedOfferData.country || serverOffer.country || '',
+    latitude: normalizedOfferData.latitude || normalizedOfferData.lat || serverOffer.latitude || serverOffer.lat || '',
+    longitude: normalizedOfferData.longitude || normalizedOfferData.lng || serverOffer.longitude || serverOffer.lng || '',
     offer_id: targetId,
     id: targetId,
   };

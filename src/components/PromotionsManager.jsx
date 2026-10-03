@@ -225,9 +225,34 @@ const PromotionsManager = () => {
       setSelectedCoordinates(null);
     }
 
-    const locStr = typeof offer.location === 'string'
-      ? offer.location
-      : (offer.location?.address || offer.location?.formatted_address || offer.location?.name || offer.address || '');
+    // Resolver la dirección más precisa disponible
+    const rawAddress = (offer.address || '').trim();
+    let rawLocation = '';
+    if (typeof offer.location === 'string') {
+      rawLocation = offer.location.trim();
+    } else if (offer.location && typeof offer.location === 'object') {
+      rawLocation = (offer.location.formatted_address || offer.location.address || offer.location.name || '').trim();
+    }
+
+    const offerCountry = (offer.country || '').trim();
+    const offerCity = (offer.city || '').trim();
+
+    // Determinar la ubicación principal evitando cadenas desactualizadas
+    let bestLocation = '';
+    if (rawAddress && offerCountry && !offerCountry.toLowerCase().includes('dominicana') && rawLocation.toLowerCase().includes('dominicana')) {
+      bestLocation = rawAddress;
+    } else if (rawAddress && (!rawLocation || rawLocation.length < rawAddress.length || !rawLocation.includes(','))) {
+      bestLocation = rawAddress;
+    } else if (rawLocation) {
+      bestLocation = rawLocation;
+    } else if (rawAddress) {
+      bestLocation = rawAddress;
+    } else if (offerCity) {
+      bestLocation = [offerCity, offer.state, offerCountry].filter(Boolean).join(', ');
+    }
+
+    const finalAddress = rawAddress || bestLocation;
+    const finalLocation = bestLocation || finalAddress;
 
     setFormData({
       title: offer.title || offer.name || '',
@@ -247,11 +272,11 @@ const PromotionsManager = () => {
       image_url: offer.image_url || offer.image || '',
       merchant_name: offer.merchant_name || offer.merchantName || '',
       merchant_code: offer.merchant_code || offer.merchantCode || offer.merchant_pin || '',
-      location: locStr,
-      address: offer.address || '',
-      city: offer.city || '',
+      location: finalLocation,
+      address: finalAddress,
+      city: offerCity,
       state: offer.state || '',
-      country: offer.country || '',
+      country: offerCountry || (finalAddress.toLowerCase().includes('canad') ? 'Canadá' : 'República Dominicana'),
       latitude: lat ? String(lat) : '',
       longitude: lng ? String(lng) : '',
       is_active: offer.is_active !== undefined ? offer.is_active : true
@@ -263,7 +288,12 @@ const PromotionsManager = () => {
 
   const handleLocationInputChange = (e) => {
     const value = e.target.value;
-    setFormData((prev) => ({ ...prev, location: value }));
+    setFormData((prev) => ({
+      ...prev,
+      location: value,
+      // Si address estaba vacío o sincronizado con la ubicación previa, mantenerlo sincronizado
+      address: (!prev.address || prev.address === prev.location) ? value : prev.address
+    }));
 
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
@@ -292,7 +322,12 @@ const PromotionsManager = () => {
 
   const handleLocationSelect = async (place) => {
     setShowSuggestions(false);
-    setFormData((prev) => ({ ...prev, location: place.description }));
+    const selectedDescription = place.description || place.formatted_address || '';
+    setFormData((prev) => ({
+      ...prev,
+      location: selectedDescription,
+      address: selectedDescription
+    }));
 
     try {
       const result = await getPlaceDetails(place.place_id);
@@ -312,15 +347,19 @@ const PromotionsManager = () => {
       let address = '';
       let city = '';
       let state = '';
-      let country = 'República Dominicana';
+      let country = '';
 
       if (result.address_components) {
         result.address_components.forEach((component) => {
           if (component.types.includes('street_number') || component.types.includes('route')) {
             address += component.long_name + ' ';
           }
-          if (component.types.includes('locality') || component.types.includes('sublocality')) {
-            city = component.long_name;
+          if (
+            component.types.includes('locality') ||
+            component.types.includes('sublocality') ||
+            component.types.includes('postal_town')
+          ) {
+            if (!city) city = component.long_name;
           }
           if (component.types.includes('administrative_area_level_1')) {
             state = component.long_name;
@@ -331,17 +370,20 @@ const PromotionsManager = () => {
         });
       }
 
+      const fullFormatted = result.formatted_address || selectedDescription;
+      const finalAddress = address.trim() || fullFormatted;
+
       if (lat && lng) {
         setSelectedCoordinates({ lat: Number(lat), lng: Number(lng) });
       }
 
       setFormData((prev) => ({
         ...prev,
-        location: result.formatted_address || place.description,
-        address: address.trim() || result.name || '',
+        location: fullFormatted,
+        address: finalAddress,
         city: city || state || '',
         state: state || '',
-        country: country || 'República Dominicana',
+        country: country || (fullFormatted.toLowerCase().includes('canad') ? 'Canadá' : (fullFormatted.toLowerCase().includes('dominicana') ? 'República Dominicana' : '')),
         latitude: lat ? String(lat) : '',
         longitude: lng ? String(lng) : ''
       }));
@@ -349,7 +391,7 @@ const PromotionsManager = () => {
       toast.success('📍 Ubicación y coordenadas integradas desde Google Maps');
     } catch (err) {
       console.error('Error obteniendo detalles del lugar en Google Places:', err);
-      setFormData((prev) => ({ ...prev, location: place.description }));
+      setFormData((prev) => ({ ...prev, location: selectedDescription, address: selectedDescription }));
     }
   };
 
@@ -395,19 +437,16 @@ const PromotionsManager = () => {
               });
             }
 
-            // Si address quedó vacío, usar el nombre de la vía o la primera parte
-            if (!address.trim() && rev.formatted_address) {
-              const parts = rev.formatted_address.split(',');
-              if (parts.length > 0) address = parts[0].trim();
-            }
+            const fullFormatted = rev.formatted_address;
+            const finalAddress = address.trim() || fullFormatted;
 
             setFormData((prev) => ({
               ...prev,
-              location: rev.formatted_address,
-              address: address.trim(),
+              location: fullFormatted,
+              address: finalAddress,
               city: city || state || '',
               state: state || '',
-              country: country || 'República Dominicana',
+              country: country || (fullFormatted.toLowerCase().includes('canad') ? 'Canadá' : (fullFormatted.toLowerCase().includes('dominicana') ? 'República Dominicana' : '')),
               latitude: String(latitude),
               longitude: String(longitude)
             }));
@@ -421,6 +460,7 @@ const PromotionsManager = () => {
         setFormData((prev) => ({
           ...prev,
           location: `Lat: ${latitude.toFixed(5)}, Lng: ${longitude.toFixed(5)}`,
+          address: `Lat: ${latitude.toFixed(5)}, Lng: ${longitude.toFixed(5)}`,
           latitude: String(latitude),
           longitude: String(longitude)
         }));
@@ -444,7 +484,17 @@ const PromotionsManager = () => {
         return;
       }
       setIsSubmitting(true);
-      await createOffer(formData, selectedImageFile);
+
+      // Reconciliar location y address antes de enviar
+      const submissionLocation = formData.location || formData.address || '';
+      const submissionAddress = formData.address || formData.location || '';
+      const submissionData = {
+        ...formData,
+        location: submissionLocation,
+        address: submissionAddress
+      };
+
+      await createOffer(submissionData, selectedImageFile);
       toast.success('🎟️ Promoción creada con éxito');
       setActiveTab('catalog');
       await loadData();
@@ -461,17 +511,37 @@ const PromotionsManager = () => {
     if (!selectedOffer) return;
     try {
       const id = selectedOffer.offer_id || selectedOffer.id || selectedOffer._id;
-      const updated = await updateOffer(id, formData, selectedImageFile);
+
+      // Reconciliar location y address asegurando que no se mande una cadena desactualizada
+      const resolvedAddress = (formData.address || '').trim();
+      let resolvedLoc = (formData.location || '').trim();
+      const countryStr = (formData.country || '').trim();
+
+      if (resolvedAddress && countryStr && !countryStr.toLowerCase().includes('dominicana') && resolvedLoc.toLowerCase().includes('dominicana')) {
+        resolvedLoc = resolvedAddress;
+      } else if (!resolvedLoc && resolvedAddress) {
+        resolvedLoc = resolvedAddress;
+      } else if (!resolvedAddress && resolvedLoc) {
+        // usar resolvedLoc
+      }
+
+      const submissionData = {
+        ...formData,
+        location: resolvedLoc || resolvedAddress,
+        address: resolvedAddress || resolvedLoc
+      };
+
+      const updated = await updateOffer(id, submissionData, selectedImageFile);
       toast.success('✨ Promoción actualizada correctamente');
       setIsEditModalOpen(false);
       setOffers((prevOffers) =>
         prevOffers.map((o) =>
           String(o.offer_id || o.id || o._id) === String(id)
-            ? { ...o, ...formData, ...updated }
+            ? { ...o, ...submissionData, ...updated }
             : o
         )
       );
-      loadData();
+      await loadData();
     } catch (error) {
       console.error('Error al actualizar promoción:', error);
       toast.error(error.message || 'Error al actualizar la promoción');
@@ -633,13 +703,14 @@ const PromotionsManager = () => {
 
                         <p className="text-zinc-400 text-xs line-clamp-2">{offer.description}</p>
 
-                        {(offer.location || offer.address || offer.city) && (
+                        {(offer.address || offer.location || offer.city) && (
                           <div className="flex items-center gap-1.5 text-xs text-blue-300 bg-blue-950/30 px-2.5 py-1.5 rounded-lg border border-blue-800/30">
                             <MapPin className="h-3.5 w-3.5 text-blue-400 shrink-0" />
                             <span className="truncate">
-                              {typeof offer.location === 'string'
-                                ? offer.location
-                                : (offer.address || offer.city || 'Ubicación registrada')}
+                              {offer.address ||
+                               (typeof offer.location === 'string' ? offer.location : '') ||
+                               (offer.location?.formatted_address || offer.location?.address) ||
+                               (offer.city ? `${offer.city}${offer.country ? ', ' + offer.country : ''}` : 'Ubicación registrada')}
                             </span>
                           </div>
                         )}
@@ -985,7 +1056,14 @@ const PromotionsManager = () => {
                       <Label className="text-zinc-400 text-[11px]">Dirección Detallada</Label>
                       <Input
                         value={formData.address}
-                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData((prev) => ({
+                            ...prev,
+                            address: val,
+                            location: (!prev.location || prev.location === prev.address) ? val : prev.location
+                          }));
+                        }}
                         placeholder="Calle, número..."
                         className="bg-zinc-900 border-zinc-800 text-white text-xs"
                       />
@@ -1601,7 +1679,14 @@ const PromotionsManager = () => {
                   <Label className="text-zinc-400 text-[10px]">Dirección Detallada</Label>
                   <Input
                     value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormData((prev) => ({
+                        ...prev,
+                        address: val,
+                        location: (!prev.location || prev.location === prev.address) ? val : prev.location
+                      }));
+                    }}
                     placeholder="Calle, número..."
                     className="bg-zinc-900 border-zinc-800 text-white text-xs"
                   />
