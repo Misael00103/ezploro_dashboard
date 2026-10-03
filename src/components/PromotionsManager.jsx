@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -259,26 +259,35 @@ const PromotionsManager = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleLocationInputChange = async (e) => {
+  const searchTimeoutRef = useRef(null);
+
+  const handleLocationInputChange = (e) => {
     const value = e.target.value;
     setFormData((prev) => ({ ...prev, location: value }));
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
 
     if (!value || value.trim().length < 3) {
       setLocationSuggestions([]);
       setShowSuggestions(false);
+      setIsSearchingLocation(false);
       return;
     }
 
-    try {
-      setIsSearchingLocation(true);
-      const predictions = await searchPlacesAPI(value);
-      setLocationSuggestions(predictions || []);
-      setShowSuggestions((predictions || []).length > 0);
-    } catch (err) {
-      console.warn('Error buscando sugerencias en Google Places:', err);
-    } finally {
-      setIsSearchingLocation(false);
-    }
+    setIsSearchingLocation(true);
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const predictions = await searchPlacesAPI(value);
+        setLocationSuggestions(predictions || []);
+        setShowSuggestions((predictions || []).length > 0);
+      } catch (err) {
+        console.warn('Error buscando sugerencias en Google Places:', err);
+      } finally {
+        setIsSearchingLocation(false);
+      }
+    }, 350);
   };
 
   const handleLocationSelect = async (place) => {
