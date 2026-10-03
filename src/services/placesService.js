@@ -83,7 +83,6 @@ export const searchPlaces = async (query) => {
         service.getPlacePredictions(
           {
             input: cleanQuery,
-            componentRestrictions: { country: 'do' }, // Restricción para República Dominicana
             types: ['establishment', 'geocode'],
           },
           (results, status) => {
@@ -121,7 +120,7 @@ export const searchPlaces = async (query) => {
   // 2. Fallback resiliente: OpenStreetMap / Nominatim (nunca bloqueado por adblockers)
   try {
     const osmResponse = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery)}&format=json&addressdetails=1&countrycodes=do&limit=6`,
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQuery)}&format=json&addressdetails=1&limit=6`,
       {
         headers: {
           'Accept-Language': 'es',
@@ -304,7 +303,7 @@ export const reverseGeocode = async (latitude, longitude) => {
           { types: ['route'], long_name: data.address?.road || '' },
           { types: ['locality'], long_name: data.address?.city || data.address?.town || data.address?.municipality || '' },
           { types: ['administrative_area_level_1'], long_name: data.address?.state || '' },
-          { types: ['country'], long_name: data.address?.country || 'República Dominicana' },
+          { types: ['country'], long_name: data.address?.country || '' },
         ],
       };
     }

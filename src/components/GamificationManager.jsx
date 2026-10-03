@@ -115,6 +115,7 @@ const GamificationManager = ({ initialTab = 'overview' }) => {
     start_date: '',
     end_date: '',
     category: '',
+    country: '',
     image_url: '',
     terms_conditions: '',
     is_active: true,
@@ -806,7 +807,8 @@ const GamificationManager = ({ initialTab = 'overview' }) => {
           promo_code: offer.promo_code,
           target_audience: offer.target_audience,
           offer_type: offer.offer_type,
-          organizer_id: offer.organizer_id
+          organizer_id: offer.organizer_id,
+          country: offer.country || ''
         };
       });
       
@@ -910,6 +912,7 @@ const GamificationManager = ({ initialTab = 'overview' }) => {
       start_date: offer.start_date ? new Date(offer.start_date).toISOString().slice(0, 16) : '',
       end_date: offer.end_date ? new Date(offer.end_date).toISOString().slice(0, 16) : '',
       category: offer.category || '',
+      country: offer.country || '',
       image_url: offer.image_url || '',
       original_image_url: offer.image_url || '',
       terms_conditions: offer.terms_conditions || '',
@@ -1017,6 +1020,7 @@ const GamificationManager = ({ initialTab = 'overview' }) => {
         start_date: '',
         end_date: '',
         category: '',
+        country: '',
         image_url: '',
         terms_conditions: '',
         is_active: true,
@@ -2390,6 +2394,18 @@ const GamificationManager = ({ initialTab = 'overview' }) => {
                   <p className="text-xs text-zinc-400 mt-1">Selecciona una imagen desde tu dispositivo</p>
                 </div>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="offer_country" className="text-zinc-300">País de la Oferta</Label>
+              <Input
+                id="offer_country"
+                value={offerFormData.country || ''}
+                onChange={(e) => setOfferFormData({ ...offerFormData, country: e.target.value })}
+                placeholder="Ej: República Dominicana, Estados Unidos, España (vacío = Todos)"
+                className="bg-zinc-900/50 border-zinc-800/60 text-white"
+              />
+              <p className="text-xs text-zinc-400">Si dejas este campo vacío o escribes 'Todos', la oferta será visible en todos los países.</p>
             </div>
 
             <div className="space-y-2">

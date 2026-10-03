@@ -227,7 +227,7 @@ const PromotionsManager = () => {
 
     const locStr = typeof offer.location === 'string'
       ? offer.location
-      : (offer.location?.address || offer.location?.name || offer.address || '');
+      : (offer.location?.address || offer.location?.formatted_address || offer.location?.name || offer.address || '');
 
     setFormData({
       title: offer.title || offer.name || '',
@@ -251,7 +251,7 @@ const PromotionsManager = () => {
       address: offer.address || '',
       city: offer.city || '',
       state: offer.state || '',
-      country: offer.country || 'República Dominicana',
+      country: offer.country || '',
       latitude: lat ? String(lat) : '',
       longitude: lng ? String(lng) : '',
       is_active: offer.is_active !== undefined ? offer.is_active : true
@@ -368,16 +368,55 @@ const PromotionsManager = () => {
         try {
           const rev = await reverseGeocode(latitude, longitude);
           if (rev && rev.formatted_address) {
+            let address = '';
+            let city = '';
+            let state = '';
+            let country = '';
+
+            if (Array.isArray(rev.address_components)) {
+              rev.address_components.forEach((component) => {
+                if (component.types.includes('street_number') || component.types.includes('route')) {
+                  address += component.long_name + ' ';
+                }
+                if (
+                  component.types.includes('locality') ||
+                  component.types.includes('sublocality') ||
+                  component.types.includes('postal_town') ||
+                  component.types.includes('administrative_area_level_2')
+                ) {
+                  if (!city) city = component.long_name;
+                }
+                if (component.types.includes('administrative_area_level_1')) {
+                  state = component.long_name;
+                }
+                if (component.types.includes('country')) {
+                  country = component.long_name;
+                }
+              });
+            }
+
+            // Si address quedó vacío, usar el nombre de la vía o la primera parte
+            if (!address.trim() && rev.formatted_address) {
+              const parts = rev.formatted_address.split(',');
+              if (parts.length > 0) address = parts[0].trim();
+            }
+
             setFormData((prev) => ({
               ...prev,
               location: rev.formatted_address,
+              address: address.trim(),
+              city: city || state || '',
+              state: state || '',
+              country: country || 'República Dominicana',
               latitude: String(latitude),
               longitude: String(longitude)
             }));
             toast.success('📍 Ubicación GPS actual detectada', { id: 'gps-loc' });
             return;
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('Error en reverse geocoding:', e);
+        }
 
         setFormData((prev) => ({
           ...prev,
@@ -422,9 +461,16 @@ const PromotionsManager = () => {
     if (!selectedOffer) return;
     try {
       const id = selectedOffer.offer_id || selectedOffer.id || selectedOffer._id;
-      await updateOffer(id, formData, selectedImageFile);
+      const updated = await updateOffer(id, formData, selectedImageFile);
       toast.success('✨ Promoción actualizada correctamente');
       setIsEditModalOpen(false);
+      setOffers((prevOffers) =>
+        prevOffers.map((o) =>
+          String(o.offer_id || o.id || o._id) === String(id)
+            ? { ...o, ...formData, ...updated }
+            : o
+        )
+      );
       loadData();
     } catch (error) {
       console.error('Error al actualizar promoción:', error);

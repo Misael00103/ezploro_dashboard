@@ -152,6 +152,35 @@ export const getOffers = async (filters = {}) => {
       resultOffers = data.data;
     }
 
+    try {
+      const localOffersStr = localStorage.getItem('ezploro_offers_config');
+      if (localOffersStr) {
+        const localOffers = JSON.parse(localOffersStr);
+        resultOffers = resultOffers.map((offer) => {
+          const offerId = String(offer.offer_id || offer.id || offer._id || '');
+          const localMatch = localOffers.find(
+            (l) => String(l.offer_id || l.id || l._id || '') === offerId
+          );
+          if (localMatch) {
+            return {
+              ...localMatch,
+              ...offer,
+              location: offer.location || localMatch.location || localMatch.address || '',
+              address: offer.address || localMatch.address || '',
+              city: offer.city || localMatch.city || '',
+              state: offer.state || localMatch.state || '',
+              country: offer.country || localMatch.country || '',
+              latitude: offer.latitude || offer.lat || localMatch.latitude || localMatch.lat || '',
+              longitude: offer.longitude || offer.lng || localMatch.longitude || localMatch.lng || ''
+            };
+          }
+          return offer;
+        });
+      }
+    } catch (e) {
+      console.warn('⚠️ Error combinando con localStorage en getOffers:', e);
+    }
+
     return resultOffers;
   } catch (error) {
     console.warn('⚠️ Error en getOffers backend:', error);
@@ -545,38 +574,134 @@ export const updateOffer = async (offerId, offerData, imageFile = null) => {
   const primaryUrl = API_URL_OFFERS_UPDATE.replace(':offerId', targetId);
   const fallbackUrl = `${BASE_URL}/rewards/offers/${targetId}`;
 
-  console.log('🔵 updateOffer - Enviando petición multipart PUT a', primaryUrl);
+  let response;
 
-  let response = await fetch(primaryUrl, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${token}`
-    },
-    body: formData
-  });
-
-  if (!response.ok && (response.status === 404 || response.status === 405)) {
-    console.log('🔵 updateOffer - Reintentando con PATCH');
-    const retryFormData = await buildOfferFormData(offerData, imageFile);
+  // Si hay un archivo de imagen nuevo, enviar multipart/form-data
+  if (imageFile instanceof File || imageFile instanceof Blob) {
+    console.log('🔵 updateOffer - Enviando petición multipart PUT a', primaryUrl);
+    const formData = await buildOfferFormData(offerData, imageFile);
     response = await fetch(primaryUrl, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      },
-      body: retryFormData
-    });
-  }
-
-  if (!response.ok && response.status === 404) {
-    console.log('🔵 updateOffer - Reintentando con endpoint alternativo:', fallbackUrl);
-    const retryFormData = await buildOfferFormData(offerData, imageFile);
-    response = await fetch(fallbackUrl, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`
       },
-      body: retryFormData
+      body: formData
     });
+
+    if (!response.ok && (response.status === 404 || response.status === 405)) {
+      console.log('🔵 updateOffer - Reintentando multipart con PATCH');
+      const retryFormData = await buildOfferFormData(offerData, imageFile);
+      response = await fetch(primaryUrl, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: retryFormData
+      });
+    }
+
+    if (!response.ok && response.status === 404) {
+      console.log('🔵 updateOffer - Reintentando multipart con endpoint alternativo:', fallbackUrl);
+      const retryFormData = await buildOfferFormData(offerData, imageFile);
+      response = await fetch(fallbackUrl, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: retryFormData
+      });
+    }
+  } else {
+    // Si no hay archivo nuevo, enviar JSON para compatibilidad con NestJS UpdateOfferDto (@Body)
+    const jsonPayload = {
+      ...offerData,
+      title: offerData.title || offerData.name,
+      name: offerData.title || offerData.name,
+      description: offerData.description || '',
+      category: offerData.category || 'Bebidas',
+      points_required: offerData.points_required !== '' ? Number(offerData.points_required) : 300,
+      cost: offerData.points_required !== '' ? Number(offerData.points_required) : 300,
+      offer_type: offerData.offer_type || 'percentage',
+      discount_percentage: offerData.discount_percentage !== '' ? Number(offerData.discount_percentage) : undefined,
+      discount_amount: offerData.discount_amount !== '' ? Number(offerData.discount_amount) : undefined,
+      original_price: offerData.original_price !== '' ? Number(offerData.original_price) : undefined,
+      final_price: offerData.final_price !== '' ? Number(offerData.final_price) : undefined,
+      start_date: offerData.start_date ? new Date(offerData.start_date).toISOString() : undefined,
+      end_date: offerData.end_date ? new Date(offerData.end_date).toISOString() : undefined,
+      max_uses: offerData.max_uses !== '' ? Number(offerData.max_uses) : undefined,
+      promo_code: offerData.promo_code ? String(offerData.promo_code).toUpperCase() : undefined,
+      terms_conditions: offerData.terms_conditions || '',
+      terms_and_conditions: offerData.terms_conditions || '',
+      merchant_name: offerData.merchant_name || '',
+      merchantName: offerData.merchant_name || '',
+      merchant_code: offerData.merchant_code || '',
+      merchantCode: offerData.merchant_code || '',
+      merchant_pin: offerData.merchant_code || '',
+      merchantPin: offerData.merchant_code || '',
+      image_url: offerData.image_url || offerData.image || '',
+      image: offerData.image_url || offerData.image || '',
+      is_active: offerData.is_active !== undefined ? offerData.is_active : true,
+
+      // Ubicación y Coordenadas geográficas
+      location: offerData.location || '',
+      address: offerData.address || '',
+      city: offerData.city || '',
+      state: offerData.state || '',
+      country: offerData.country || '',
+      latitude: offerData.latitude ? Number(offerData.latitude) : (offerData.lat ? Number(offerData.lat) : undefined),
+      longitude: offerData.longitude ? Number(offerData.longitude) : (offerData.lng ? Number(offerData.lng) : undefined),
+      lat: offerData.latitude ? Number(offerData.latitude) : (offerData.lat ? Number(offerData.lat) : undefined),
+      lng: offerData.longitude ? Number(offerData.longitude) : (offerData.lng ? Number(offerData.lng) : undefined),
+      coordinates: (offerData.latitude && offerData.longitude)
+        ? [Number(offerData.longitude), Number(offerData.latitude)]
+        : undefined
+    };
+
+    console.log('🔵 updateOffer - Enviando petición JSON PUT a', primaryUrl);
+    response = await fetch(primaryUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(jsonPayload)
+    });
+
+    if (!response.ok && (response.status === 404 || response.status === 405)) {
+      console.log('🔵 updateOffer - Reintentando JSON con PATCH');
+      response = await fetch(primaryUrl, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(jsonPayload)
+      });
+    }
+
+    if (!response.ok && (response.status === 415 || response.status === 400)) {
+      console.log('🔵 updateOffer - Servidor rechazó JSON, reintentando con FormData');
+      const formData = await buildOfferFormData(offerData, null);
+      response = await fetch(primaryUrl, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+    }
+
+    if (!response.ok && response.status === 404) {
+      console.log('🔵 updateOffer - Reintentando JSON con fallbackUrl:', fallbackUrl);
+      response = await fetch(fallbackUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(jsonPayload)
+      });
+    }
   }
 
   const responseText = await response.text();
@@ -596,10 +721,17 @@ export const updateOffer = async (offerId, offerData, imageFile = null) => {
   }
 
   console.log('✅ updateOffer - Oferta actualizada con éxito:', result);
-  const serverOffer = result.offer || result.data || result;
+  const serverOffer = result.offer || result.data || result || {};
   const updated = {
     ...offerData,
     ...serverOffer,
+    location: offerData.location || serverOffer.location || offerData.address || '',
+    address: offerData.address || serverOffer.address || '',
+    city: offerData.city || serverOffer.city || '',
+    state: offerData.state || serverOffer.state || '',
+    country: offerData.country || serverOffer.country || '',
+    latitude: offerData.latitude || serverOffer.latitude || offerData.lat || '',
+    longitude: offerData.longitude || serverOffer.longitude || offerData.lng || '',
     offer_id: targetId,
     id: targetId,
   };
