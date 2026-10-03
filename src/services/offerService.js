@@ -396,8 +396,51 @@ const buildOfferFormData = async (offerData, imageFile = null) => {
     }
   }
 
+  // 8. Ubicación y Coordenadas geográficas (Integración Google Maps)
+  const loc = offerData.location;
+  if (loc && typeof loc === 'object') {
+    formData.append('location', JSON.stringify(loc));
+  } else if (loc && String(loc).trim()) {
+    formData.append('location', String(loc).trim());
+  }
+
+  if (offerData.address && String(offerData.address).trim()) {
+    formData.append('address', String(offerData.address).trim());
+  }
+  if (offerData.city && String(offerData.city).trim()) {
+    formData.append('city', String(offerData.city).trim());
+  }
+  if (offerData.state && String(offerData.state).trim()) {
+    formData.append('state', String(offerData.state).trim());
+  }
+  if (offerData.country && String(offerData.country).trim()) {
+    formData.append('country', String(offerData.country).trim());
+  }
+
+  const lat = offerData.latitude ?? offerData.lat;
+  if (lat !== undefined && lat !== null && lat !== '') {
+    formData.append('latitude', String(lat));
+    formData.append('lat', String(lat));
+  }
+
+  const lng = offerData.longitude ?? offerData.lng ?? offerData.lon;
+  if (lng !== undefined && lng !== null && lng !== '') {
+    formData.append('longitude', String(lng));
+    formData.append('lng', String(lng));
+  }
+
+  // Enviar también arreglo GeoJSON coordinates [longitude, latitude] compatible con PostGIS / MongoDB
+  if (lat !== undefined && lat !== null && lat !== '' && lng !== undefined && lng !== null && lng !== '') {
+    const numLat = parseFloat(lat);
+    const numLng = parseFloat(lng);
+    if (!isNaN(numLat) && !isNaN(numLng)) {
+      formData.append('coordinates', JSON.stringify([numLng, numLat]));
+    }
+  }
+
   return formData;
 };
+
 
 export const uploadOfferImage = async (imageFile) => {
   try {

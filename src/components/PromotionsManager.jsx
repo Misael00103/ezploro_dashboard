@@ -27,7 +27,9 @@ import {
   Building,
   ShieldCheck,
   QrCode,
-  RefreshCw
+  RefreshCw,
+  MapPin,
+  X
 } from 'lucide-react';
 
 import {
@@ -38,6 +40,11 @@ import {
   toggleOfferStatus,
   getOfferRedemptions
 } from '../services/offerService';
+import {
+  searchPlaces as searchPlacesAPI,
+  getPlaceDetails,
+  reverseGeocode
+} from '../services/placesService';
 import { toast } from 'react-hot-toast';
 
 const DEFAULT_CATEGORIES = ['Bebidas', 'Entradas', 'Comida', 'Experiencias', 'VIP'];
@@ -58,6 +65,11 @@ const PromotionsManager = () => {
   const [selectedImageFile, setSelectedImageFile] = useState(null);
   const [selectedRedemptionModal, setSelectedRedemptionModal] = useState(null);
 
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isSearchingLocation, setIsSearchingLocation] = useState(false);
+  const [selectedCoordinates, setSelectedCoordinates] = useState(null);
+
   const [formData, setFormData] = useState({
     title: '',
     category: 'Bebidas',
@@ -76,10 +88,18 @@ const PromotionsManager = () => {
     image_url: '',
     merchant_name: '',
     merchant_code: '',
+    location: '',
+    address: '',
+    city: '',
+    state: '',
+    country: 'República Dominicana',
+    latitude: '',
+    longitude: '',
     is_active: true
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
 
   const loadData = async () => {
     try {
@@ -154,6 +174,9 @@ const PromotionsManager = () => {
 
   const handleCreateOpen = () => {
     setSelectedImageFile(null);
+    setSelectedCoordinates(null);
+    setLocationSuggestions([]);
+    setShowSuggestions(false);
     setFormData({
       title: 'Happy Hour 2x1 en Mojitos & Tragos',
       category: 'Bebidas',
@@ -172,6 +195,13 @@ const PromotionsManager = () => {
       image_url: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=600&auto=format&fit=crop&q=80',
       merchant_name: 'Bar La Pasión',
       merchant_code: 'PASION123',
+      location: '',
+      address: '',
+      city: '',
+      state: '',
+      country: 'República Dominicana',
+      latitude: '',
+      longitude: '',
       is_active: true
     });
     setActiveTab('create');
@@ -180,6 +210,25 @@ const PromotionsManager = () => {
   const handleEditOpen = (offer) => {
     setSelectedOffer(offer);
     setSelectedImageFile(null);
+    setLocationSuggestions([]);
+    setShowSuggestions(false);
+
+    let lat = offer.latitude || offer.lat || '';
+    let lng = offer.longitude || offer.lng || '';
+    if (!lat && offer.location && typeof offer.location === 'object' && Array.isArray(offer.location.coordinates)) {
+      lng = offer.location.coordinates[0];
+      lat = offer.location.coordinates[1];
+    }
+    if (lat && lng) {
+      setSelectedCoordinates({ lat: Number(lat), lng: Number(lng) });
+    } else {
+      setSelectedCoordinates(null);
+    }
+
+    const locStr = typeof offer.location === 'string'
+      ? offer.location
+      : (offer.location?.address || offer.location?.name || offer.address || '');
+
     setFormData({
       title: offer.title || offer.name || '',
       category: offer.category || 'Bebidas',
@@ -198,10 +247,145 @@ const PromotionsManager = () => {
       image_url: offer.image_url || offer.image || '',
       merchant_name: offer.merchant_name || offer.merchantName || '',
       merchant_code: offer.merchant_code || offer.merchantCode || offer.merchant_pin || '',
+      location: locStr,
+      address: offer.address || '',
+      city: offer.city || '',
+      state: offer.state || '',
+      country: offer.country || 'República Dominicana',
+      latitude: lat ? String(lat) : '',
+      longitude: lng ? String(lng) : '',
       is_active: offer.is_active !== undefined ? offer.is_active : true
     });
     setIsEditModalOpen(true);
   };
+
+  const handleLocationInputChange = async (e) => {
+    const value = e.target.value;
+    setFormData((prev) => ({ ...prev, location: value }));
+
+    if (!value || value.trim().length < 3) {
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    try {
+      setIsSearchingLocation(true);
+      const predictions = await searchPlacesAPI(value);
+      setLocationSuggestions(predictions || []);
+      setShowSuggestions((predictions || []).length > 0);
+    } catch (err) {
+      console.warn('Error buscando sugerencias en Google Places:', err);
+    } finally {
+      setIsSearchingLocation(false);
+    }
+  };
+
+  const handleLocationSelect = async (place) => {
+    setShowSuggestions(false);
+    setFormData((prev) => ({ ...prev, location: place.description }));
+
+    try {
+      const result = await getPlaceDetails(place.place_id);
+      let lat = '';
+      let lng = '';
+
+      if (result.geometry && result.geometry.location) {
+        if (typeof result.geometry.location.lat === 'function') {
+          lat = result.geometry.location.lat();
+          lng = result.geometry.location.lng();
+        } else {
+          lat = result.geometry.location.lat;
+          lng = result.geometry.location.lng;
+        }
+      }
+
+      let address = '';
+      let city = '';
+      let state = '';
+      let country = 'República Dominicana';
+
+      if (result.address_components) {
+        result.address_components.forEach((component) => {
+          if (component.types.includes('street_number') || component.types.includes('route')) {
+            address += component.long_name + ' ';
+          }
+          if (component.types.includes('locality') || component.types.includes('sublocality')) {
+            city = component.long_name;
+          }
+          if (component.types.includes('administrative_area_level_1')) {
+            state = component.long_name;
+          }
+          if (component.types.includes('country')) {
+            country = component.long_name;
+          }
+        });
+      }
+
+      if (lat && lng) {
+        setSelectedCoordinates({ lat: Number(lat), lng: Number(lng) });
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        location: result.formatted_address || place.description,
+        address: address.trim() || result.name || '',
+        city: city || state || '',
+        state: state || '',
+        country: country || 'República Dominicana',
+        latitude: lat ? String(lat) : '',
+        longitude: lng ? String(lng) : ''
+      }));
+
+      toast.success('📍 Ubicación y coordenadas integradas desde Google Maps');
+    } catch (err) {
+      console.error('Error obteniendo detalles del lugar en Google Places:', err);
+      setFormData((prev) => ({ ...prev, location: place.description }));
+    }
+  };
+
+  const handleGetCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('La geolocalización no es soportada por este navegador');
+      return;
+    }
+
+    toast.loading('Obteniendo ubicación GPS...', { id: 'gps-loc' });
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setSelectedCoordinates({ lat: latitude, lng: longitude });
+
+        try {
+          const rev = await reverseGeocode(latitude, longitude);
+          if (rev && rev.formatted_address) {
+            setFormData((prev) => ({
+              ...prev,
+              location: rev.formatted_address,
+              latitude: String(latitude),
+              longitude: String(longitude)
+            }));
+            toast.success('📍 Ubicación GPS actual detectada', { id: 'gps-loc' });
+            return;
+          }
+        } catch (e) {}
+
+        setFormData((prev) => ({
+          ...prev,
+          location: `Lat: ${latitude.toFixed(5)}, Lng: ${longitude.toFixed(5)}`,
+          latitude: String(latitude),
+          longitude: String(longitude)
+        }));
+        toast.success('📍 Coordenadas actuales agregadas', { id: 'gps-loc' });
+      },
+      (error) => {
+        console.warn('Error al obtener geolocalización:', error);
+        toast.error('No se pudo acceder a tu ubicación GPS', { id: 'gps-loc' });
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    );
+  };
+
 
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
@@ -393,6 +577,17 @@ const PromotionsManager = () => {
                         </div>
 
                         <p className="text-zinc-400 text-xs line-clamp-2">{offer.description}</p>
+
+                        {(offer.location || offer.address || offer.city) && (
+                          <div className="flex items-center gap-1.5 text-xs text-blue-300 bg-blue-950/30 px-2.5 py-1.5 rounded-lg border border-blue-800/30">
+                            <MapPin className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                            <span className="truncate">
+                              {typeof offer.location === 'string'
+                                ? offer.location
+                                : (offer.address || offer.city || 'Ubicación registrada')}
+                            </span>
+                          </div>
+                        )}
 
                         <div className="flex flex-wrap items-center gap-1.5 pt-1">
                           {offer.discount_percentage && (
@@ -654,8 +849,123 @@ const PromotionsManager = () => {
                   </div>
                 </div>
 
+                {/* 4c. Ubicación del Establecimiento (Integración Google Maps) */}
+                <div className="p-4 rounded-xl bg-blue-950/20 border border-blue-800/40 space-y-3 relative">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-blue-400" />
+                      <Label className="text-blue-300 font-bold text-xs uppercase tracking-wider">
+                        Ubicación del Establecimiento (Google Maps)
+                      </Label>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleGetCurrentLocation}
+                      className="text-xs border-blue-500/30 text-blue-300 hover:bg-blue-950/50 h-7 px-2.5"
+                    >
+                      <MapPin className="h-3 w-3 mr-1" />
+                      Usar mi ubicación
+                    </Button>
+                  </div>
+
+                  <div className="space-y-1.5 relative">
+                    <Label className="text-zinc-300 text-xs">
+                      Buscar Dirección o Local en Google Maps
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        value={formData.location}
+                        onChange={handleLocationInputChange}
+                        onFocus={() => {
+                          if (formData.location && formData.location.length >= 3 && locationSuggestions.length > 0) {
+                            setShowSuggestions(true);
+                          }
+                        }}
+                        placeholder="Escribe el nombre del negocio o dirección (ej: Hard Rock Cafe, Av. Churchill...)"
+                        className="bg-zinc-900 border-zinc-800 text-white text-xs pl-8 focus:border-blue-500"
+                        autoComplete="off"
+                      />
+                      <MapPin className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-500" />
+                      {isSearchingLocation && (
+                        <Loader2 className="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-blue-400 animate-spin" />
+                      )}
+                    </div>
+
+                    {/* Dropdown de Sugerencias de Google Places */}
+                    {showSuggestions && locationSuggestions.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-zinc-950 border border-blue-500/40 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
+                        {locationSuggestions.map((suggestion) => (
+                          <div
+                            key={suggestion.place_id}
+                            className="px-3.5 py-2.5 hover:bg-blue-900/30 cursor-pointer text-white text-xs border-b border-zinc-800/60 last:border-b-0 flex items-center justify-between gap-2"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleLocationSelect(suggestion)}
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <MapPin className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                              <span className="truncate">{suggestion.description}</span>
+                            </div>
+                          </div>
+                        ))}
+                        <div className="p-2 border-t border-zinc-800 bg-zinc-900/50 flex justify-end">
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => setShowSuggestions(false)}
+                            className="text-[11px] text-zinc-400 hover:text-white flex items-center gap-1"
+                          >
+                            <X className="h-3 w-3" />
+                            Cerrar lista
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Coordenadas e Información Geográfica */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <Label className="text-zinc-400 text-[11px]">Dirección Detallada</Label>
+                      <Input
+                        value={formData.address}
+                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                        placeholder="Calle, número..."
+                        className="bg-zinc-900 border-zinc-800 text-white text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-zinc-400 text-[11px]">Ciudad / Municipio</Label>
+                      <Input
+                        value={formData.city}
+                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                        placeholder="Santo Domingo"
+                        className="bg-zinc-900 border-zinc-800 text-white text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-zinc-400 text-[11px]">País</Label>
+                      <Input
+                        value={formData.country}
+                        onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                        placeholder="República Dominicana"
+                        className="bg-zinc-900 border-zinc-800 text-white text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {formData.latitude && formData.longitude && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30 text-[10px] font-mono flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Coordenadas GPS: {Number(formData.latitude).toFixed(4)}, {Number(formData.longitude).toFixed(4)}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
 
                 {/* 5. Imagen */}
+
                 <div className="space-y-2">
                   <Label className="text-zinc-300 flex items-center justify-between">
                     <span>Imagen de la Promoción</span>
@@ -1156,6 +1466,118 @@ const PromotionsManager = () => {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Ubicación del Establecimiento (Integración Google Maps) */}
+            <div className="p-3 rounded-xl bg-blue-950/20 border border-blue-800/40 space-y-2.5 relative">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-3.5 w-3.5 text-blue-400" />
+                  <Label className="text-blue-300 font-bold text-xs uppercase tracking-wider">
+                    Ubicación del Establecimiento (Google Maps)
+                  </Label>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleGetCurrentLocation}
+                  className="text-xs border-blue-500/30 text-blue-300 hover:bg-blue-950/50 h-6 px-2 text-[11px]"
+                >
+                  <MapPin className="h-3 w-3 mr-1" />
+                  Mi ubicación
+                </Button>
+              </div>
+
+              <div className="space-y-1.5 relative">
+                <div className="relative">
+                  <Input
+                    value={formData.location}
+                    onChange={handleLocationInputChange}
+                    onFocus={() => {
+                      if (formData.location && formData.location.length >= 3 && locationSuggestions.length > 0) {
+                        setShowSuggestions(true);
+                      }
+                    }}
+                    placeholder="Buscar dirección o local en Google Maps..."
+                    className="bg-zinc-900 border-zinc-800 text-white text-xs pl-8 focus:border-blue-500"
+                    autoComplete="off"
+                  />
+                  <MapPin className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-500" />
+                  {isSearchingLocation && (
+                    <Loader2 className="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-blue-400 animate-spin" />
+                  )}
+                </div>
+
+                {/* Dropdown de Sugerencias de Google Places */}
+                {showSuggestions && locationSuggestions.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-zinc-950 border border-blue-500/40 rounded-xl shadow-2xl max-h-52 overflow-y-auto">
+                    {locationSuggestions.map((suggestion) => (
+                      <div
+                        key={suggestion.place_id}
+                        className="px-3 py-2 hover:bg-blue-900/30 cursor-pointer text-white text-xs border-b border-zinc-800/60 last:border-b-0 flex items-center justify-between gap-2"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleLocationSelect(suggestion)}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <MapPin className="h-3 w-3 text-blue-400 shrink-0" />
+                          <span className="truncate">{suggestion.description}</span>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="p-1.5 border-t border-zinc-800 bg-zinc-900/50 flex justify-end">
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => setShowSuggestions(false)}
+                        className="text-[10px] text-zinc-400 hover:text-white flex items-center gap-1"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                        Cerrar lista
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Coordenadas e Información Geográfica */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-0.5">
+                <div className="space-y-1">
+                  <Label className="text-zinc-400 text-[10px]">Dirección Detallada</Label>
+                  <Input
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    placeholder="Calle, número..."
+                    className="bg-zinc-900 border-zinc-800 text-white text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-zinc-400 text-[10px]">Ciudad</Label>
+                  <Input
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    placeholder="Santo Domingo"
+                    className="bg-zinc-900 border-zinc-800 text-white text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-zinc-400 text-[10px]">País</Label>
+                  <Input
+                    value={formData.country}
+                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                    placeholder="República Dominicana"
+                    className="bg-zinc-900 border-zinc-800 text-white text-xs"
+                  />
+                </div>
+              </div>
+
+              {formData.latitude && formData.longitude && (
+                <div className="flex items-center gap-2 pt-0.5">
+                  <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30 text-[10px] font-mono flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" /> GPS: {Number(formData.latitude).toFixed(4)}, {Number(formData.longitude).toFixed(4)}
+                  </Badge>
+                </div>
+              )}
             </div>
 
             {/* Imagen */}
