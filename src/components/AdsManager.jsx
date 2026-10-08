@@ -241,6 +241,32 @@ const AdsManager = () => {
       toast.success('Campaña eliminada');
       loadCampaignsList();
     }
+  const handleToggleStatus = async (ad) => {
+    const id = ad.id || ad._id;
+    if (!id && !ad.title) return;
+    const isAct = ad.status === 'Activo' || ad.is_active;
+    const newActiveState = !isAct;
+    const newStatusStr = newActiveState ? 'Activo' : 'Inactivo';
+
+    // Optimistic UI update
+    setAds((prevAds) =>
+      prevAds.map((a) =>
+        (id && (String(a.id || a._id) === String(id))) || (a.title && a.title === ad.title)
+          ? { ...a, status: newStatusStr, is_active: newActiveState }
+          : a
+      )
+    );
+
+    try {
+      const updatedAd = await toggleAdStatus(ad);
+      const activeState = updatedAd ? (updatedAd.status === 'Activo' || updatedAd.is_active) : newActiveState;
+      toast.success(activeState ? '✨ Anuncio activado' : '🚫 Anuncio desactivado');
+      await loadData();
+    } catch (error) {
+      console.error('Error toggling ad status:', error);
+      toast.error('No se pudo cambiar el estado del anuncio');
+      await loadData();
+    }
   };
 
   const handleCreateOpen = () => {

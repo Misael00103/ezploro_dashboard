@@ -808,38 +808,68 @@ export const deleteOffer = async (offerId) => {
 };
 
 export const toggleOfferStatus = async (offerId, isActive) => {
+  const targetObj = typeof offerId === 'object' && offerId !== null ? offerId : {};
+  const targetIdStr = String(targetObj.offer_id || targetObj.id || targetObj._id || offerId || '').trim();
+
   const localOffersStr = localStorage.getItem('ezploro_offers_config');
   let localOffers = localOffersStr ? JSON.parse(localOffersStr) : [];
-  const targetIdStr = String(offerId || '').trim();
-  const index = localOffers.findIndex(o => String(o.offer_id || o.id || o._id || '').trim() === targetIdStr);
-  
+  let index = localOffers.findIndex(o => String(o.offer_id || o.id || o._id || '').trim() === targetIdStr);
+
   let newStatus = isActive;
+  if (newStatus === undefined && targetObj.is_active !== undefined) {
+    newStatus = !targetObj.is_active;
+  }
+
   if (index !== -1) {
     if (newStatus === undefined) {
       newStatus = !localOffers[index].is_active;
     }
     localOffers[index].is_active = newStatus;
     localOffers[index].status = newStatus ? 'Activa' : 'Inactiva';
-    localStorage.setItem('ezploro_offers_config', JSON.stringify(localOffers));
+  } else {
+    if (newStatus === undefined) {
+      newStatus = false;
+    }
+    const newOffer = {
+      ...targetObj,
+      offer_id: targetIdStr,
+      id: targetIdStr,
+      _id: targetIdStr,
+      is_active: newStatus,
+      status: newStatus ? 'Activa' : 'Inactiva'
+    };
+    localOffers.push(newOffer);
+    index = localOffers.length - 1;
   }
 
-  const isNumericId = /^\d+$/.test(targetIdStr);
-  if (isNumericId) {
+  try {
+    localStorage.setItem('ezploro_offers_config', JSON.stringify(localOffers));
+  } catch (e) {
+    console.warn('⚠️ Error guardando en local storage:', e);
+  }
+
+  if (targetIdStr) {
     try {
       const token = getAuthToken();
       if (token) {
-        const url = API_URL_OFFERS_TOGGLE_STATUS.replace(':id', targetIdStr);
-        await fetchWithAuth(url, {
+        const patchUrl = API_URL_OFFERS_TOGGLE_STATUS.replace(':id', targetIdStr).replace(':offerId', targetIdStr);
+        await fetchWithAuth(patchUrl, {
           method: 'PATCH',
-          body: JSON.stringify({ is_active: newStatus })
-        }).catch(() => null);
+          body: JSON.stringify({ is_active: newStatus, status: newStatus ? 'Activa' : 'Inactiva' })
+        }).catch(async () => {
+          const updateUrl = API_URL_OFFERS_UPDATE.replace(':offerId', targetIdStr).replace(':id', targetIdStr);
+          await fetchWithAuth(updateUrl, {
+            method: 'PUT',
+            body: JSON.stringify({ is_active: newStatus, status: newStatus ? 'Activa' : 'Inactiva' })
+          }).catch(() => null);
+        });
       }
     } catch (error) {
       console.warn('⚠️ Error alternando estado de oferta en backend:', error);
     }
   }
 
-  return localOffers[index] || { offer_id: offerId, is_active: newStatus, status: newStatus ? 'Activa' : 'Inactiva' };
+  return localOffers[index] || { offer_id: targetIdStr, id: targetIdStr, is_active: newStatus, status: newStatus ? 'Activa' : 'Inactiva' };
 };
 
 /**

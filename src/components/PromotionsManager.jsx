@@ -550,13 +550,26 @@ const PromotionsManager = () => {
 
   const handleToggleStatus = async (offer) => {
     const id = offer.offer_id || offer.id || offer._id;
+    if (!id) return;
+    const newActiveState = !offer.is_active;
+
+    // Actualización optimista de interfaz
+    setOffers((prevOffers) =>
+      prevOffers.map((o) =>
+        String(o.offer_id || o.id || o._id) === String(id)
+          ? { ...o, is_active: newActiveState, status: newActiveState ? 'Activa' : 'Inactiva' }
+          : o
+      )
+    );
+
     try {
-      await toggleOfferStatus(id, !offer.is_active);
-      toast.success('Estado de la promoción actualizado');
-      loadData();
+      await toggleOfferStatus(offer, newActiveState);
+      toast.success(newActiveState ? '✨ Promoción activada' : '🚫 Promoción desactivada');
+      await loadData();
     } catch (error) {
       console.error('Error alternando estado:', error);
       toast.error('No se pudo cambiar el estado de la promoción');
+      await loadData();
     }
   };
 

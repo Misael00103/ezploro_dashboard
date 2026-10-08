@@ -758,7 +758,20 @@ export const toggleAdStatus = async (idOrAd) => {
       status: newStatus,
       is_active: isAct
     };
+  } else if (targetId || targetTitle) {
+    const isAct = !(targetObj.is_active || targetObj.status === 'Activo');
+    const newStatus = isAct ? 'Activo' : 'Inactivo';
+    const newAd = {
+      ...targetObj,
+      id: targetId || `ad-${Date.now()}`,
+      status: newStatus,
+      is_active: isAct
+    };
+    ads.push(newAd);
+    index = ads.length - 1;
+  }
 
+  if (index !== -1) {
     saveStoredAds(ads);
 
     try {
