@@ -1,5 +1,5 @@
-# Etapa 1: build del frontend
-FROM node:20-alpine AS builder
+# Etapa 1: build del frontend (usando espejo AWS ECR para evitar rate-limiting/timeouts de Docker Hub)
+FROM public.ecr.aws/docker/library/node:20-alpine AS builder
 
 WORKDIR /app
 COPY package*.json ./
@@ -9,7 +9,7 @@ ENV GENERATE_SOURCEMAP=false
 RUN npm run build
 
 # Etapa 2: servir el frontend con Nginx
-FROM nginx:stable-alpine
+FROM public.ecr.aws/docker/library/nginx:alpine
 
 # Copiar la configuración personalizada de Nginx
 COPY nginx.conf /etc/nginx/conf.d/default.conf
