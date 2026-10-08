@@ -1,24 +1,12 @@
-# Etapa 1: build del frontend (usando espejo AWS ECR para evitar rate-limiting/timeouts de Docker Hub)
-FROM public.ecr.aws/docker/library/node:20-alpine AS builder
+# Dockerfile súper ligero (1 etapa) sirviendo la compilación lista del frontend
+FROM nginx:alpine
 
-WORKDIR /app
-COPY package*.json ./
-RUN npm install --legacy-peer-deps
-COPY . .
-ENV GENERATE_SOURCEMAP=false
-RUN npm run build
-
-# Etapa 2: servir el frontend con Nginx
-FROM public.ecr.aws/docker/library/nginx:alpine
-
-# Copiar la configuración personalizada de Nginx
+# Copiar la configuración de Nginx con soporte para SPA (React Router)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copiar los archivos construidos desde la primera etapa
-COPY --from=builder /app/build /usr/share/nginx/html
+# Copiar el paquete compilado listo
+COPY build /usr/share/nginx/html
 
-# Exponer el puerto HTTP
 EXPOSE 80
 
-# Arrancar Nginx
 CMD ["nginx", "-g", "daemon off;"]
