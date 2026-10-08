@@ -241,32 +241,6 @@ const AdsManager = () => {
       toast.success('Campaña eliminada');
       loadCampaignsList();
     }
-  const handleToggleStatus = async (ad) => {
-    const id = ad.id || ad._id;
-    if (!id && !ad.title) return;
-    const isAct = ad.status === 'Activo' || ad.is_active;
-    const newActiveState = !isAct;
-    const newStatusStr = newActiveState ? 'Activo' : 'Inactivo';
-
-    // Optimistic UI update
-    setAds((prevAds) =>
-      prevAds.map((a) =>
-        (id && (String(a.id || a._id) === String(id))) || (a.title && a.title === ad.title)
-          ? { ...a, status: newStatusStr, is_active: newActiveState }
-          : a
-      )
-    );
-
-    try {
-      const updatedAd = await toggleAdStatus(ad);
-      const activeState = updatedAd ? (updatedAd.status === 'Activo' || updatedAd.is_active) : newActiveState;
-      toast.success(activeState ? '✨ Anuncio activado' : '🚫 Anuncio desactivado');
-      await loadData();
-    } catch (error) {
-      console.error('Error toggling ad status:', error);
-      toast.error('No se pudo cambiar el estado del anuncio');
-      await loadData();
-    }
   };
 
   const handleCreateOpen = () => {
@@ -390,15 +364,32 @@ const AdsManager = () => {
   };
 
   const handleToggleStatus = async (adOrId) => {
+    const targetObj = typeof adOrId === 'object' && adOrId !== null ? adOrId : {};
+    const id = targetObj.id || targetObj._id || (typeof adOrId !== 'object' ? adOrId : '');
+    const title = targetObj.title || targetObj.name || '';
+    const isAct = targetObj.status === 'Activo' || targetObj.is_active;
+    const newActiveState = !isAct;
+    const newStatusStr = newActiveState ? 'Activo' : 'Inactivo';
+
+    // Optimistic UI update
+    setAds((prevAds) =>
+      prevAds.map((a) =>
+        (id && (String(a.id || a._id) === String(id))) || (title && a.title === title)
+          ? { ...a, status: newStatusStr, is_active: newActiveState }
+          : a
+      )
+    );
+
     try {
       const updated = await toggleAdStatus(adOrId);
       if (updated) {
-        toast.success(`Anuncio ${updated.status === 'Activo' ? 'Activado' : 'Desactivado'}`);
-        loadData();
+        toast.success(`✨ Anuncio ${updated.status === 'Activo' || updated.is_active ? 'Activado' : 'Desactivado'}`);
+        await loadData();
       }
     } catch (error) {
       console.error('Error al cambiar estado:', error);
       toast.error('No se pudo cambiar el estado del anuncio');
+      await loadData();
     }
   };
 
