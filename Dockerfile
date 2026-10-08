@@ -1,12 +1,24 @@
-# Dockerfile súper ligero (1 etapa) sirviendo la compilación lista del frontend
-FROM nginx:alpine
+# Etapa 1: build del frontend
+FROM node:20-alpine AS builder
 
-# Copiar la configuración de Nginx con soporte para SPA (React Router)
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --legacy-peer-deps
+COPY . .
+ENV GENERATE_SOURCEMAP=false
+RUN npm run build
+
+# Etapa 2: servir el frontend con Nginx
+FROM nginx:stable-alpine
+
+# Copiar la configuración personalizada de Nginx
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copiar el paquete compilado listo
-COPY build /usr/share/nginx/html
+# Copiar los archivos construidos desde la primera etapa
+COPY --from=builder /app/build /usr/share/nginx/html
 
+# Exponer el puerto HTTP
 EXPOSE 80
 
+# Arrancar Nginx
 CMD ["nginx", "-g", "daemon off;"]

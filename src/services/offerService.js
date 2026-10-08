@@ -26,7 +26,7 @@ export const checkOffersEndpoint = async () => {
     const headers = {
       'Content-Type': 'application/json',
     };
-    
+
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
@@ -55,7 +55,7 @@ export const getOffers = async (filters = {}) => {
     const headers = {
       'Content-Type': 'application/json',
     };
-    
+
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
@@ -69,7 +69,7 @@ export const getOffers = async (filters = {}) => {
     });
 
     // Use the /all endpoint for admin to get all offers with offer_id
-    const url = params.toString() 
+    const url = params.toString()
       ? `${API_URL_OFFERS_LIST}?${params.toString()}`
       : API_URL_OFFERS_LIST;
 
@@ -86,7 +86,7 @@ export const getOffers = async (filters = {}) => {
           exp: payload.exp,
           exp_readable: new Date(payload.exp * 1000).toLocaleString()
         });
-        
+
         // Verificar si el token expiró
         const now = Math.floor(Date.now() / 1000);
         if (payload.exp < now) {
@@ -113,12 +113,12 @@ export const getOffers = async (filters = {}) => {
         errorData = { message: errorText || `Error HTTP! status: ${response.status}` };
       }
       console.error('🔴 getOffers - Error response:', errorData);
-      
+
       // Si es error de userId inválido, mostrar más información
       if (errorData.message && errorData.message.includes('ID de usuario inválido')) {
         console.error('🔴 getOffers - Problema con el userId del token');
         console.error('🔴 getOffers - Verifica que el token tenga un user_id válido (número positivo)');
-        
+
         // Mostrar información del localStorage
         const userId = localStorage.getItem('userId');
         const userStr = localStorage.getItem('user');
@@ -136,13 +136,13 @@ export const getOffers = async (filters = {}) => {
           }
         }
       }
-      
+
       throw new Error(errorData.message || `Error HTTP! status: ${response.status}`);
     }
 
     const data = await response.json();
     console.log('🔵 getOffers - Response data:', data);
-    
+
     let resultOffers = [];
     if (data && Array.isArray(data.offers)) {
       resultOffers = data.offers;
@@ -213,7 +213,7 @@ export const getActiveOffers = async (filters = {}) => {
     const headers = {
       'Content-Type': 'application/json',
     };
-    
+
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
@@ -225,7 +225,7 @@ export const getActiveOffers = async (filters = {}) => {
       }
     });
 
-    const url = params.toString() 
+    const url = params.toString()
       ? `${API_URL_OFFERS_ACTIVE}?${params.toString()}`
       : API_URL_OFFERS_ACTIVE;
 
@@ -250,7 +250,7 @@ export const getActiveOffers = async (filters = {}) => {
 
     const data = await response.json();
     console.log('🔵 getActiveOffers - Response data:', data);
-    
+
     // El backend devuelve { offers, totalCount, limit, offset }
     if (data && Array.isArray(data.offers)) {
       return data.offers;
@@ -808,68 +808,38 @@ export const deleteOffer = async (offerId) => {
 };
 
 export const toggleOfferStatus = async (offerId, isActive) => {
-  const targetObj = typeof offerId === 'object' && offerId !== null ? offerId : {};
-  const targetIdStr = String(targetObj.offer_id || targetObj.id || targetObj._id || offerId || '').trim();
-
   const localOffersStr = localStorage.getItem('ezploro_offers_config');
   let localOffers = localOffersStr ? JSON.parse(localOffersStr) : [];
-  let index = localOffers.findIndex(o => String(o.offer_id || o.id || o._id || '').trim() === targetIdStr);
+  const targetIdStr = String(offerId || '').trim();
+  const index = localOffers.findIndex(o => String(o.offer_id || o.id || o._id || '').trim() === targetIdStr);
 
   let newStatus = isActive;
-  if (newStatus === undefined && targetObj.is_active !== undefined) {
-    newStatus = !targetObj.is_active;
-  }
-
   if (index !== -1) {
     if (newStatus === undefined) {
       newStatus = !localOffers[index].is_active;
     }
     localOffers[index].is_active = newStatus;
     localOffers[index].status = newStatus ? 'Activa' : 'Inactiva';
-  } else {
-    if (newStatus === undefined) {
-      newStatus = false;
-    }
-    const newOffer = {
-      ...targetObj,
-      offer_id: targetIdStr,
-      id: targetIdStr,
-      _id: targetIdStr,
-      is_active: newStatus,
-      status: newStatus ? 'Activa' : 'Inactiva'
-    };
-    localOffers.push(newOffer);
-    index = localOffers.length - 1;
-  }
-
-  try {
     localStorage.setItem('ezploro_offers_config', JSON.stringify(localOffers));
-  } catch (e) {
-    console.warn('⚠️ Error guardando en local storage:', e);
   }
 
-  if (targetIdStr) {
+  const isNumericId = /^\d+$/.test(targetIdStr);
+  if (isNumericId) {
     try {
       const token = getAuthToken();
       if (token) {
-        const patchUrl = API_URL_OFFERS_TOGGLE_STATUS.replace(':id', targetIdStr).replace(':offerId', targetIdStr);
-        await fetchWithAuth(patchUrl, {
+        const url = API_URL_OFFERS_TOGGLE_STATUS.replace(':id', targetIdStr);
+        await fetchWithAuth(url, {
           method: 'PATCH',
-          body: JSON.stringify({ is_active: newStatus, status: newStatus ? 'Activa' : 'Inactiva' })
-        }).catch(async () => {
-          const updateUrl = API_URL_OFFERS_UPDATE.replace(':offerId', targetIdStr).replace(':id', targetIdStr);
-          await fetchWithAuth(updateUrl, {
-            method: 'PUT',
-            body: JSON.stringify({ is_active: newStatus, status: newStatus ? 'Activa' : 'Inactiva' })
-          }).catch(() => null);
-        });
+          body: JSON.stringify({ is_active: newStatus })
+        }).catch(() => null);
       }
     } catch (error) {
       console.warn('⚠️ Error alternando estado de oferta en backend:', error);
     }
   }
 
-  return localOffers[index] || { offer_id: targetIdStr, id: targetIdStr, is_active: newStatus, status: newStatus ? 'Activa' : 'Inactiva' };
+  return localOffers[index] || { offer_id: offerId, is_active: newStatus, status: newStatus ? 'Activa' : 'Inactiva' };
 };
 
 /**
@@ -917,7 +887,7 @@ export const getOfferStats = async (filters = {}) => {
     const headers = {
       'Content-Type': 'application/json',
     };
-    
+
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
@@ -929,7 +899,7 @@ export const getOfferStats = async (filters = {}) => {
       }
     });
 
-    const url = params.toString() 
+    const url = params.toString()
       ? `${API_URL_OFFERS_STATS}?${params.toString()}`
       : API_URL_OFFERS_STATS;
 
@@ -978,9 +948,39 @@ export const getOfferRedemptions = async () => {
       const parsed = JSON.parse(cached);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
-  } catch (e) {}
+  } catch (e) { }
 
   return [];
+};
+
+
+'Authorization': `Bearer ${token}`
+      };
+
+// Consultar endpoint activo /offer/rewards/my-redemptions (HTTP 200 OK en la nube)
+const response = await fetch(`${BASE_URL}/offer/rewards/my-redemptions`, { headers }).catch(() => null);
+
+if (response && response.ok) {
+  const data = await response.json().catch(() => null);
+  const list = data?.redemptions || data?.data || (Array.isArray(data) ? data : null);
+  if (Array.isArray(list)) {
+    return list;
+  }
+}
+    }
+  } catch (error) {
+  console.warn('⚠️ Error al consultar confirmaciones de canjes en backend:', error);
+}
+
+try {
+  const cached = localStorage.getItem('ezploro_offer_redemptions');
+  if (cached) {
+    const parsed = JSON.parse(cached);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  }
+} catch (e) { }
+
+return [];
 };
 
 

@@ -45,7 +45,7 @@ const recordDeletedAd = (idOrTitle) => {
     const raw = String(idOrTitle).trim().toLowerCase();
     if (raw) set.add(raw);
     localStorage.setItem(STORAGE_KEY_DELETED_ADS, JSON.stringify(Array.from(set)));
-  } catch (e) {}
+  } catch (e) { }
 };
 
 const unrecordDeletedAd = (idOrTitle) => {
@@ -57,7 +57,7 @@ const unrecordDeletedAd = (idOrTitle) => {
       set.delete(raw);
       localStorage.setItem(STORAGE_KEY_DELETED_ADS, JSON.stringify(Array.from(set)));
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 const isAdDeleted = (ad) => {
@@ -265,14 +265,14 @@ export const getPrimaryAd = (adsList = []) => {
     if (cachedPrimary) {
       const parsedPrimary = JSON.parse(cachedPrimary);
       if (parsedPrimary && typeof parsedPrimary === 'object' && !isAdDeleted(parsedPrimary)) {
-        const found = ads.find(a => 
+        const found = ads.find(a =>
           (parsedPrimary.id && (String(a.id || a._id) === String(parsedPrimary.id || parsedPrimary._id))) ||
           (parsedPrimary.title && a.title === parsedPrimary.title)
         );
         if (found) return found;
       }
     }
-  } catch (e) {}
+  } catch (e) { }
 
   return ads.find(a => a.is_active || a.status === 'Activo') || ads[0] || null;
 };
@@ -416,7 +416,7 @@ export const saveRewardedAdConfig = async (configData) => {
   saveStoredAds(ads);
   try {
     localStorage.setItem('ezploro_primary_rewarded_ad', JSON.stringify(normalizedInput));
-  } catch (e) {}
+  } catch (e) { }
 
   try {
     const token = getAuthToken();
@@ -539,7 +539,7 @@ export const getAds = async () => {
             const sId = String(sAd.id || sAd._id || '').trim();
             const sTitle = String(sAd.title || sAd.name || '').trim();
 
-            const existingIndex = combined.findIndex(l => 
+            const existingIndex = combined.findIndex(l =>
               (sId && (String(l.id) === sId || String(l._id) === sId)) ||
               (sTitle && l.title === sTitle)
             );
@@ -632,8 +632,8 @@ export const updateAd = async (id, updatedFields) => {
   const ads = getStoredAds();
   const targetIdStr = String(id || '').trim();
 
-  let index = ads.findIndex(a => 
-    (a.id && String(a.id) === targetIdStr) || 
+  let index = ads.findIndex(a =>
+    (a.id && String(a.id) === targetIdStr) ||
     (a._id && String(a._id) === targetIdStr) ||
     (updatedFields.title && a.title && a.title.trim().toLowerCase() === updatedFields.title.trim().toLowerCase())
   );
@@ -644,10 +644,10 @@ export const updateAd = async (id, updatedFields) => {
 
   if (index !== -1) {
     const existing = ads[index];
-    const isAct = updatedFields.status !== undefined 
-      ? updatedFields.status === 'Activo' 
+    const isAct = updatedFields.status !== undefined
+      ? updatedFields.status === 'Activo'
       : (updatedFields.is_active !== undefined ? updatedFields.is_active : existing.is_active);
-    
+
     const ptsVal = parseInt(updatedFields.reward_points ?? updatedFields.rewardPoints ?? updatedFields.points ?? existing.reward_points ?? 5) || 5;
     const durationVal = parseInt(updatedFields.duration ?? updatedFields.duration_seconds ?? existing.duration ?? 30) || 30;
     const dailyLimitVal = parseInt(updatedFields.daily_limit ?? updatedFields.dailyLimit ?? existing.daily_limit ?? 1) || 1;
@@ -758,20 +758,7 @@ export const toggleAdStatus = async (idOrAd) => {
       status: newStatus,
       is_active: isAct
     };
-  } else if (targetId || targetTitle) {
-    const isAct = !(targetObj.is_active || targetObj.status === 'Activo');
-    const newStatus = isAct ? 'Activo' : 'Inactivo';
-    const newAd = {
-      ...targetObj,
-      id: targetId || `ad-${Date.now()}`,
-      status: newStatus,
-      is_active: isAct
-    };
-    ads.push(newAd);
-    index = ads.length - 1;
-  }
 
-  if (index !== -1) {
     saveStoredAds(ads);
 
     try {
@@ -782,7 +769,7 @@ export const toggleAdStatus = async (idOrAd) => {
           localStorage.setItem('ezploro_primary_rewarded_ad', JSON.stringify(ads[index]));
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     const primaryRewarded = getPrimaryAd(ads);
     await saveRewardedAdConfig(primaryRewarded).catch(() => null);
@@ -838,7 +825,7 @@ export const deleteAd = async (idOrAd) => {
         }
       }
     }
-  } catch (e) {}
+  } catch (e) { }
 
   try {
     const token = getAuthToken();
@@ -913,7 +900,7 @@ export const deleteAllAds = async () => {
   saveStoredAds([]);
   try {
     localStorage.removeItem('ezploro_primary_rewarded_ad');
-  } catch (e) {}
+  } catch (e) { }
 
   try {
     const token = getAuthToken();
@@ -1028,7 +1015,7 @@ export const getAdStats = async () => {
     totalCompletions,
     conversionRate
   };
-};const STORAGE_KEY_CAMPAIGNS = 'ezploro_ad_campaigns';
+}; const STORAGE_KEY_CAMPAIGNS = 'ezploro_ad_campaigns';
 
 const DEFAULT_CAMPAIGNS = [
   {

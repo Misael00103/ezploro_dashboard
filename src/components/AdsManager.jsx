@@ -364,32 +364,15 @@ const AdsManager = () => {
   };
 
   const handleToggleStatus = async (adOrId) => {
-    const targetObj = typeof adOrId === 'object' && adOrId !== null ? adOrId : {};
-    const id = targetObj.id || targetObj._id || (typeof adOrId !== 'object' ? adOrId : '');
-    const title = targetObj.title || targetObj.name || '';
-    const isAct = targetObj.status === 'Activo' || targetObj.is_active;
-    const newActiveState = !isAct;
-    const newStatusStr = newActiveState ? 'Activo' : 'Inactivo';
-
-    // Optimistic UI update
-    setAds((prevAds) =>
-      prevAds.map((a) =>
-        (id && (String(a.id || a._id) === String(id))) || (title && a.title === title)
-          ? { ...a, status: newStatusStr, is_active: newActiveState }
-          : a
-      )
-    );
-
     try {
       const updated = await toggleAdStatus(adOrId);
       if (updated) {
-        toast.success(`✨ Anuncio ${updated.status === 'Activo' || updated.is_active ? 'Activado' : 'Desactivado'}`);
-        await loadData();
+        toast.success(`Anuncio ${updated.status === 'Activo' ? 'Activado' : 'Desactivado'}`);
+        loadData();
       }
     } catch (error) {
       console.error('Error al cambiar estado:', error);
       toast.error('No se pudo cambiar el estado del anuncio');
-      await loadData();
     }
   };
 
