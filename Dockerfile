@@ -1,11 +1,21 @@
-# Dockerfile de 1 sola etapa sirviendo el build pre-compilado de React
+# Etapa 1: build del frontend
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --legacy-peer-deps
+COPY . .
+ENV GENERATE_SOURCEMAP=false
+RUN npm run build
+
+# Etapa 2: servir el frontend con Nginx
 FROM nginx:alpine
 
-# Configuración Nginx para rutas React (SPA)
+# Configuración personalizada de Nginx para React Router (SPA)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copiar la carpeta compilada build/
-COPY build /usr/share/nginx/html
+# Copiar el build generado en la etapa 1
+COPY --from=builder /app/build /usr/share/nginx/html
 
 EXPOSE 80
 
