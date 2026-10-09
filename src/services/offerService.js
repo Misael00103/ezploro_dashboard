@@ -954,33 +954,4 @@ export const getOfferRedemptions = async () => {
 };
 
 
-'Authorization': `Bearer ${token}`
-      };
-
-// Consultar endpoint activo /offer/rewards/my-redemptions (HTTP 200 OK en la nube)
-const response = await fetch(`${BASE_URL}/offer/rewards/my-redemptions`, { headers }).catch(() => null);
-
-if (response && response.ok) {
-  const data = await response.json().catch(() => null);
-  const list = data?.redemptions || data?.data || (Array.isArray(data) ? data : null);
-  if (Array.isArray(list)) {
-    return list;
-  }
-}
-    }
-  } catch (error) {
-  console.warn('⚠️ Error al consultar confirmaciones de canjes en backend:', error);
-}
-
-try {
-  const cached = localStorage.getItem('ezploro_offer_redemptions');
-  if (cached) {
-    const parsed = JSON.parse(cached);
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-  }
-} catch (e) { }
-
-return [];
-};
-
 
