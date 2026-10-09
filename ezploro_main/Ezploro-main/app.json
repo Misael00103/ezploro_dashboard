@@ -2,7 +2,7 @@
   "expo": {
     "name": "Ezploro",
     "slug": "Ezploro",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/logoezploro.png",
     "scheme": "ezploro",
@@ -11,10 +11,12 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.misael25.ezploro",
+      "buildNumber": "2",
       "googleServicesFile": "./ios/GoogleService-Info.plist"
     },
     "android": {
       "package": "com.misael25.ezploro",
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

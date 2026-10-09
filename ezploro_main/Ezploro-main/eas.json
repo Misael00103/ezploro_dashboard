@@ -23,6 +23,16 @@
       }
     },
     "production": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "NODE_OPTIONS": "--max-old-space-size=4096"
+      }
+    },
+    "production-apk": {
+      "distribution": "internal",
       "android": {
         "buildType": "apk"
       },
