@@ -237,22 +237,8 @@ const PromotionsManager = () => {
     const offerCountry = (offer.country || '').trim();
     const offerCity = (offer.city || '').trim();
 
-    // Determinar la ubicación principal evitando cadenas desactualizadas
-    let bestLocation = '';
-    if (rawAddress && offerCountry && !offerCountry.toLowerCase().includes('dominicana') && rawLocation.toLowerCase().includes('dominicana')) {
-      bestLocation = rawAddress;
-    } else if (rawAddress && (!rawLocation || rawLocation.length < rawAddress.length || !rawLocation.includes(','))) {
-      bestLocation = rawAddress;
-    } else if (rawLocation) {
-      bestLocation = rawLocation;
-    } else if (rawAddress) {
-      bestLocation = rawAddress;
-    } else if (offerCity) {
-      bestLocation = [offerCity, offer.state, offerCountry].filter(Boolean).join(', ');
-    }
-
-    const finalAddress = rawAddress || bestLocation;
-    const finalLocation = bestLocation || finalAddress;
+    const activeLocationStr = (offer.location || offer.address || offer.city || '').trim();
+    const activeAddressStr = (offer.address || offer.location || activeLocationStr).trim();
 
     setFormData({
       title: offer.title || offer.name || '',
@@ -272,14 +258,14 @@ const PromotionsManager = () => {
       image_url: offer.image_url || offer.image || '',
       merchant_name: offer.merchant_name || offer.merchantName || '',
       merchant_code: offer.merchant_code || offer.merchantCode || offer.merchant_pin || '',
-      location: finalLocation,
-      address: finalAddress,
+      location: activeLocationStr,
+      address: activeAddressStr,
       city: offerCity,
       state: offer.state || '',
-      country: offerCountry || (finalAddress.toLowerCase().includes('canad') ? 'Canadá' : 'República Dominicana'),
+      country: offerCountry || 'República Dominicana',
       latitude: lat ? String(lat) : '',
       longitude: lng ? String(lng) : '',
-      is_active: offer.is_active !== undefined ? offer.is_active : true
+      is_active: offer.is_active === true || offer.is_active === 1 || offer.is_active === '1' || String(offer.is_active).toLowerCase() === 'true'
     });
     setIsEditModalOpen(true);
   };
@@ -291,8 +277,7 @@ const PromotionsManager = () => {
     setFormData((prev) => ({
       ...prev,
       location: value,
-      // Si address estaba vacío o sincronizado con la ubicación previa, mantenerlo sincronizado
-      address: (!prev.address || prev.address === prev.location) ? value : prev.address
+      address: value
     }));
 
     if (searchTimeoutRef.current) {
@@ -512,23 +497,13 @@ const PromotionsManager = () => {
     try {
       const id = selectedOffer.offer_id || selectedOffer.id || selectedOffer._id;
 
-      // Reconciliar location y address asegurando que no se mande una cadena desactualizada
-      const resolvedAddress = (formData.address || '').trim();
-      let resolvedLoc = (formData.location || '').trim();
-      const countryStr = (formData.country || '').trim();
-
-      if (resolvedAddress && countryStr && !countryStr.toLowerCase().includes('dominicana') && resolvedLoc.toLowerCase().includes('dominicana')) {
-        resolvedLoc = resolvedAddress;
-      } else if (!resolvedLoc && resolvedAddress) {
-        resolvedLoc = resolvedAddress;
-      } else if (!resolvedAddress && resolvedLoc) {
-        // usar resolvedLoc
-      }
+      const targetLocation = (formData.location || formData.address || '').trim();
+      const targetAddress = (formData.address || formData.location || targetLocation).trim();
 
       const submissionData = {
         ...formData,
-        location: resolvedLoc || resolvedAddress,
-        address: resolvedAddress || resolvedLoc
+        location: targetLocation,
+        address: targetAddress
       };
 
       const updated = await updateOffer(id, submissionData, selectedImageFile);
@@ -537,7 +512,7 @@ const PromotionsManager = () => {
       setOffers((prevOffers) =>
         prevOffers.map((o) =>
           String(o.offer_id || o.id || o._id) === String(id)
-            ? { ...o, ...submissionData, ...updated }
+            ? { ...o, ...submissionData, ...updated, location: targetLocation, address: targetAddress }
             : o
         )
       );
@@ -550,13 +525,27 @@ const PromotionsManager = () => {
 
   const handleToggleStatus = async (offer) => {
     const id = offer.offer_id || offer.id || offer._id;
+    if (!id) return;
+    const isAct = offer.is_active === true || offer.is_active === 1 || offer.is_active === '1' || String(offer.is_active).toLowerCase() === 'true';
+    const newActiveState = !isAct;
+
+    // Actualización optimista instantánea
+    setOffers((prevOffers) =>
+      prevOffers.map((o) =>
+        String(o.offer_id || o.id || o._id) === String(id)
+          ? { ...o, is_active: newActiveState, status: newActiveState ? 'Activa' : 'Inactiva' }
+          : o
+      )
+    );
+
     try {
-      await toggleOfferStatus(id, !offer.is_active);
-      toast.success('Estado de la promoción actualizado');
-      loadData();
+      await toggleOfferStatus(id, newActiveState);
+      toast.success(newActiveState ? '✨ Promoción activada' : '🚫 Promoción desactivada');
+      await loadData();
     } catch (error) {
       console.error('Error alternando estado:', error);
       toast.error('No se pudo cambiar el estado de la promoción');
+      await loadData();
     }
   };
 
@@ -685,8 +674,8 @@ const PromotionsManager = () => {
                           <ImageIcon className="h-10 w-10 text-zinc-700" />
                         )}
                         <div className="absolute top-3 right-3 flex items-center gap-2">
-                          <Badge className={offer.is_active ? 'bg-emerald-500/90 text-zinc-950 font-bold' : 'bg-zinc-800 text-zinc-400'}>
-                            {offer.is_active ? 'Activo' : 'Inactivo'}
+                          <Badge className={(offer.is_active === true || offer.is_active === 1 || offer.is_active === '1' || String(offer.is_active).toLowerCase() === 'true') ? 'bg-emerald-500/90 text-zinc-950 font-bold' : 'bg-zinc-800 text-zinc-400'}>
+                            {(offer.is_active === true || offer.is_active === 1 || offer.is_active === '1' || String(offer.is_active).toLowerCase() === 'true') ? 'Activo' : 'Inactivo'}
                           </Badge>
                         </div>
                         <div className="absolute bottom-3 left-3">
@@ -703,11 +692,12 @@ const PromotionsManager = () => {
 
                         <p className="text-zinc-400 text-xs line-clamp-2">{offer.description}</p>
 
-                        {(offer.address || offer.location || offer.city) && (
+                        {(offer.location || offer.address || offer.city) && (
                           <div className="flex items-center gap-1.5 text-xs text-blue-300 bg-blue-950/30 px-2.5 py-1.5 rounded-lg border border-blue-800/30">
                             <MapPin className="h-3.5 w-3.5 text-blue-400 shrink-0" />
                             <span className="truncate">
-                              {offer.address ||
+                              {offer.location ||
+                               offer.address ||
                                (typeof offer.location === 'string' ? offer.location : '') ||
                                (offer.location?.formatted_address || offer.location?.address) ||
                                (offer.city ? `${offer.city}${offer.country ? ', ' + offer.country : ''}` : 'Ubicación registrada')}
@@ -751,10 +741,10 @@ const PromotionsManager = () => {
                     <div className="flex items-center justify-between p-4 border-t border-zinc-800/60 bg-zinc-950/40 text-xs">
                       <div className="flex items-center gap-2">
                         <Switch
-                          checked={!!offer.is_active}
+                          checked={offer.is_active === true || offer.is_active === 1 || offer.is_active === '1' || String(offer.is_active).toLowerCase() === 'true'}
                           onCheckedChange={() => handleToggleStatus(offer)}
                         />
-                        <span className="text-zinc-400">{offer.is_active ? 'Visible' : 'Oculto'}</span>
+                        <span className="text-zinc-400">{(offer.is_active === true || offer.is_active === 1 || offer.is_active === '1' || String(offer.is_active).toLowerCase() === 'true') ? 'Visible' : 'Oculto'}</span>
                       </div>
 
                       <div className="flex items-center gap-2">

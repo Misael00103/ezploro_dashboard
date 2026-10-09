@@ -154,43 +154,42 @@ export const getOffers = async (filters = {}) => {
 
     try {
       const localOffersStr = localStorage.getItem('ezploro_offers_config');
-      if (localOffersStr) {
-        const localOffers = JSON.parse(localOffersStr);
-        resultOffers = resultOffers.map((offer) => {
-          const offerId = String(offer.offer_id || offer.id || offer._id || '');
-          const localMatch = localOffers.find(
-            (l) => String(l.offer_id || l.id || l._id || '') === offerId
-          );
-          if (localMatch) {
-            const locAddress = (localMatch.address || offer.address || '').trim();
-            const locCountry = (localMatch.country || offer.country || '').trim();
-            let locLocation = (localMatch.location || offer.location || '').trim();
+      const localOffers = localOffersStr ? JSON.parse(localOffersStr) : [];
+      resultOffers = resultOffers.map((offer) => {
+        const offerId = String(offer.offer_id || offer.id || offer._id || '');
+        const localMatch = localOffers.find(
+          (l) => String(l.offer_id || l.id || l._id || '') === offerId
+        );
 
-            if (locAddress && locCountry && !locCountry.toLowerCase().includes('dominicana') && locLocation.toLowerCase().includes('dominicana')) {
-              locLocation = locAddress;
-            }
+        // Ubicación y Dirección unificadas
+        const effectiveLocation = (localMatch?.location || offer.location || localMatch?.address || offer.address || '').trim();
+        const effectiveAddress = (localMatch?.address || offer.address || localMatch?.location || offer.location || '').trim();
 
-            const effectiveLocation = locLocation || locAddress || offer.location || '';
-            const effectiveAddress = locAddress || locLocation || offer.address || '';
+        // Determinar estado activo de manera estricta sin bugs de tipos '0' o strings
+        let activeVal;
+        if (localMatch && localMatch.is_active !== undefined) {
+          activeVal = localMatch.is_active === true || localMatch.is_active === 1 || localMatch.is_active === '1' || String(localMatch.is_active).toLowerCase() === 'true';
+        } else {
+          activeVal = (offer.is_active === true || offer.is_active === 1 || offer.is_active === '1' || String(offer.is_active).toLowerCase() === 'true') &&
+                      (offer.status !== 'Inactiva' && offer.status !== 'Inactivo' && offer.status !== 'inactive' && offer.status !== 'Oculto');
+        }
 
-            return {
-              ...offer,
-              ...localMatch,
-              // Los datos actualizados por el usuario en localMatch tienen prioridad sobre los datos anteriores del backend
-              location: effectiveLocation,
-              address: effectiveAddress,
-              city: localMatch.city !== undefined ? localMatch.city : (offer.city || ''),
-              state: localMatch.state !== undefined ? localMatch.state : (offer.state || ''),
-              country: locCountry || (offer.country || ''),
-              latitude: localMatch.latitude || localMatch.lat || offer.latitude || offer.lat || '',
-              longitude: localMatch.longitude || localMatch.lng || offer.longitude || offer.lng || '',
-              offer_id: offerId,
-              id: offerId
-            };
-          }
-          return offer;
-        });
-      }
+        return {
+          ...offer,
+          ...(localMatch || {}),
+          location: effectiveLocation,
+          address: effectiveAddress,
+          is_active: activeVal,
+          status: activeVal ? 'Activa' : 'Inactiva',
+          city: localMatch?.city !== undefined ? localMatch.city : (offer.city || ''),
+          state: localMatch?.state !== undefined ? localMatch.state : (offer.state || ''),
+          country: localMatch?.country || offer.country || '',
+          latitude: localMatch?.latitude || localMatch?.lat || offer.latitude || offer.lat || '',
+          longitude: localMatch?.longitude || localMatch?.lng || offer.longitude || offer.lng || '',
+          offer_id: offerId,
+          id: offerId
+        };
+      });
     } catch (e) {
       console.warn('⚠️ Error combinando con localStorage en getOffers:', e);
     }
@@ -808,30 +807,66 @@ export const deleteOffer = async (offerId) => {
 };
 
 export const toggleOfferStatus = async (offerId, isActive) => {
+  const targetObj = typeof offerId === 'object' && offerId !== null ? offerId : {};
+  const targetIdStr = String(targetObj.offer_id || targetObj.id || targetObj._id || offerId || '').trim();
+
   const localOffersStr = localStorage.getItem('ezploro_offers_config');
   let localOffers = localOffersStr ? JSON.parse(localOffersStr) : [];
-  const targetIdStr = String(offerId || '').trim();
-  const index = localOffers.findIndex(o => String(o.offer_id || o.id || o._id || '').trim() === targetIdStr);
+  let index = localOffers.findIndex(o => String(o.offer_id || o.id || o._id || '').trim() === targetIdStr);
 
   let newStatus = isActive;
-  if (index !== -1) {
-    if (newStatus === undefined) {
-      newStatus = !localOffers[index].is_active;
-    }
-    localOffers[index].is_active = newStatus;
-    localOffers[index].status = newStatus ? 'Activa' : 'Inactiva';
-    localStorage.setItem('ezploro_offers_config', JSON.stringify(localOffers));
+  if (newStatus === undefined && targetObj.is_active !== undefined) {
+    const isCurrentlyActive = targetObj.is_active === true || targetObj.is_active === 1 || targetObj.is_active === '1' || String(targetObj.is_active).toLowerCase() === 'true';
+    newStatus = !isCurrentlyActive;
+  } else if (newStatus === undefined && index !== -1) {
+    const isCurrentlyActive = localOffers[index].is_active === true || localOffers[index].is_active === 1 || localOffers[index].is_active === '1' || String(localOffers[index].is_active).toLowerCase() === 'true';
+    newStatus = !isCurrentlyActive;
+  } else if (newStatus === undefined) {
+    newStatus = false;
   }
 
-  const isNumericId = /^\d+$/.test(targetIdStr);
-  if (isNumericId) {
+  const statusStr = newStatus ? 'Activa' : 'Inactiva';
+
+  if (index !== -1) {
+    localOffers[index] = {
+      ...localOffers[index],
+      is_active: newStatus,
+      status: statusStr
+    };
+  } else {
+    localOffers.push({
+      ...targetObj,
+      offer_id: targetIdStr,
+      id: targetIdStr,
+      _id: targetIdStr,
+      is_active: newStatus,
+      status: statusStr
+    });
+    index = localOffers.length - 1;
+  }
+
+  try {
+    localStorage.setItem('ezploro_offers_config', JSON.stringify(localOffers));
+  } catch (e) {
+    console.warn('⚠️ Error guardando en local storage:', e);
+  }
+
+  if (targetIdStr) {
     try {
       const token = getAuthToken();
       if (token) {
-        const url = API_URL_OFFERS_TOGGLE_STATUS.replace(':id', targetIdStr);
-        await fetchWithAuth(url, {
+        // 1. Endpoint específico PATCH toggle-status
+        const toggleUrl = API_URL_OFFERS_TOGGLE_STATUS.replace(':id', targetIdStr).replace(':offerId', targetIdStr);
+        await fetchWithAuth(toggleUrl, {
           method: 'PATCH',
-          body: JSON.stringify({ is_active: newStatus })
+          body: JSON.stringify({ is_active: newStatus, status: statusStr })
+        }).catch(() => null);
+
+        // 2. Endpoint general PUT update para asegurar persistencia en BD
+        const updateUrl = API_URL_OFFERS_UPDATE.replace(':offerId', targetIdStr).replace(':id', targetIdStr);
+        await fetchWithAuth(updateUrl, {
+          method: 'PUT',
+          body: JSON.stringify({ is_active: newStatus, status: statusStr })
         }).catch(() => null);
       }
     } catch (error) {
@@ -839,7 +874,7 @@ export const toggleOfferStatus = async (offerId, isActive) => {
     }
   }
 
-  return localOffers[index] || { offer_id: offerId, is_active: newStatus, status: newStatus ? 'Activa' : 'Inactiva' };
+  return localOffers[index] || { offer_id: targetIdStr, id: targetIdStr, is_active: newStatus, status: statusStr };
 };
 
 /**
