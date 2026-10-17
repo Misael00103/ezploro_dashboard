@@ -806,6 +806,7 @@ export const deleteOffer = async (offerId) => {
   return { success: true, message: 'Oferta eliminada' };
 };
 
+
 export const toggleOfferStatus = async (offerId, isActive) => {
   const targetObj = typeof offerId === 'object' && offerId !== null ? offerId : {};
   const targetIdStr = String(targetObj.offer_id || targetObj.id || targetObj._id || offerId || '').trim();
