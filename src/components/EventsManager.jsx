@@ -20,21 +20,60 @@ import {
   Search,
   Filter,
   Upload,
-  X
+  X,
+  ExternalLink,
+  Lock,
+  Unlock,
+  Ticket,
+  LayoutGrid,
+  Table as TableIcon,
+  ShieldCheck,
+  CheckCircle2,
+  Globe,
+  Instagram,
+  Facebook,
+  Twitter,
+  Share2,
+  UserPlus,
+  UserCheck,
+  Loader2
 } from 'lucide-react';
+import { Switch } from './ui/switch';
+import EventGuestManagerModal from './EventGuestManagerModal';
+import AttendanceAuditModal from './AttendanceAuditModal';
 import { useToast } from '../hooks/use-toast';
-import { createEvent, updateEvent, deleteEvent, deleteAllEvents } from '../services/eventService';
+import { 
+  createEvent, 
+  updateEvent, 
+  deleteEvent, 
+  deleteAllEvents,
+  searchUsersToInvite,
+  inviteUsersToEvent,
+  getEventInvitedUsers
+} from '../services/eventService';
 import { getAuthToken } from '../services/authService';
-import { getCurrentUserId } from '../services/userService';
+import { getCurrentUserId, getAllUsers } from '../services/userService';
 import { searchPlaces as searchPlacesAPI, getPlaceDetails, reverseGeocode } from '../services/placesService';
 
 const EventsManager = ({ events, updateEvents }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [viewMode, setViewMode] = useState('table'); // 'table' o 'grid'
+  const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
+  const [guestModalEvent, setGuestModalEvent] = useState(null);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [auditModalEvent, setAuditModalEvent] = useState(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  
+  // Estados para búsqueda y selección de invitados a eventos privados
+  const [guestSearchQuery, setGuestSearchQuery] = useState('');
+  const [guestSearchResults, setGuestSearchResults] = useState([]);
+  const [isSearchingGuests, setIsSearchingGuests] = useState(false);
+  const [cachedUsersList, setCachedUsersList] = useState([]);
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -48,6 +87,14 @@ const EventsManager = ({ events, updateEvents }) => {
     cover_image: null,
     price: 0,
     video_url: '',
+    ticket_url: '',
+    is_private: false,
+    allowed_users: [],
+    facebook_url: '',
+    instagram_url: '',
+    twitter_url: '',
+    tiktok_url: '',
+    website_url: '',
     address: '',
     city: '',
     state: '',
@@ -188,6 +235,78 @@ const EventsManager = ({ events, updateEvents }) => {
     });
   };
 
+  // Funciones para buscar y seleccionar usuarios invitados a eventos privados
+  const handleSearchGuests = async (query) => {
+    setGuestSearchQuery(query);
+    if (!query || query.trim().length < 2) {
+      setGuestSearchResults([]);
+      return;
+    }
+
+    try {
+      setIsSearchingGuests(true);
+      let results = [];
+      try {
+        results = await searchUsersToInvite(query);
+      } catch (e) {
+        console.warn('searchUsersToInvite error, using cached fallback:', e);
+      }
+
+      if (!results || results.length === 0) {
+        let all = cachedUsersList;
+        if (!all || all.length === 0) {
+          try {
+            all = await getAllUsers();
+            setCachedUsersList(all || []);
+          } catch (allErr) {
+            console.warn('getAllUsers error:', allErr);
+          }
+        }
+        const q = query.toLowerCase();
+        results = (all || []).filter(u => {
+          const name = (u.display_name || u.name || '').toLowerCase();
+          const username = (u.username || '').toLowerCase();
+          const email = (u.email || '').toLowerCase();
+          return name.includes(q) || username.includes(q) || email.includes(q);
+        });
+      }
+
+      // Filtrar usuarios que ya estén en formData.allowed_users
+      const currentIds = new Set((formData.allowed_users || []).map(u => String(u.id || u.user_id)));
+      const filtered = (results || []).filter(u => !currentIds.has(String(u.id || u.user_id)));
+      setGuestSearchResults(filtered.slice(0, 8));
+    } catch (err) {
+      console.error('Error buscando invitados:', err);
+    } finally {
+      setIsSearchingGuests(false);
+    }
+  };
+
+  const handleAddGuest = (user) => {
+    const userId = String(user.id || user.user_id);
+    const exists = (formData.allowed_users || []).some(
+      u => String(u.id || u.user_id) === userId
+    );
+    if (!exists) {
+      setFormData(prev => ({
+        ...prev,
+        allowed_users: [...(prev.allowed_users || []), user]
+      }));
+    }
+    setGuestSearchQuery('');
+    setGuestSearchResults([]);
+  };
+
+  const handleRemoveGuest = (userId) => {
+    const idStr = String(userId);
+    setFormData(prev => ({
+      ...prev,
+      allowed_users: (prev.allowed_users || []).filter(
+        u => String(u.id || u.user_id) !== idStr
+      )
+    }));
+  };
+
   const resetForm = () => {
     setFormData({
       title: '',
@@ -202,6 +321,14 @@ const EventsManager = ({ events, updateEvents }) => {
       cover_image: null,
       price: 0,
       video_url: '',
+      ticket_url: '',
+      is_private: false,
+      allowed_users: [],
+      facebook_url: '',
+      instagram_url: '',
+      twitter_url: '',
+      tiktok_url: '',
+      website_url: '',
       address: '',
       city: '',
       state: '',
@@ -214,9 +341,43 @@ const EventsManager = ({ events, updateEvents }) => {
       recurrenceEndDate: '',
       recurrenceCount: null
     });
+    setGuestSearchQuery('');
+    setGuestSearchResults([]);
     setLocationSuggestions([]);
     setShowSuggestions(false);
     setSelectedCoordinates(null);
+  };
+
+  const handleOpenGuestModal = (event) => {
+    setGuestModalEvent(event);
+    setIsGuestModalOpen(true);
+  };
+
+  const handleOpenAuditModal = (event) => {
+    setAuditModalEvent(event);
+    setIsAuditModalOpen(true);
+  };
+
+  const handleGuestsUpdated = (updatedGuests) => {
+    if (!guestModalEvent) return;
+    const targetId = guestModalEvent.id || guestModalEvent.event_id;
+    const updatedIds = updatedGuests.map(u => String(u.id || u.user_id));
+    
+    // Actualizar evento en estado local
+    setGuestModalEvent(prev => prev ? { ...prev, allowed_user_ids: updatedIds } : prev);
+    
+    if (events && updateEvents) {
+      const updatedList = events.map(ev => {
+        if ((ev.id || ev.event_id) === targetId) {
+          return {
+            ...ev,
+            allowed_user_ids: updatedIds
+          };
+        }
+        return ev;
+      });
+      updateEvents(updatedList);
+    }
   };
 
   const handleImageChange = (e) => {
@@ -488,6 +649,24 @@ const EventsManager = ({ events, updateEvents }) => {
         subcategory: formData.subcategory || '',
         price: formData.price || 0,
         video_url: formData.online ? formData.video_url : (formData.video_url || ''),
+        ticket_url: formData.ticket_url || '',
+        is_private: Boolean(formData.is_private),
+        allowed_user_ids: formData.is_private && Array.isArray(formData.allowed_users)
+          ? formData.allowed_users.map(u => String(u.id || u.user_id))
+          : [],
+        allowed_users: formData.is_private ? (formData.allowed_users || []) : [],
+        facebook_url: formData.facebook_url || '',
+        instagram_url: formData.instagram_url || '',
+        twitter_url: formData.twitter_url || '',
+        tiktok_url: formData.tiktok_url || '',
+        website_url: formData.website_url || '',
+        social_links: {
+          facebook: formData.facebook_url || '',
+          instagram: formData.instagram_url || '',
+          twitter: formData.twitter_url || '',
+          tiktok: formData.tiktok_url || '',
+          website: formData.website_url || '',
+        },
         address: formData.online ? '' : (formData.address || ''),
         city: formData.online ? '' : (formData.city || ''),
         state: formData.online ? '' : (formData.state || ''),
@@ -516,6 +695,20 @@ const EventsManager = ({ events, updateEvents }) => {
       
       console.log('🔵 Evento creado:', newEvent);
       console.log('🔵 Es recurrente:', formData.isRecurring);
+
+      // Si es un evento privado y se seleccionaron usuarios, asegurar que queden invitados
+      const newEventId = newEvent?.id || newEvent?.event_id || newEvent?.eventId || newEvent?._id;
+      const guestIds = formData.is_private && Array.isArray(formData.allowed_users)
+        ? formData.allowed_users.map(u => String(u.id || u.user_id))
+        : [];
+      if (formData.is_private && guestIds.length > 0 && newEventId) {
+        try {
+          await inviteUsersToEvent(newEventId, guestIds);
+          console.log(`✅ ${guestIds.length} invitados autorizados en el nuevo evento privado`);
+        } catch (inviteErr) {
+          console.warn('Aviso: invitaciones posteriores a la creación:', inviteErr);
+        }
+      }
       
       // Recargar la lista completa de eventos desde el servidor
       try {
@@ -609,6 +802,23 @@ const EventsManager = ({ events, updateEvents }) => {
       subcategory: event.subcategory || '',
       price: event.price || 0,
       video_url: event.video_url || event.videoUrl || '',
+      ticket_url: event.ticket_url || '',
+      is_private: event.is_private !== undefined ? Boolean(event.is_private) : false,
+      allowed_users: Array.isArray(event.allowed_users) && event.allowed_users.length > 0
+        ? event.allowed_users
+        : Array.isArray(event.allowed_user_ids) && event.allowed_user_ids.length > 0
+        ? event.allowed_user_ids.map(id => ({
+            id: String(id),
+            user_id: String(id),
+            display_name: `Usuario #${id}`,
+            username: `user_${id}`
+          }))
+        : [],
+      facebook_url: event.facebook_url || event.social_links?.facebook || '',
+      instagram_url: event.instagram_url || event.social_links?.instagram || '',
+      twitter_url: event.twitter_url || event.social_links?.twitter || '',
+      tiktok_url: event.tiktok_url || event.social_links?.tiktok || '',
+      website_url: event.website_url || event.website || event.social_links?.website || '',
       address: event.address || '',
       city: event.city || '',
       state: event.state || '',
@@ -624,6 +834,19 @@ const EventsManager = ({ events, updateEvents }) => {
           }))
         : []
     });
+
+    // Si es un evento privado, sincronizar invitados completos desde el backend
+    const eventIdForGuests = event.id || event.event_id || event.eventId;
+    if (event.is_private && eventIdForGuests) {
+      getEventInvitedUsers(eventIdForGuests).then(users => {
+        if (Array.isArray(users) && users.length > 0) {
+          setFormData(prev => ({
+            ...prev,
+            allowed_users: users
+          }));
+        }
+      }).catch(() => {});
+    }
 
     // Establecer coordenadas si existen
     if (coordinates) {
@@ -689,6 +912,24 @@ const EventsManager = ({ events, updateEvents }) => {
         subcategory: formData.subcategory || '',
         price: formData.price || 0,
         video_url: formData.video_url || '',
+        ticket_url: formData.ticket_url || '',
+        is_private: Boolean(formData.is_private),
+        allowed_user_ids: formData.is_private && Array.isArray(formData.allowed_users)
+          ? formData.allowed_users.map(u => String(u.id || u.user_id))
+          : [],
+        allowed_users: formData.is_private ? (formData.allowed_users || []) : [],
+        facebook_url: formData.facebook_url || '',
+        instagram_url: formData.instagram_url || '',
+        twitter_url: formData.twitter_url || '',
+        tiktok_url: formData.tiktok_url || '',
+        website_url: formData.website_url || '',
+        social_links: {
+          facebook: formData.facebook_url || '',
+          instagram: formData.instagram_url || '',
+          twitter: formData.twitter_url || '',
+          tiktok: formData.tiktok_url || '',
+          website: formData.website_url || '',
+        },
         address: formData.address || '',
         city: formData.city || '',
         state: formData.state || '',
@@ -713,6 +954,18 @@ const EventsManager = ({ events, updateEvents }) => {
 
       console.log('🔵 handleUpdate - Llamando a updateEvent con eventData:', eventData);
       const updatedEvent = await updateEvent(eventData);
+
+      // Si es un evento privado y se seleccionaron invitados, sincronizar invitaciones
+      const guestIds = formData.is_private && Array.isArray(formData.allowed_users)
+        ? formData.allowed_users.map(u => String(u.id || u.user_id))
+        : [];
+      if (formData.is_private && guestIds.length > 0 && eventId) {
+        try {
+          await inviteUsersToEvent(eventId, guestIds);
+        } catch (inviteErr) {
+          console.warn('Aviso al sincronizar invitados:', inviteErr);
+        }
+      }
       
       // Recargar la lista completa de eventos desde el servidor para evitar problemas de sincronización
       try {
@@ -1366,17 +1619,291 @@ const EventsManager = ({ events, updateEvents }) => {
                     </div>
                   </div>
                 )}
+
+                {/* Visibilidad y Boletos */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-purple-500/20">
+                  <div className="space-y-2">
+                    <Label htmlFor="create_ticket_url" className="text-purple-200 text-xs">
+                      URL de Boletería / Entradas
+                    </Label>
+                    <Input
+                      id="create_ticket_url"
+                      name="ticket_url"
+                      value={formData.ticket_url || ''}
+                      onChange={handleInputChange}
+                      placeholder="https://tuboleta.com/evento/..."
+                      className="bg-black/50 border-purple-500/30 text-white text-xs"
+                    />
+                  </div>
+                  <div className="flex flex-col justify-end space-y-1">
+                    <div className="flex items-center justify-between p-2.5 bg-purple-950/30 border border-purple-500/30 rounded-xl">
+                      <div>
+                        <Label htmlFor="create_is_private" className="text-purple-200 text-xs font-semibold cursor-pointer block">
+                          🔒 Evento Privado
+                        </Label>
+                        <span className="text-[10px] text-purple-400">
+                          Solo invitados autorizados
+                        </span>
+                      </div>
+                      <Switch
+                        id="create_is_private"
+                        checked={Boolean(formData.is_private)}
+                        onCheckedChange={(checked) => setFormData({ ...formData, is_private: checked })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Panel de Selección de Invitados para Evento Privado (Crear) */}
+                {Boolean(formData.is_private) && (
+                  <div className="p-3.5 bg-gradient-to-b from-purple-950/60 to-black/80 border border-purple-500/40 rounded-xl space-y-3 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-purple-500/20 border border-purple-500/30 rounded-lg text-purple-300">
+                          <Users className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <Label className="text-purple-200 text-xs font-semibold block leading-tight">
+                            Invitados Autorizados (Acceso Exclusivo)
+                          </Label>
+                          <span className="text-[10px] text-purple-400">
+                            Solo estos usuarios podrán ver y asistir al evento
+                          </span>
+                        </div>
+                      </div>
+                      <Badge className="bg-purple-900/60 text-purple-200 border border-purple-500/30 text-[10px]">
+                        {formData.allowed_users?.length || 0} agregados
+                      </Badge>
+                    </div>
+
+                    {/* Buscador interactivo de usuarios */}
+                    <div className="relative">
+                      <div className="relative flex items-center">
+                        <Search className="w-3.5 h-3.5 absolute left-2.5 text-purple-400" />
+                        <Input
+                          id="create_guest_search"
+                          type="text"
+                          value={guestSearchQuery}
+                          onChange={(e) => handleSearchGuests(e.target.value)}
+                          placeholder="Buscar usuario por nombre, @username o correo..."
+                          className="pl-8 pr-8 py-1 h-8 text-xs bg-black/60 border-purple-500/40 text-white placeholder:text-zinc-500 focus:border-purple-400"
+                        />
+                        {isSearchingGuests && (
+                          <Loader2 className="w-3.5 h-3.5 absolute right-2.5 text-purple-400 animate-spin" />
+                        )}
+                        {!isSearchingGuests && guestSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => { setGuestSearchQuery(''); setGuestSearchResults([]); }}
+                            className="absolute right-2.5 text-purple-400 hover:text-white"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Dropdown flotante con resultados de búsqueda */}
+                      {guestSearchResults.length > 0 && (
+                        <div className="absolute z-50 left-0 right-0 mt-1 bg-slate-950 border border-purple-500/40 rounded-xl shadow-2xl max-h-48 overflow-y-auto divide-y divide-purple-500/20 custom-scrollbar">
+                          {guestSearchResults.map((user) => {
+                            const uid = user.id || user.user_id;
+                            const displayName = user.display_name || user.name || user.username || 'Usuario';
+                            const username = user.username ? `@${user.username}` : user.email || '';
+                            const avatar = user.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=7c3aed&color=fff&size=32`;
+
+                            return (
+                              <div
+                                key={uid}
+                                className="flex items-center justify-between p-2 hover:bg-purple-900/40 transition-colors"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <img
+                                    src={avatar}
+                                    alt={displayName}
+                                    className="w-6 h-6 rounded-full object-cover border border-purple-500/30 flex-shrink-0"
+                                    onError={(e) => {
+                                      e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=7c3aed&color=fff&size=32`;
+                                    }}
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-white truncate leading-tight">{displayName}</p>
+                                    <p className="text-[10px] text-purple-300 truncate">{username}</p>
+                                  </div>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => handleAddGuest(user)}
+                                  className="h-6 px-2 text-[10px] bg-purple-600 hover:bg-purple-500 text-white rounded-md flex items-center gap-1"
+                                >
+                                  <UserPlus className="w-3 h-3" />
+                                  Agregar
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Lista de usuarios seleccionados */}
+                    <div className="space-y-1.5">
+                      {(!formData.allowed_users || formData.allowed_users.length === 0) ? (
+                        <div className="text-center py-2.5 px-3 bg-black/30 border border-dashed border-purple-500/20 rounded-lg">
+                          <p className="text-[11px] text-purple-300">
+                            No has agregado invitados aún.
+                          </p>
+                          <p className="text-[10px] text-purple-400">
+                            Escribe en el buscador arriba para añadir usuarios autorizados.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-1 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
+                          {formData.allowed_users.map((guest) => {
+                            const gid = guest.id || guest.user_id;
+                            const gName = guest.display_name || guest.name || guest.username || `Usuario #${gid}`;
+                            const gUsername = guest.username ? `@${guest.username}` : (guest.email || '');
+                            const gAvatar = guest.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(gName)}&background=7c3aed&color=fff&size=32`;
+
+                            return (
+                              <div
+                                key={gid}
+                                className="flex items-center justify-between px-2.5 py-1.5 bg-black/40 border border-purple-500/20 rounded-lg group hover:border-purple-500/40 transition-all"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <img
+                                    src={gAvatar}
+                                    alt={gName}
+                                    className="w-5 h-5 rounded-full object-cover border border-purple-500/30 flex-shrink-0"
+                                    onError={(e) => {
+                                      e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(gName)}&background=7c3aed&color=fff&size=32`;
+                                    }}
+                                  />
+                                  <span className="text-xs text-white font-medium truncate">{gName}</span>
+                                  {gUsername && (
+                                    <span className="text-[10px] text-purple-400 truncate">({gUsername})</span>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveGuest(gid)}
+                                  className="p-1 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                                  title="Quitar invitado"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Redes Sociales y Enlaces Web */}
+                <div className="space-y-3 pt-3 border-t border-purple-500/20">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-purple-200 text-xs font-semibold flex items-center gap-1.5">
+                      <Share2 className="w-3.5 h-3.5 text-purple-400" />
+                      Redes Sociales y Enlaces del Evento
+                    </Label>
+                    <span className="text-[10px] text-purple-400 bg-purple-950/40 px-2 py-0.5 rounded border border-purple-500/20">Opcional</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Instagram */}
+                    <div className="space-y-1">
+                      <Label htmlFor="create_instagram_url" className="text-purple-300 text-[11px] flex items-center gap-1">
+                        <Instagram className="w-3 h-3 text-pink-400" />
+                        Instagram
+                      </Label>
+                      <Input
+                        id="create_instagram_url"
+                        name="instagram_url"
+                        value={formData.instagram_url || ''}
+                        onChange={handleInputChange}
+                        placeholder="https://instagram.com/cuenta"
+                        className="bg-black/50 border-purple-500/30 text-white text-xs h-8"
+                      />
+                    </div>
+
+                    {/* Facebook */}
+                    <div className="space-y-1">
+                      <Label htmlFor="create_facebook_url" className="text-purple-300 text-[11px] flex items-center gap-1">
+                        <Facebook className="w-3 h-3 text-blue-400" />
+                        Facebook
+                      </Label>
+                      <Input
+                        id="create_facebook_url"
+                        name="facebook_url"
+                        value={formData.facebook_url || ''}
+                        onChange={handleInputChange}
+                        placeholder="https://facebook.com/evento"
+                        className="bg-black/50 border-purple-500/30 text-white text-xs h-8"
+                      />
+                    </div>
+
+                    {/* Twitter / X */}
+                    <div className="space-y-1">
+                      <Label htmlFor="create_twitter_url" className="text-purple-300 text-[11px] flex items-center gap-1">
+                        <Twitter className="w-3 h-3 text-sky-400" />
+                        Twitter / X
+                      </Label>
+                      <Input
+                        id="create_twitter_url"
+                        name="twitter_url"
+                        value={formData.twitter_url || ''}
+                        onChange={handleInputChange}
+                        placeholder="https://x.com/usuario"
+                        className="bg-black/50 border-purple-500/30 text-white text-xs h-8"
+                      />
+                    </div>
+
+                    {/* TikTok */}
+                    <div className="space-y-1">
+                      <Label htmlFor="create_tiktok_url" className="text-purple-300 text-[11px] flex items-center gap-1">
+                        <span className="font-black text-[10px] text-cyan-400 font-mono">TT</span>
+                        TikTok
+                      </Label>
+                      <Input
+                        id="create_tiktok_url"
+                        name="tiktok_url"
+                        value={formData.tiktok_url || ''}
+                        onChange={handleInputChange}
+                        placeholder="https://tiktok.com/@cuenta"
+                        className="bg-black/50 border-purple-500/30 text-white text-xs h-8"
+                      />
+                    </div>
+
+                    {/* Sitio Web Oficial */}
+                    <div className="space-y-1 sm:col-span-2">
+                      <Label htmlFor="create_website_url" className="text-purple-300 text-[11px] flex items-center gap-1">
+                        <Globe className="w-3 h-3 text-emerald-400" />
+                        Sitio Web Oficial / Landing Page
+                      </Label>
+                      <Input
+                        id="create_website_url"
+                        name="website_url"
+                        value={formData.website_url || ''}
+                        onChange={handleInputChange}
+                        placeholder="https://mievento.com"
+                        className="bg-black/50 border-purple-500/30 text-white text-xs h-8"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end space-x-2 pt-4 border-t border-purple-500/30">
                 <Button
                   type="button"
                   variant="ghost"
-                    onClick={() => setIsCreateModalOpen(false)}
-                    className="text-purple-300 hover:bg-purple-900/50"
-                  >
-                    Cancelar
-                  </Button>
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="text-purple-300 hover:bg-purple-900/50"
+                >
+                  Cancelar
+                </Button>
                   <Button
                     type="submit"
                     className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
@@ -1443,136 +1970,496 @@ const EventsManager = ({ events, updateEvents }) => {
         </CardContent>
       </Card>
 
-      {/* Events Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-        {filteredEvents.map(event => (
-          <Card key={event.id || event.event_id || event.eventId || `event-${event.title}`} className="bg-black/40 border-purple-500/30 overflow-hidden hover:border-purple-500/50 transition-colors">
-            {/* Event Image - Full Width */}
-            {event.cover_image && (
-              <div className="w-full h-48 sm:h-56 md:h-52 lg:h-64 xl:h-72 relative overflow-hidden">
-                <img 
-                  src={event.cover_image} 
-                  alt={event.title}
-                  className="w-full h-full object-cover"
-                  loading="lazy"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?auto=format&fit=crop&q=80';
-                  }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex flex-col gap-1.5 sm:gap-2">
-                  <Badge className={`${getStatusColor(event.status)} text-xs sm:text-sm px-2 py-0.5`}>
-                    {event.status === 'upcoming' ? 'Próximo' : 
-                     event.status === 'ongoing' ? 'En curso' : 'Pasado'}
-                  </Badge>
-                  <Badge variant="secondary" className="bg-purple-900/50 text-purple-200 text-xs sm:text-sm px-2 py-0.5">
-                    {event.category}
-                  </Badge>
-                  {event.isRecurring && (
-                    <Badge variant="secondary" className="bg-blue-900/50 text-blue-200 text-xs sm:text-sm px-2 py-0.5">
-                      🔄 Recurrente
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            )}
-            <CardHeader className="p-4 sm:p-6">
-              <div className="space-y-2 sm:space-y-3">
-                <div>
-                  <CardTitle className="text-white text-base sm:text-lg md:text-xl mb-1 sm:mb-2 line-clamp-2">{event.title}</CardTitle>
-                  <CardDescription className="text-purple-300 text-xs sm:text-sm md:text-base line-clamp-2">
-                    {event.description}
-                  </CardDescription>
-                  {event.organizer && (
-                    <div className="flex items-center space-x-2 mt-2">
-                      <img 
-                        src={event.organizer.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(event.organizer.display_name || event.organizer.username || 'User')}&background=7c3aed&color=fff&size=32`} 
-                        alt={event.organizer.display_name || event.organizer.username}
-                        className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 rounded-full object-cover border-2 border-purple-500/30 flex-shrink-0"
-                        onError={(e) => {
-                          e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(event.organizer.display_name || event.organizer.username || 'User')}&background=7c3aed&color=fff&size=32`;
-                        }}
-                      />
-                      <p className="text-xs sm:text-sm text-purple-400 truncate">
-                        Por: {event.organizer.display_name || event.organizer.username}
-                      </p>
-                    </div>
-                  )}
-                  <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm text-purple-200 mt-2 sm:mt-3">
-                    <div className="flex items-center space-x-1 min-w-0">
-                      <Calendar className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                      <span className="truncate">{formatDate(event.date_time)}</span>
-                    </div>
-                    <div className="flex items-center space-x-1 min-w-0 flex-1 sm:flex-initial">
-                      <MapPin className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                      <span className="truncate">{typeof event.location === 'string' ? event.location : 'Ubicación no disponible'}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="flex flex-col gap-3 sm:gap-4">
-                <div className="flex flex-wrap gap-3 sm:gap-4 md:gap-6 text-xs sm:text-sm text-purple-200">
-                  <div className="flex items-center space-x-1">
-                    <Users className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                    <span>{event.attendees_count || 0} asistentes</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <Users className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                    <span>{event.subscribers_count || 0} suscritos</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <Heart className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                    <span>{event.likes_count || 0} likes</span>
-                  </div>
-                </div>
-                <div className="flex space-x-2 justify-end">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-purple-300 hover:bg-purple-900/50 h-8 w-8 p-0"
-                    title="Ver evento"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleEdit(event)}
-                    className="text-purple-300 hover:bg-purple-900/50 h-8 w-8 p-0"
-                    title="Editar evento"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDelete(event)}
-                    className="text-red-400 hover:bg-red-900/50 h-8 w-8 p-0"
-                    title="Eliminar evento"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-
-        {filteredEvents.length === 0 && (
-          <Card className="bg-black/40 border-purple-500/30">
-            <CardContent className="pt-6">
-              <div className="text-center py-8">
-                <Calendar className="h-16 w-16 text-purple-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-white mb-2">No se encontraron eventos</h3>
-                <p className="text-purple-300">No hay eventos que coincidan con los filtros aplicados.</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+      {/* View Switcher and Events Count Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-2">
+        <div className="flex items-center gap-2.5">
+          <h3 className="text-base sm:text-lg font-bold text-white">Eventos Registrados</h3>
+          <Badge className="bg-purple-900/50 text-purple-200 border-purple-500/30 text-xs font-semibold">
+            {filteredEvents.length} {filteredEvents.length === 1 ? 'evento' : 'eventos'}
+          </Badge>
+        </div>
+        <div className="flex items-center bg-black/60 border border-purple-500/30 rounded-xl p-1 gap-1">
+          <button
+            onClick={() => setViewMode('table')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              viewMode === 'table'
+                ? 'bg-purple-600 text-white shadow-md'
+                : 'text-purple-300 hover:text-white hover:bg-purple-900/40'
+            }`}
+          >
+            <TableIcon className="w-3.5 h-3.5" />
+            Tabla General
+          </button>
+          <button
+            onClick={() => setViewMode('grid')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              viewMode === 'grid'
+                ? 'bg-purple-600 text-white shadow-md'
+                : 'text-purple-300 hover:text-white hover:bg-purple-900/40'
+            }`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            Cuadrícula
+          </button>
+        </div>
       </div>
+
+      {/* 1. TABLA GENERAL DE EVENTOS (/admin/events) */}
+      {viewMode === 'table' && (
+        <Card className="bg-black/50 border-purple-500/30 overflow-hidden shadow-2xl">
+          <CardContent className="p-0 overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-purple-950/40 text-purple-200 font-semibold uppercase tracking-wider text-[11px] border-b border-purple-500/30">
+                <tr>
+                  <th className="py-3.5 px-4 min-w-[220px]">Evento</th>
+                  <th className="py-3.5 px-4">Categoría</th>
+                  <th className="py-3.5 px-4 min-w-[140px]">Fecha</th>
+                  <th className="py-3.5 px-4">Tipo de Visibilidad</th>
+                  <th className="py-3.5 px-4">Boletos / Entradas</th>
+                  <th className="py-3.5 px-4">Gestión de Invitados</th>
+                  <th className="py-3.5 px-4">Asistencias Reales</th>
+                  <th className="py-3.5 px-4 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-purple-500/20">
+                {filteredEvents.length === 0 ? (
+                  <tr>
+                    <td colSpan="8" className="text-center py-12 text-purple-300">
+                      <Calendar className="h-12 w-12 text-purple-400 mx-auto mb-2 opacity-50" />
+                      <p className="font-semibold text-sm">No se encontraron eventos</p>
+                      <p className="text-xs text-purple-400 mt-1">No hay eventos que coincidan con los filtros aplicados.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredEvents.map((event) => {
+                    const eventId = event.id || event.event_id || event.eventId;
+                    const isPrivate = Boolean(event.is_private);
+
+                    return (
+                      <tr key={eventId || `event-${event.title}`} className="hover:bg-purple-900/20 transition-colors">
+                        {/* Evento: Imagen + Título + Ubicación */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-12 h-12 rounded-lg overflow-hidden bg-purple-950/50 border border-purple-500/30 flex-shrink-0">
+                              {event.cover_image ? (
+                                <img
+                                  src={event.cover_image}
+                                  alt={event.title}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src = 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?auto=format&fit=crop&q=80';
+                                  }}
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-purple-400">
+                                  <Calendar className="w-5 h-5" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0 max-w-xs">
+                              <span className="font-bold text-white text-sm block truncate" title={event.title}>
+                                {event.title}
+                              </span>
+                              <div className="flex items-center gap-1 text-[11px] text-purple-300 truncate mt-0.5">
+                                <MapPin className="w-3 h-3 text-purple-400 flex-shrink-0" />
+                                <span className="truncate">{typeof event.location === 'string' ? event.location : (event.address || 'Ubicación no especificada')}</span>
+                              </div>
+                              {event.organizer && (
+                                <span className="text-[10px] text-purple-400 block truncate">
+                                  Por: {event.organizer.display_name || event.organizer.username}
+                                </span>
+                              )}
+                              {/* Redes sociales del evento */}
+                              {(() => {
+                                const ig = event.instagram_url || event.social_links?.instagram;
+                                const fb = event.facebook_url || event.social_links?.facebook;
+                                const tw = event.twitter_url || event.social_links?.twitter;
+                                const tt = event.tiktok_url || event.social_links?.tiktok;
+                                const ws = event.website_url || event.social_links?.website || event.website;
+                                if (!ig && !fb && !tw && !tt && !ws) return null;
+                                return (
+                                  <div className="flex items-center gap-1.5 mt-1.5 pt-1 border-t border-purple-500/10">
+                                    {ig && (
+                                      <a href={ig} target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:text-pink-300 transition-colors" title={`Instagram: ${ig}`}>
+                                        <Instagram className="w-3 h-3" />
+                                      </a>
+                                    )}
+                                    {fb && (
+                                      <a href={fb} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 transition-colors" title={`Facebook: ${fb}`}>
+                                        <Facebook className="w-3 h-3" />
+                                      </a>
+                                    )}
+                                    {tw && (
+                                      <a href={tw} target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:text-sky-300 transition-colors" title={`Twitter/X: ${tw}`}>
+                                        <Twitter className="w-3 h-3" />
+                                      </a>
+                                    )}
+                                    {tt && (
+                                      <a href={tt} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 transition-colors text-[9px] font-bold font-mono" title={`TikTok: ${tt}`}>
+                                        TT
+                                      </a>
+                                    )}
+                                    {ws && (
+                                      <a href={ws} target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:text-emerald-300 transition-colors" title={`Sitio Web: ${ws}`}>
+                                        <Globe className="w-3 h-3" />
+                                      </a>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Categoría */}
+                        <td className="py-3 px-4">
+                          <div className="flex flex-col gap-1 items-start">
+                            <Badge variant="secondary" className="bg-purple-900/50 text-purple-200 text-xs">
+                              {event.category}
+                            </Badge>
+                            <Badge className={`${getStatusColor(event.status)} text-[10px] px-1.5 py-0`}>
+                              {event.status === 'upcoming' ? 'Próximo' : 
+                               event.status === 'ongoing' ? 'En curso' : 'Pasado'}
+                            </Badge>
+                          </div>
+                        </td>
+
+                        {/* Fecha */}
+                        <td className="py-3 px-4 text-purple-200 text-xs">
+                          <div className="flex items-center gap-1 font-mono">
+                            <Calendar className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+                            <span>{formatDate(event.date_time)}</span>
+                          </div>
+                        </td>
+
+                        {/* 1.1 Columna 1: Tipo de Visibilidad */}
+                        <td className="py-3 px-4">
+                          {!isPrivate ? (
+                            <span className="px-2 py-1 rounded-md text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold inline-flex items-center gap-1">
+                              Público
+                            </span>
+                          ) : (
+                            <span className="px-2 py-1 rounded-md text-xs bg-purple-500/10 text-purple-400 border border-purple-500/20 font-semibold inline-flex items-center gap-1">
+                              🔒 Privado
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 1.1 Columna 2: Boletos / Entradas */}
+                        <td className="py-3 px-4">
+                          {event.ticket_url ? (
+                            <a
+                              href={event.ticket_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                              title="Abrir boletería en pestaña nueva para probar disponibilidad"
+                            >
+                              <Ticket className="w-3.5 h-3.5" />
+                              Boletos
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          ) : (
+                            <span className="text-xs text-zinc-500 italic">
+                              Sin boletería
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 1.1 Columna 3: Gestión de Invitados */}
+                        <td className="py-3 px-4">
+                          <button
+                            onClick={() => handleOpenGuestModal(event)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-600/30 hover:text-white transition-all shadow-sm"
+                            title="Gestionar lista de invitados autorizados"
+                          >
+                            👥 {event.allowed_user_ids?.length || 0} Invitados
+                          </button>
+                        </td>
+
+                        {/* 1.1 Columna 4: Asistencias Reales */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1.5">
+                            <span 
+                              className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20 font-mono"
+                              title="Contador incrementado atómicamente por la regla presencial"
+                            >
+                              <Users className="w-3 h-3 mr-1 text-amber-400" />
+                              {event.attendees_count || 0}
+                            </span>
+                            <button
+                              onClick={() => handleOpenAuditModal(event)}
+                              title="Auditoría GPS de Asistencias Presenciales"
+                              className="p-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 transition-colors"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Acciones */}
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end space-x-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleOpenAuditModal(event)}
+                              className="text-emerald-400 hover:bg-emerald-950/40 h-8 w-8 p-0"
+                              title="Auditoría GPS de Asistencias"
+                            >
+                              <ShieldCheck className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleEdit(event)}
+                              className="text-purple-300 hover:bg-purple-900/50 h-8 w-8 p-0"
+                              title="Editar evento"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDelete(event)}
+                              className="text-red-400 hover:bg-red-900/50 h-8 w-8 p-0"
+                              title="Eliminar evento"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 2. VISTA DE CUADRÍCULA (Cards Grid) */}
+      {viewMode === 'grid' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+          {filteredEvents.map(event => {
+            const isPrivate = Boolean(event.is_private);
+
+            return (
+              <Card key={event.id || event.event_id || event.eventId || `event-${event.title}`} className="bg-black/40 border-purple-500/30 overflow-hidden hover:border-purple-500/50 transition-colors">
+                {/* Event Image - Full Width */}
+                {event.cover_image && (
+                  <div className="w-full h-48 sm:h-56 md:h-52 lg:h-64 xl:h-72 relative overflow-hidden">
+                    <img 
+                      src={event.cover_image} 
+                      alt={event.title}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?auto=format&fit=crop&q=80';
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                    <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex flex-col gap-1.5 sm:gap-2">
+                      <Badge className={`${getStatusColor(event.status)} text-xs sm:text-sm px-2 py-0.5`}>
+                        {event.status === 'upcoming' ? 'Próximo' : 
+                         event.status === 'ongoing' ? 'En curso' : 'Pasado'}
+                      </Badge>
+                      <Badge variant="secondary" className="bg-purple-900/50 text-purple-200 text-xs sm:text-sm px-2 py-0.5">
+                        {event.category}
+                      </Badge>
+                      {/* Tipo de Visibilidad Badge en Card */}
+                      {!isPrivate ? (
+                        <span className="px-2 py-1 rounded-md text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold">
+                          Público
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 rounded-md text-xs bg-purple-500/10 text-purple-400 border border-purple-500/20 font-semibold">
+                          🔒 Privado
+                        </span>
+                      )}
+                      {event.isRecurring && (
+                        <Badge variant="secondary" className="bg-blue-900/50 text-blue-200 text-xs sm:text-sm px-2 py-0.5">
+                          🔄 Recurrente
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <CardHeader className="p-4 sm:p-6">
+                  <div className="space-y-2 sm:space-y-3">
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-1 sm:mb-2">
+                        <CardTitle className="text-white text-base sm:text-lg md:text-xl line-clamp-2">{event.title}</CardTitle>
+                        {/* Enlace Boletería si existe */}
+                        {event.ticket_url && (
+                          <a
+                            href={event.ticket_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors flex-shrink-0"
+                            title="Probar boletería en pestaña nueva"
+                          >
+                            <Ticket className="w-3 h-3" /> Boletos <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        )}
+                      </div>
+                      <CardDescription className="text-purple-300 text-xs sm:text-sm md:text-base line-clamp-2">
+                        {event.description}
+                      </CardDescription>
+                      {event.organizer && (
+                        <div className="flex items-center space-x-2 mt-2">
+                          <img 
+                            src={event.organizer.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(event.organizer.display_name || event.organizer.username || 'User')}&background=7c3aed&color=fff&size=32`} 
+                            alt={event.organizer.display_name || event.organizer.username}
+                            className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 rounded-full object-cover border-2 border-purple-500/30 flex-shrink-0"
+                            onError={(e) => {
+                              e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(event.organizer.display_name || event.organizer.username || 'User')}&background=7c3aed&color=fff&size=32`;
+                            }}
+                          />
+                          <p className="text-xs sm:text-sm text-purple-400 truncate">
+                            Por: {event.organizer.display_name || event.organizer.username}
+                          </p>
+                        </div>
+                      )}
+                      {/* Redes sociales del evento en tarjeta */}
+                      {(() => {
+                        const ig = event.instagram_url || event.social_links?.instagram;
+                        const fb = event.facebook_url || event.social_links?.facebook;
+                        const tw = event.twitter_url || event.social_links?.twitter;
+                        const tt = event.tiktok_url || event.social_links?.tiktok;
+                        const ws = event.website_url || event.social_links?.website || event.website;
+                        if (!ig && !fb && !tw && !tt && !ws) return null;
+                        return (
+                          <div className="flex items-center gap-2 mt-2 pt-1.5 border-t border-purple-500/10">
+                            <span className="text-[10px] text-purple-400">Enlaces:</span>
+                            {ig && (
+                              <a href={ig} target="_blank" rel="noopener noreferrer" className="p-1 rounded bg-pink-500/10 text-pink-400 hover:bg-pink-500/20 transition-colors" title={`Instagram: ${ig}`}>
+                                <Instagram className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                            {fb && (
+                              <a href={fb} target="_blank" rel="noopener noreferrer" className="p-1 rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors" title={`Facebook: ${fb}`}>
+                                <Facebook className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                            {tw && (
+                              <a href={tw} target="_blank" rel="noopener noreferrer" className="p-1 rounded bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 transition-colors" title={`Twitter/X: ${tw}`}>
+                                <Twitter className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                            {tt && (
+                              <a href={tt} target="_blank" rel="noopener noreferrer" className="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 transition-colors text-[10px] font-bold font-mono" title={`TikTok: ${tt}`}>
+                                TT
+                              </a>
+                            )}
+                            {ws && (
+                              <a href={ws} target="_blank" rel="noopener noreferrer" className="p-1 rounded bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors" title={`Sitio Web: ${ws}`}>
+                                <Globe className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })()}
+                      <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm text-purple-200 mt-2 sm:mt-3">
+                        <div className="flex items-center space-x-1 min-w-0">
+                          <Calendar className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                          <span className="truncate">{formatDate(event.date_time)}</span>
+                        </div>
+                        <div className="flex items-center space-x-1 min-w-0 flex-1 sm:flex-initial">
+                          <MapPin className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                          <span className="truncate">{typeof event.location === 'string' ? event.location : 'Ubicación no disponible'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 sm:p-6 pt-0">
+                  <div className="flex flex-col gap-3 sm:gap-4">
+                    {/* Botón Gestión de Invitados */}
+                    <div className="flex items-center justify-between pt-2 border-t border-purple-500/20">
+                      <button
+                        onClick={() => handleOpenGuestModal(event)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-600/30 hover:text-white transition-all shadow-sm"
+                        title="Gestionar lista de invitados autorizados"
+                      >
+                        👥 {event.allowed_user_ids?.length || 0} Invitados
+                      </button>
+                      
+                      <button
+                        onClick={() => handleOpenAuditModal(event)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                        title="Auditoría GPS de Asistencias"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        Auditoría GPS
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3 sm:gap-4 md:gap-6 text-xs sm:text-sm text-purple-200">
+                      <div className="flex items-center space-x-1">
+                        <Users className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0 text-amber-400" />
+                        <span className="font-bold text-amber-300">{event.attendees_count || 0} asistentes reales</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <Users className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                        <span>{event.subscribers_count || 0} suscritos</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <Heart className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                        <span>{event.likes_count || 0} likes</span>
+                      </div>
+                    </div>
+                    <div className="flex space-x-2 justify-end">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleOpenAuditModal(event)}
+                        className="text-emerald-400 hover:bg-emerald-950/40 h-8 w-8 p-0"
+                        title="Auditoría de Asistencias"
+                      >
+                        <ShieldCheck className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleEdit(event)}
+                        className="text-purple-300 hover:bg-purple-900/50 h-8 w-8 p-0"
+                        title="Editar evento"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDelete(event)}
+                        className="text-red-400 hover:bg-red-900/50 h-8 w-8 p-0"
+                        title="Eliminar evento"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+
+          {filteredEvents.length === 0 && (
+            <Card className="bg-black/40 border-purple-500/30 col-span-full">
+              <CardContent className="pt-6">
+                <div className="text-center py-8">
+                  <Calendar className="h-16 w-16 text-purple-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-white mb-2">No se encontraron eventos</h3>
+                  <p className="text-purple-300">No hay eventos que coincidan con los filtros aplicados.</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Edit Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
@@ -1957,6 +2844,280 @@ const EventsManager = ({ events, updateEvents }) => {
               </div>
             </div>
 
+            {/* Visibilidad y Boletos */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-purple-500/20">
+              <div className="space-y-2">
+                <Label htmlFor="edit_ticket_url" className="text-purple-200 text-xs">
+                  URL de Boletería / Entradas
+                </Label>
+                <Input
+                  id="edit_ticket_url"
+                  name="ticket_url"
+                  value={formData.ticket_url || ''}
+                  onChange={handleInputChange}
+                  placeholder="https://tuboleta.com/evento/..."
+                  className="bg-black/50 border-purple-500/30 text-white text-xs"
+                />
+              </div>
+              <div className="flex flex-col justify-end space-y-1">
+                <div className="flex items-center justify-between p-2.5 bg-purple-950/30 border border-purple-500/30 rounded-xl">
+                  <div>
+                    <Label htmlFor="edit_is_private" className="text-purple-200 text-xs font-semibold cursor-pointer block">
+                      🔒 Evento Privado
+                    </Label>
+                    <span className="text-[10px] text-purple-400">
+                      Solo invitados autorizados
+                    </span>
+                  </div>
+                  <Switch
+                    id="edit_is_private"
+                    checked={Boolean(formData.is_private)}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_private: checked })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Panel de Selección de Invitados para Evento Privado (Editar) */}
+            {Boolean(formData.is_private) && (
+              <div className="p-3.5 bg-gradient-to-b from-purple-950/60 to-black/80 border border-purple-500/40 rounded-xl space-y-3 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-purple-500/20 border border-purple-500/30 rounded-lg text-purple-300">
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <Label className="text-purple-200 text-xs font-semibold block leading-tight">
+                        Invitados Autorizados (Acceso Exclusivo)
+                      </Label>
+                      <span className="text-[10px] text-purple-400">
+                        Solo estos usuarios podrán ver y asistir al evento
+                      </span>
+                    </div>
+                  </div>
+                  <Badge className="bg-purple-900/60 text-purple-200 border-purple-500/30 text-[10px]">
+                    {formData.allowed_users?.length || 0} agregados
+                  </Badge>
+                </div>
+
+                {/* Buscador interactivo de usuarios */}
+                <div className="relative">
+                  <div className="relative flex items-center">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 text-purple-400" />
+                    <Input
+                      id="edit_guest_search"
+                      type="text"
+                      value={guestSearchQuery}
+                      onChange={(e) => handleSearchGuests(e.target.value)}
+                      placeholder="Buscar usuario por nombre, @username o correo..."
+                      className="pl-8 pr-8 py-1 h-8 text-xs bg-black/60 border-purple-500/40 text-white placeholder:text-zinc-500 focus:border-purple-400"
+                    />
+                    {isSearchingGuests && (
+                      <Loader2 className="w-3.5 h-3.5 absolute right-2.5 text-purple-400 animate-spin" />
+                    )}
+                    {!isSearchingGuests && guestSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => { setGuestSearchQuery(''); setGuestSearchResults([]); }}
+                        className="absolute right-2.5 text-purple-400 hover:text-white"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dropdown flotante con resultados de búsqueda */}
+                  {guestSearchResults.length > 0 && (
+                    <div className="absolute z-50 left-0 right-0 mt-1 bg-slate-950 border border-purple-500/40 rounded-xl shadow-2xl max-h-48 overflow-y-auto divide-y divide-purple-500/20 custom-scrollbar">
+                      {guestSearchResults.map((user) => {
+                        const uid = user.id || user.user_id;
+                        const displayName = user.display_name || user.name || user.username || 'Usuario';
+                        const username = user.username ? `@${user.username}` : user.email || '';
+                        const avatar = user.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=7c3aed&color=fff&size=32`;
+
+                        return (
+                          <div
+                            key={uid}
+                            className="flex items-center justify-between p-2 hover:bg-purple-900/40 transition-colors"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <img
+                                src={avatar}
+                                alt={displayName}
+                                className="w-6 h-6 rounded-full object-cover border border-purple-500/30 flex-shrink-0"
+                                onError={(e) => {
+                                  e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=7c3aed&color=fff&size=32`;
+                                }}
+                              />
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-white truncate leading-tight">{displayName}</p>
+                                <p className="text-[10px] text-purple-300 truncate">{username}</p>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => handleAddGuest(user)}
+                              className="h-6 px-2 text-[10px] bg-purple-600 hover:bg-purple-500 text-white rounded-md flex items-center gap-1"
+                            >
+                              <UserPlus className="w-3 h-3" />
+                              Agregar
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Lista de usuarios seleccionados */}
+                <div className="space-y-1.5">
+                  {(!formData.allowed_users || formData.allowed_users.length === 0) ? (
+                    <div className="text-center py-2.5 px-3 bg-black/30 border border-dashed border-purple-500/20 rounded-lg">
+                      <p className="text-[11px] text-purple-300">
+                        No has agregado invitados aún.
+                      </p>
+                      <p className="text-[10px] text-purple-400">
+                        Escribe en el buscador arriba para añadir usuarios autorizados.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
+                      {formData.allowed_users.map((guest) => {
+                        const gid = guest.id || guest.user_id;
+                        const gName = guest.display_name || guest.name || guest.username || `Usuario #${gid}`;
+                        const gUsername = guest.username ? `@${guest.username}` : (guest.email || '');
+                        const gAvatar = guest.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(gName)}&background=7c3aed&color=fff&size=32`;
+
+                        return (
+                          <div
+                            key={gid}
+                            className="flex items-center justify-between px-2.5 py-1.5 bg-black/40 border border-purple-500/20 rounded-lg group hover:border-purple-500/40 transition-all"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <img
+                                src={gAvatar}
+                                alt={gName}
+                                className="w-5 h-5 rounded-full object-cover border border-purple-500/30 flex-shrink-0"
+                                onError={(e) => {
+                                  e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(gName)}&background=7c3aed&color=fff&size=32`;
+                                }}
+                              />
+                              <span className="text-xs text-white font-medium truncate">{gName}</span>
+                              {gUsername && (
+                                <span className="text-[10px] text-purple-400 truncate">({gUsername})</span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveGuest(gid)}
+                              className="p-1 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                              title="Quitar invitado"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Redes Sociales y Enlaces Web */}
+            <div className="space-y-3 pt-3 border-t border-purple-500/20">
+              <div className="flex items-center justify-between">
+                <Label className="text-purple-200 text-xs font-semibold flex items-center gap-1.5">
+                  <Share2 className="w-3.5 h-3.5 text-purple-400" />
+                  Redes Sociales y Enlaces del Evento
+                </Label>
+                <span className="text-[10px] text-purple-400 bg-purple-950/40 px-2 py-0.5 rounded border border-purple-500/20">Opcional</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Instagram */}
+                <div className="space-y-1">
+                  <Label htmlFor="edit_instagram_url" className="text-purple-300 text-[11px] flex items-center gap-1">
+                    <Instagram className="w-3 h-3 text-pink-400" />
+                    Instagram
+                  </Label>
+                  <Input
+                    id="edit_instagram_url"
+                    name="instagram_url"
+                    value={formData.instagram_url || ''}
+                    onChange={handleInputChange}
+                    placeholder="https://instagram.com/cuenta"
+                    className="bg-black/50 border-purple-500/30 text-white text-xs h-8"
+                  />
+                </div>
+
+                {/* Facebook */}
+                <div className="space-y-1">
+                  <Label htmlFor="edit_facebook_url" className="text-purple-300 text-[11px] flex items-center gap-1">
+                    <Facebook className="w-3 h-3 text-blue-400" />
+                    Facebook
+                  </Label>
+                  <Input
+                    id="edit_facebook_url"
+                    name="facebook_url"
+                    value={formData.facebook_url || ''}
+                    onChange={handleInputChange}
+                    placeholder="https://facebook.com/evento"
+                    className="bg-black/50 border-purple-500/30 text-white text-xs h-8"
+                  />
+                </div>
+
+                {/* Twitter / X */}
+                <div className="space-y-1">
+                  <Label htmlFor="edit_twitter_url" className="text-purple-300 text-[11px] flex items-center gap-1">
+                    <Twitter className="w-3 h-3 text-sky-400" />
+                    Twitter / X
+                  </Label>
+                  <Input
+                    id="edit_twitter_url"
+                    name="twitter_url"
+                    value={formData.twitter_url || ''}
+                    onChange={handleInputChange}
+                    placeholder="https://x.com/usuario"
+                    className="bg-black/50 border-purple-500/30 text-white text-xs h-8"
+                  />
+                </div>
+
+                {/* TikTok */}
+                <div className="space-y-1">
+                  <Label htmlFor="edit_tiktok_url" className="text-purple-300 text-[11px] flex items-center gap-1">
+                    <span className="font-black text-[10px] text-cyan-400 font-mono">TT</span>
+                    TikTok
+                  </Label>
+                  <Input
+                    id="edit_tiktok_url"
+                    name="tiktok_url"
+                    value={formData.tiktok_url || ''}
+                    onChange={handleInputChange}
+                    placeholder="https://tiktok.com/@cuenta"
+                    className="bg-black/50 border-purple-500/30 text-white text-xs h-8"
+                  />
+                </div>
+
+                {/* Sitio Web Oficial */}
+                <div className="space-y-1 sm:col-span-2">
+                  <Label htmlFor="edit_website_url" className="text-purple-300 text-[11px] flex items-center gap-1">
+                    <Globe className="w-3 h-3 text-emerald-400" />
+                    Sitio Web Oficial / Landing Page
+                  </Label>
+                  <Input
+                    id="edit_website_url"
+                    name="website_url"
+                    value={formData.website_url || ''}
+                    onChange={handleInputChange}
+                    placeholder="https://mievento.com"
+                    className="bg-black/50 border-purple-500/30 text-white text-xs h-8"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="flex justify-end space-x-2 pt-4 border-t border-purple-500/30">
               <Button
                 type="button"
@@ -1977,6 +3138,22 @@ const EventsManager = ({ events, updateEvents }) => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal 2: Gestión de Invitados a Eventos Privados */}
+      <EventGuestManagerModal
+        eventId={guestModalEvent?.id || guestModalEvent?.event_id || guestModalEvent?.eventId}
+        eventTitle={guestModalEvent?.title}
+        isOpen={isGuestModalOpen}
+        onClose={() => setIsGuestModalOpen(false)}
+        onGuestsUpdated={handleGuestsUpdated}
+      />
+
+      {/* Modal 4: Auditoría de Asistencias Presenciales (GPS) */}
+      <AttendanceAuditModal
+        event={auditModalEvent}
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
+      />
     </div>
   );
 };

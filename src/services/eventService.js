@@ -7,6 +7,10 @@ import {
   API_URL_EVENTS_THIS_WEEK,
   API_URL_EVENTS_RECOMMENDATIONS,
   API_URL_EVENTS_BY_LIKES,
+  API_URL_EVENTS_INVITED_USERS,
+  API_URL_EVENTS_INVITE,
+  API_URL_EVENTS_ATTENDANCE_AUDIT,
+  BASE_URL,
   BASE_URL_IMAGE,
   formatImageUrl
 } from './config';
@@ -188,6 +192,27 @@ export const createEvent = async (eventData) => {
       formData.append('faqs', JSON.stringify(eventData.faqs));
     }
     
+    // Redes Sociales y Enlaces
+    if (eventData.facebook_url) formData.append('facebook_url', eventData.facebook_url);
+    if (eventData.instagram_url) formData.append('instagram_url', eventData.instagram_url);
+    if (eventData.twitter_url) formData.append('twitter_url', eventData.twitter_url);
+    if (eventData.tiktok_url) formData.append('tiktok_url', eventData.tiktok_url);
+    if (eventData.website_url) formData.append('website_url', eventData.website_url);
+    if (eventData.ticket_url) formData.append('ticket_url', eventData.ticket_url);
+    if (eventData.is_private !== undefined) formData.append('is_private', eventData.is_private ? 'true' : 'false');
+    if (eventData.social_links) {
+      formData.append('social_links', typeof eventData.social_links === 'object' ? JSON.stringify(eventData.social_links) : eventData.social_links);
+    }
+    
+    // Usuarios autorizados para eventos privados
+    if (eventData.allowed_user_ids && Array.isArray(eventData.allowed_user_ids)) {
+      formData.append('allowed_user_ids', JSON.stringify(eventData.allowed_user_ids.map(String)));
+      formData.append('allowedUserIds', JSON.stringify(eventData.allowed_user_ids.map(String)));
+    }
+    if (eventData.allowed_users && Array.isArray(eventData.allowed_users)) {
+      formData.append('allowed_users', JSON.stringify(eventData.allowed_users));
+    }
+    
     // Campos de eventos recurrentes
     if (eventData.isRecurring) {
       formData.append('isRecurring', 'true');
@@ -320,6 +345,25 @@ export const updateEvent = async (eventData) => {
       if (eventData.faqs) {
         formData.append('faqs', JSON.stringify(eventData.faqs));
       }
+
+      // Redes Sociales y Enlaces
+      if (eventData.facebook_url !== undefined) formData.append('facebook_url', eventData.facebook_url || '');
+      if (eventData.instagram_url !== undefined) formData.append('instagram_url', eventData.instagram_url || '');
+      if (eventData.twitter_url !== undefined) formData.append('twitter_url', eventData.twitter_url || '');
+      if (eventData.tiktok_url !== undefined) formData.append('tiktok_url', eventData.tiktok_url || '');
+      if (eventData.website_url !== undefined) formData.append('website_url', eventData.website_url || '');
+      if (eventData.ticket_url !== undefined) formData.append('ticket_url', eventData.ticket_url || '');
+      if (eventData.is_private !== undefined) formData.append('is_private', eventData.is_private ? 'true' : 'false');
+      if (eventData.social_links !== undefined) {
+        formData.append('social_links', typeof eventData.social_links === 'object' ? JSON.stringify(eventData.social_links) : eventData.social_links);
+      }
+      if (eventData.allowed_user_ids !== undefined && Array.isArray(eventData.allowed_user_ids)) {
+        formData.append('allowed_user_ids', JSON.stringify(eventData.allowed_user_ids.map(String)));
+        formData.append('allowedUserIds', JSON.stringify(eventData.allowed_user_ids.map(String)));
+      }
+      if (eventData.allowed_users !== undefined && Array.isArray(eventData.allowed_users)) {
+        formData.append('allowed_users', JSON.stringify(eventData.allowed_users));
+      }
       
       // Imagen
       if (coverImageSource instanceof File || coverImageSource instanceof Blob) {
@@ -368,6 +412,9 @@ export const updateEvent = async (eventData) => {
       }
       if (updateData.end_date_time) {
         updateData.end_date_time = formatDateTime(updateData.end_date_time);
+      }
+      if (updateData.allowed_user_ids && Array.isArray(updateData.allowed_user_ids)) {
+        updateData.allowedUserIds = updateData.allowed_user_ids;
       }
       
       const response = await fetch(url, {
@@ -616,3 +663,94 @@ export const getEventSubscribers = async (eventId) => {
 
 // Alias para compatibilidad hacia atrás
 export const updateEvents = updateEvent;
+
+/**
+ * Obtiene la lista de usuarios invitados a un evento privado
+ * @param {string|number} eventId - ID del evento
+ * @returns {Promise<Array>} Lista de usuarios invitados
+ */
+export const getEventInvitedUsers = async (eventId) => {
+  try {
+    const url = `${BASE_URL}/events/${eventId}/invited-users`;
+    const response = await fetchWithAuth(url, {
+      method: 'GET',
+    });
+    return response.allowed_users || response.data || response || [];
+  } catch (error) {
+    console.error('Error en getEventInvitedUsers:', error);
+    return [];
+  }
+};
+
+/**
+ * Invita a uno o más usuarios a un evento privado
+ * @param {string|number} eventId - ID del evento
+ * @param {Array<string|number>} userIds - Lista de IDs de usuarios a invitar
+ */
+export const inviteUsersToEvent = async (eventId, userIds) => {
+  try {
+    const url = `${BASE_URL}/events/${eventId}/invite`;
+    const response = await fetchWithAuth(url, {
+      method: 'POST',
+      body: JSON.stringify({ user_ids: userIds.map(String) }),
+    });
+    return response;
+  } catch (error) {
+    console.error('Error en inviteUsersToEvent:', error);
+    throw error;
+  }
+};
+
+/**
+ * Revoca el acceso de un invitado a un evento privado
+ * @param {string|number} eventId - ID del evento
+ * @param {string|number} userId - ID del usuario a revocar
+ */
+export const removeEventGuest = async (eventId, userId) => {
+  try {
+    const url = `${BASE_URL}/events/${eventId}/invite/${userId}`;
+    const response = await fetchWithAuth(url, {
+      method: 'DELETE',
+    });
+    return response;
+  } catch (error) {
+    console.error('Error en removeEventGuest:', error);
+    throw error;
+  }
+};
+
+/**
+ * Busca usuarios por nombre o username para invitar a eventos
+ * @param {string} query - Término de búsqueda
+ * @returns {Promise<Array>} Usuarios coincidentes
+ */
+export const searchUsersToInvite = async (query) => {
+  try {
+    const url = `${BASE_URL}/users/search?q=${encodeURIComponent(query)}`;
+    const response = await fetchWithAuth(url, {
+      method: 'GET',
+    });
+    return response.data || response.users || (Array.isArray(response) ? response : []);
+  } catch (error) {
+    console.error('Error en searchUsersToInvite:', error);
+    return [];
+  }
+};
+
+/**
+ * Obtiene la auditoría de asistencias presenciales con geolocalización de un evento
+ * @param {string|number} eventId - ID del evento
+ * @returns {Promise<Array>} Registros de auditoría con coordenadas GPS y distancia
+ */
+export const getEventAttendanceAudit = async (eventId) => {
+  try {
+    const url = `${BASE_URL}/events/${eventId}/attendance-audit`;
+    const response = await fetchWithAuth(url, {
+      method: 'GET',
+    });
+    return response.data || response.audit || response || [];
+  } catch (error) {
+    console.warn('⚠️ Endpoint de auditoría no disponible:', error.message);
+    return [];
+  }
+};

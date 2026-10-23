@@ -76,6 +76,36 @@ function App() {
           <Route path="/validate-qr" element={<MerchantQrValidator />} />
           <Route path="/scan-qr" element={<MerchantQrValidator />} />
           <Route path="/validar-cupon" element={<MerchantQrValidator />} />
+          <Route 
+            path="/admin/events" 
+            element={
+              user ? (
+                <Dashboard user={user} onLogout={handleLogout} initialTab="events" />
+              ) : (
+                <Login onLogin={handleLogin} />
+              )
+            } 
+          />
+          <Route 
+            path="/admin/point-rules" 
+            element={
+              user ? (
+                <Dashboard user={user} onLogout={handleLogout} initialTab="points" />
+              ) : (
+                <Login onLogin={handleLogin} />
+              )
+            } 
+          />
+          <Route 
+            path="/admin/attendance-audit" 
+            element={
+              user ? (
+                <Dashboard user={user} onLogout={handleLogout} initialTab="attendance-audit" />
+              ) : (
+                <Login onLogin={handleLogin} />
+              )
+            } 
+          />
         </Routes>
 
       </BrowserRouter>

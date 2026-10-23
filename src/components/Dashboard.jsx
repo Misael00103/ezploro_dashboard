@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -30,6 +30,7 @@ import {
   Gift,
   Ticket,
   Flame,
+  ShieldCheck,
 } from 'lucide-react';
 import { AnimatedCounter } from './AnimatedCounter';
 import { toast, Toaster } from 'react-hot-toast';
@@ -46,6 +47,7 @@ import AdsManager from './AdsManager';
 import DailyRewardsManager from './DailyRewardsManager';
 import StreaksManager from './StreaksManager';
 import PromotionsManager from './PromotionsManager';
+import AttendanceAuditManager from './AttendanceAuditManager';
 import BroadcastNotificationButton from './BroadcastNotificationButton';
 import {
   getEvents,
@@ -73,9 +75,18 @@ const getProfilePictureUrl = (profilePicture) => {
   return formatImageUrl(profilePicture) || undefined;
 };
 
-const Dashboard = ({ onLogout }) => {
+const Dashboard = ({ onLogout, initialTab }) => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('overview');
+  const location = useLocation();
+
+  const getInitialActiveTab = () => {
+    if (location.pathname === '/admin/events') return 'events';
+    if (location.pathname === '/admin/point-rules') return 'points';
+    if (location.pathname === '/admin/attendance-audit') return 'attendance-audit';
+    return initialTab || 'overview';
+  };
+
+  const [activeTab, setActiveTab] = useState(getInitialActiveTab);
   const [user, setUser] = useState(null);
   const [events, setEvents] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -99,15 +110,24 @@ const Dashboard = ({ onLogout }) => {
     localStorage.setItem('sidebarCollapsed', isSidebarCollapsed.toString());
   }, [isSidebarCollapsed]);
 
+  // Sincronizar activeTab si la ruta cambia directamente
+  useEffect(() => {
+    if (location.pathname === '/admin/events') setActiveTab('events');
+    else if (location.pathname === '/admin/point-rules') setActiveTab('points');
+    else if (location.pathname === '/admin/attendance-audit') setActiveTab('attendance-audit');
+    else if (initialTab) setActiveTab(initialTab);
+  }, [location.pathname, initialTab]);
+
   const navItems = [
     { id: 'overview', label: 'Resumen', icon: BarChart3 },
     ...(user?.role === 'admin' || user?.role === 'moderator' ? [
       { id: 'user-management', label: 'Usuarios', icon: User },
-      { id: 'points', label: 'Puntos', icon: Star },
+      { id: 'points', label: 'Puntos / Reglas', icon: Star },
+      { id: 'events', label: 'Eventos', icon: Calendar },
+      { id: 'attendance-audit', label: 'Auditoría Presencial', icon: ShieldCheck },
       { id: 'advertising', label: 'Publicidad', icon: Megaphone },
       { id: 'rewards', label: 'Premios', icon: Gift },
       { id: 'promotions', label: 'Promociones', icon: Ticket },
-      { id: 'events', label: 'Eventos', icon: Calendar },
       { id: 'streaks', label: 'Rachas', icon: Flame },
       { id: 'contacts', label: 'Contactos', icon: MessageCircle, badge: contacts.filter(c => c.status !== 'responded' && c.status !== 'resolved').length },
       { id: 'testimonials', label: 'Testimonios', icon: Star },
@@ -117,6 +137,7 @@ const Dashboard = ({ onLogout }) => {
       { id: 'ezploro-info', label: 'Info Ezploro', icon: Info }
     ] : [
       { id: 'events', label: 'Eventos', icon: Calendar },
+      { id: 'attendance-audit', label: 'Auditoría Presencial', icon: ShieldCheck },
       { id: 'contacts', label: 'Contactos', icon: MessageCircle, badge: contacts.filter(c => c.status !== 'responded' && c.status !== 'resolved').length },
       { id: 'testimonials', label: 'Testimonios', icon: Star },
       { id: 'posts', label: 'Posts', icon: FileText },
@@ -1018,6 +1039,10 @@ const Dashboard = ({ onLogout }) => {
 
           <TabsContent value="points">
             <GamificationManager initialTab="points" />
+          </TabsContent>
+
+          <TabsContent value="attendance-audit">
+            <AttendanceAuditManager />
           </TabsContent>
 
           <TabsContent value="advertising">

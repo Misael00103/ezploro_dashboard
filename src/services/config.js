@@ -179,6 +179,9 @@ export const API_URL_EVENTS_CONFIRM_ATTENDANCE = `${API_URL_EVENTS}/:id/attendee
 export const API_URL_EVENTS_ATTENDEES = `${API_URL_EVENTS}/:id/attendees`
 export const API_URL_EVENTS_INSIGHTS = `${API_URL_EVENTS}/:id/insights`
 export const API_URL_EVENTS_SUBSCRIBERS = `${API_URL_EVENTS}/:id/subscribers`
+export const API_URL_EVENTS_INVITED_USERS = `${API_URL_EVENTS}/:id/invited-users`
+export const API_URL_EVENTS_INVITE = `${API_URL_EVENTS}/:id/invite`
+export const API_URL_EVENTS_ATTENDANCE_AUDIT = `${API_URL_EVENTS}/:id/attendance-audit`
 
 // ==================== EVENT LIKES ====================
 // URLs corregidas según tu backend real
@@ -263,6 +266,7 @@ export const API_URL_GAMIFICATION_POINTS = `${API_URL_GAMIFICATION}/points/:user
 export const API_URL_GAMIFICATION_REDEEM = `${API_URL_GAMIFICATION}/redeem`
 export const API_URL_GAMIFICATION_HISTORY = `${API_URL_GAMIFICATION}/history/:user_id`
 export const API_URL_RULES = `${BASE_URL}/rules`
+export const API_URL_POINT_RULES = `${BASE_URL}/point-rules`
 
 // ==================== POINTS ====================
 export const API_URL_POINTS = `${BASE_URL}/points`

@@ -2,7 +2,8 @@ import { fetchWithAuth } from './userService';
 import { getAuthToken } from './authService';
 import { BASE_URL } from './config';
 
-// Base URL para reglas de puntos
+// Base URL para reglas de puntos (soporta /point-rules y /rules)
+const API_URL_POINT_RULES = `${BASE_URL}/point-rules`;
 const API_URL_RULES = `${BASE_URL}/rules`;
 
 /**
@@ -10,9 +11,12 @@ const API_URL_RULES = `${BASE_URL}/rules`;
  */
 export const getAllRules = async () => {
   try {
-    const data = await fetchWithAuth(API_URL_RULES, {
-      method: 'GET',
-    });
+    let data;
+    try {
+      data = await fetchWithAuth(API_URL_POINT_RULES, { method: 'GET' });
+    } catch (e) {
+      data = await fetchWithAuth(API_URL_RULES, { method: 'GET' });
+    }
     
     // El backend devuelve un array directamente según el código proporcionado
     if (Array.isArray(data)) {
@@ -165,7 +169,7 @@ export const updateRule = async (ruleId, ruleData) => {
       payload.is_active = ruleData.is_active;
     }
 
-    const response = await fetch(`${API_URL_RULES}/${ruleId}`, {
+    let response = await fetch(`${API_URL_POINT_RULES}/${ruleId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -173,6 +177,17 @@ export const updateRule = async (ruleId, ruleData) => {
       },
       body: JSON.stringify(payload),
     });
+
+    if (!response.ok && (response.status === 404 || response.status === 405)) {
+      response = await fetch(`${API_URL_RULES}/${ruleId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));

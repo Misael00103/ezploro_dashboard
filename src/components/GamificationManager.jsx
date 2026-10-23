@@ -49,6 +49,7 @@ import {
 } from '../services/offerService';
 import { toast } from 'react-hot-toast';
 import PromotionsManager from './PromotionsManager';
+import PointRulesManager from './PointRulesManager';
 
 const GamificationManager = ({ initialTab = 'overview' }) => {
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -1535,89 +1536,9 @@ const GamificationManager = ({ initialTab = 'overview' }) => {
           </div>
         </TabsContent>
 
-        {/* Points Tab */}
+        {/* Points Tab - Control de Reglas de Gamificación (/admin/point-rules) */}
         <TabsContent value="points" className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-2xl font-bold text-white">Reglas de Puntos</h2>
-              <p className="text-zinc-400">Gestiona cómo se otorgan los puntos</p>
-            </div>
-            <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-              <DialogTrigger asChild>
-            <Button className="bg-violet-600 hover:bg-violet-700">
-              <Plus className="h-4 w-4 mr-2" />
-              Nueva Regla
-            </Button>
-              </DialogTrigger>
-            </Dialog>
-          </div>
-
-          {isLoadingRules ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
-            </div>
-          ) : (
-          <div className="grid gap-4">
-            {pointsRules.map((rule) => (
-                <Card key={rule.id || rule.rule_id} className="glass-panel border-zinc-800/50">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 bg-violet-600/20 rounded-lg flex items-center justify-center">
-                        <Star className="h-6 w-6 text-zinc-400" />
-                      </div>
-                      <div>
-                          <h3 className="text-lg font-semibold text-white">{rule.display_name || rule.rule_name}</h3>
-                          <p className="text-zinc-400 text-sm">{rule.description || 'Sin descripción'}</p>
-                        <div className="flex items-center space-x-2 mt-2">
-                            <Badge className={getCategoryColor(rule.category || rule.point_type)}>
-                              {getCategoryDisplayName(rule.point_type)}
-                          </Badge>
-                          <Badge className="bg-zinc-800/50 text-zinc-300">
-                            {rule.points} puntos
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        checked={rule.is_active}
-                          onCheckedChange={() => handleToggleRule(rule.id || rule.rule_id)}
-                        />
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="text-zinc-400 hover:text-white"
-                          onClick={() => handleEdit(rule)}
-                        >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="text-red-400 hover:text-red-300"
-                          onClick={() => handleDelete(rule.id || rule.rule_id)}
-                        >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-              {pointsRules.length === 0 && (
-                <Card className="glass-panel border-zinc-800/50">
-                  <CardContent className="pt-6">
-                    <div className="text-center py-8">
-                      <Star className="h-16 w-16 text-zinc-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-white mb-2">No hay reglas</h3>
-                      <p className="text-zinc-400">Crea tu primera regla de puntos para comenzar</p>
-          </div>
-                  </CardContent>
-                </Card>
-              )}
-          </div>
-          )}
+          <PointRulesManager />
         </TabsContent>
 
         {/* Rewards Tab - Usa el gestor unificado de Promociones y Recompensas */}
