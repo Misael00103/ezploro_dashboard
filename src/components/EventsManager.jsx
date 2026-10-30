@@ -93,6 +93,8 @@ const EventsManager = ({ events, updateEvents }) => {
     ticket_url: '',
     is_private: false,
     is_promotion: false,
+    promotion_start_date: '',
+    promotion_end_date: '',
     allowed_users: [],
     facebook_url: '',
     instagram_url: '',
@@ -333,6 +335,8 @@ const EventsManager = ({ events, updateEvents }) => {
       ticket_url: '',
       is_private: false,
       is_promotion: false,
+      promotion_start_date: '',
+      promotion_end_date: '',
       allowed_users: [],
       facebook_url: '',
       instagram_url: '',
@@ -663,6 +667,8 @@ const EventsManager = ({ events, updateEvents }) => {
         is_private: Boolean(formData.is_private),
         is_promotion: Boolean(formData.is_promotion),
         isPromotion: Boolean(formData.is_promotion),
+        promotion_start_date: formData.is_promotion ? formData.promotion_start_date : '',
+        promotion_end_date: formData.is_promotion ? formData.promotion_end_date : '',
         allowed_user_ids: formData.is_private && Array.isArray(formData.allowed_users)
           ? formData.allowed_users.map(u => String(u.id || u.user_id))
           : [],
@@ -819,6 +825,12 @@ const EventsManager = ({ events, updateEvents }) => {
       is_promotion: event.is_promotion !== undefined
         ? Boolean(event.is_promotion)
         : Boolean(event.isPromotion || event.is_promoted || event.isPromoted),
+      promotion_start_date: event.promotion_start_date
+        ? String(event.promotion_start_date).slice(0, 16)
+        : (event.promotionStartDate ? String(event.promotionStartDate).slice(0, 16) : (event.promotion?.startDate ? String(event.promotion.startDate).slice(0, 16) : '')),
+      promotion_end_date: event.promotion_end_date
+        ? String(event.promotion_end_date).slice(0, 16)
+        : (event.promotionEndDate ? String(event.promotionEndDate).slice(0, 16) : (event.promotion?.endDate ? String(event.promotion.endDate).slice(0, 16) : '')),
       allowed_users: Array.isArray(event.allowed_users) && event.allowed_users.length > 0
         ? event.allowed_users
         : Array.isArray(event.allowed_user_ids) && event.allowed_user_ids.length > 0
@@ -931,6 +943,8 @@ const EventsManager = ({ events, updateEvents }) => {
         is_private: Boolean(formData.is_private),
         is_promotion: Boolean(formData.is_promotion),
         isPromotion: Boolean(formData.is_promotion),
+        promotion_start_date: formData.is_promotion ? formData.promotion_start_date : '',
+        promotion_end_date: formData.is_promotion ? formData.promotion_end_date : '',
         allowed_user_ids: formData.is_private && Array.isArray(formData.allowed_users)
           ? formData.allowed_users.map(u => String(u.id || u.user_id))
           : [],
@@ -1681,11 +1695,68 @@ const EventsManager = ({ events, updateEvents }) => {
                       <Switch
                         id="create_is_promotion"
                         checked={Boolean(formData.is_promotion)}
-                        onCheckedChange={(checked) => setFormData({ ...formData, is_promotion: checked })}
+                        onCheckedChange={(checked) => {
+                          const now = new Date();
+                          const inWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+                          const pad = (n) => String(n).padStart(2, '0');
+                          const formatDT = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                          setFormData({
+                            ...formData,
+                            is_promotion: checked,
+                            promotion_start_date: checked ? (formData.promotion_start_date || formatDT(now)) : '',
+                            promotion_end_date: checked ? (formData.promotion_end_date || formatDT(inWeek)) : '',
+                          });
+                        }}
                       />
                     </div>
                   </div>
                 </div>
+
+                {/* Panel de Rango de Fechas para Evento Promocionado (Crear) */}
+                {Boolean(formData.is_promotion) && (
+                  <div className="p-3.5 bg-gradient-to-b from-amber-950/40 to-black/80 border border-amber-500/40 rounded-xl space-y-3 animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-amber-500/20 border border-amber-500/30 rounded-lg text-amber-300">
+                        <Calendar className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <Label className="text-amber-200 text-xs font-semibold block leading-tight">
+                          Período de Promoción (Destacado en App)
+                        </Label>
+                        <span className="text-[10px] text-amber-400/90">
+                          Define el rango de fecha en el que el evento aparecerá como promocionado
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor="create_promo_start" className="text-[11px] text-amber-200/90 mb-1 block">
+                          Fecha y hora de inicio
+                        </Label>
+                        <Input
+                          id="create_promo_start"
+                          type="datetime-local"
+                          value={formData.promotion_start_date || ''}
+                          onChange={(e) => setFormData({ ...formData, promotion_start_date: e.target.value })}
+                          className="bg-black/40 border-amber-500/30 text-white text-xs h-9 focus:border-amber-400"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="create_promo_end" className="text-[11px] text-amber-200/90 mb-1 block">
+                          Fecha y hora de fin
+                        </Label>
+                        <Input
+                          id="create_promo_end"
+                          type="datetime-local"
+                          value={formData.promotion_end_date || ''}
+                          onChange={(e) => setFormData({ ...formData, promotion_end_date: e.target.value })}
+                          className="bg-black/40 border-amber-500/30 text-white text-xs h-9 focus:border-amber-400"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Panel de Selección de Invitados para Evento Privado (Crear) */}
                 {Boolean(formData.is_private) && (
@@ -2948,11 +3019,68 @@ const EventsManager = ({ events, updateEvents }) => {
                   <Switch
                     id="edit_is_promotion"
                     checked={Boolean(formData.is_promotion)}
-                    onCheckedChange={(checked) => setFormData({ ...formData, is_promotion: checked })}
+                    onCheckedChange={(checked) => {
+                      const now = new Date();
+                      const inWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+                      const pad = (n) => String(n).padStart(2, '0');
+                      const formatDT = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                      setFormData({
+                        ...formData,
+                        is_promotion: checked,
+                        promotion_start_date: checked ? (formData.promotion_start_date || formatDT(now)) : '',
+                        promotion_end_date: checked ? (formData.promotion_end_date || formatDT(inWeek)) : '',
+                      });
+                    }}
                   />
                 </div>
               </div>
             </div>
+
+            {/* Panel de Rango de Fechas para Evento Promocionado (Editar) */}
+            {Boolean(formData.is_promotion) && (
+              <div className="p-3.5 bg-gradient-to-b from-amber-950/40 to-black/80 border border-amber-500/40 rounded-xl space-y-3 animate-in fade-in duration-200">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-amber-500/20 border border-amber-500/30 rounded-lg text-amber-300">
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <Label className="text-amber-200 text-xs font-semibold block leading-tight">
+                      Período de Promoción (Destacado en App)
+                    </Label>
+                    <span className="text-[10px] text-amber-400/90">
+                      Define el rango de fecha en el que el evento aparecerá como promocionado
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="edit_promo_start" className="text-[11px] text-amber-200/90 mb-1 block">
+                      Fecha y hora de inicio
+                    </Label>
+                    <Input
+                      id="edit_promo_start"
+                      type="datetime-local"
+                      value={formData.promotion_start_date || ''}
+                      onChange={(e) => setFormData({ ...formData, promotion_start_date: e.target.value })}
+                      className="bg-black/40 border-amber-500/30 text-white text-xs h-9 focus:border-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="edit_promo_end" className="text-[11px] text-amber-200/90 mb-1 block">
+                      Fecha y hora de fin
+                    </Label>
+                    <Input
+                      id="edit_promo_end"
+                      type="datetime-local"
+                      value={formData.promotion_end_date || ''}
+                      onChange={(e) => setFormData({ ...formData, promotion_end_date: e.target.value })}
+                      className="bg-black/40 border-amber-500/30 text-white text-xs h-9 focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Panel de Selección de Invitados para Evento Privado (Editar) */}
             {Boolean(formData.is_private) && (

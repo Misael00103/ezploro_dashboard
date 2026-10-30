@@ -205,6 +205,14 @@ export const createEvent = async (eventData) => {
       formData.append('is_promotion', isPromo ? 'true' : 'false');
       formData.append('isPromotion', isPromo ? 'true' : 'false');
     }
+    if (eventData.promotion_start_date) {
+      formData.append('promotion_start_date', eventData.promotion_start_date);
+      formData.append('promotionStartDate', eventData.promotion_start_date);
+    }
+    if (eventData.promotion_end_date) {
+      formData.append('promotion_end_date', eventData.promotion_end_date);
+      formData.append('promotionEndDate', eventData.promotion_end_date);
+    }
     if (eventData.social_links) {
       formData.append('social_links', typeof eventData.social_links === 'object' ? JSON.stringify(eventData.social_links) : eventData.social_links);
     }
@@ -364,6 +372,20 @@ export const updateEvent = async (eventData) => {
       formData.append('is_promotion', isPromo ? 'true' : 'false');
       formData.append('isPromotion', isPromo ? 'true' : 'false');
     }
+    if (eventData.promotion_start_date !== undefined) {
+      formData.append('promotion_start_date', eventData.promotion_start_date || '');
+      formData.append('promotionStartDate', eventData.promotion_start_date || '');
+    } else if (eventData.promotionStartDate !== undefined) {
+      formData.append('promotion_start_date', eventData.promotionStartDate || '');
+      formData.append('promotionStartDate', eventData.promotionStartDate || '');
+    }
+    if (eventData.promotion_end_date !== undefined) {
+      formData.append('promotion_end_date', eventData.promotion_end_date || '');
+      formData.append('promotionEndDate', eventData.promotion_end_date || '');
+    } else if (eventData.promotionEndDate !== undefined) {
+      formData.append('promotion_end_date', eventData.promotionEndDate || '');
+      formData.append('promotionEndDate', eventData.promotionEndDate || '');
+    }
       if (eventData.social_links !== undefined) {
         formData.append('social_links', typeof eventData.social_links === 'object' ? JSON.stringify(eventData.social_links) : eventData.social_links);
       }
@@ -432,6 +454,16 @@ export const updateEvent = async (eventData) => {
       } else if (updateData.isPromotion !== undefined) {
         updateData.is_promotion = Boolean(updateData.isPromotion);
         updateData.isPromotion = updateData.is_promotion;
+      }
+      if (updateData.promotion_start_date !== undefined) {
+        updateData.promotionStartDate = updateData.promotion_start_date;
+      } else if (updateData.promotionStartDate !== undefined) {
+        updateData.promotion_start_date = updateData.promotionStartDate;
+      }
+      if (updateData.promotion_end_date !== undefined) {
+        updateData.promotionEndDate = updateData.promotion_end_date;
+      } else if (updateData.promotionEndDate !== undefined) {
+        updateData.promotion_end_date = updateData.promotionEndDate;
       }
       
       const response = await fetch(url, {
