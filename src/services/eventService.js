@@ -200,6 +200,11 @@ export const createEvent = async (eventData) => {
     if (eventData.website_url) formData.append('website_url', eventData.website_url);
     if (eventData.ticket_url) formData.append('ticket_url', eventData.ticket_url);
     if (eventData.is_private !== undefined) formData.append('is_private', eventData.is_private ? 'true' : 'false');
+    if (eventData.is_promotion !== undefined || eventData.isPromotion !== undefined) {
+      const isPromo = eventData.is_promotion !== undefined ? eventData.is_promotion : eventData.isPromotion;
+      formData.append('is_promotion', isPromo ? 'true' : 'false');
+      formData.append('isPromotion', isPromo ? 'true' : 'false');
+    }
     if (eventData.social_links) {
       formData.append('social_links', typeof eventData.social_links === 'object' ? JSON.stringify(eventData.social_links) : eventData.social_links);
     }
@@ -354,6 +359,11 @@ export const updateEvent = async (eventData) => {
       if (eventData.website_url !== undefined) formData.append('website_url', eventData.website_url || '');
       if (eventData.ticket_url !== undefined) formData.append('ticket_url', eventData.ticket_url || '');
       if (eventData.is_private !== undefined) formData.append('is_private', eventData.is_private ? 'true' : 'false');
+    if (eventData.is_promotion !== undefined || eventData.isPromotion !== undefined) {
+      const isPromo = eventData.is_promotion !== undefined ? eventData.is_promotion : eventData.isPromotion;
+      formData.append('is_promotion', isPromo ? 'true' : 'false');
+      formData.append('isPromotion', isPromo ? 'true' : 'false');
+    }
       if (eventData.social_links !== undefined) {
         formData.append('social_links', typeof eventData.social_links === 'object' ? JSON.stringify(eventData.social_links) : eventData.social_links);
       }
@@ -415,6 +425,13 @@ export const updateEvent = async (eventData) => {
       }
       if (updateData.allowed_user_ids && Array.isArray(updateData.allowed_user_ids)) {
         updateData.allowedUserIds = updateData.allowed_user_ids;
+      }
+      if (updateData.is_promotion !== undefined) {
+        updateData.is_promotion = Boolean(updateData.is_promotion);
+        updateData.isPromotion = updateData.is_promotion;
+      } else if (updateData.isPromotion !== undefined) {
+        updateData.is_promotion = Boolean(updateData.isPromotion);
+        updateData.isPromotion = updateData.is_promotion;
       }
       
       const response = await fetch(url, {

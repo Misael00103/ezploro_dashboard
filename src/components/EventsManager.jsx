@@ -36,7 +36,9 @@ import {
   Share2,
   UserPlus,
   UserCheck,
-  Loader2
+  Loader2,
+  Sparkles,
+  Star
 } from 'lucide-react';
 import { Switch } from './ui/switch';
 import EventGuestManagerModal from './EventGuestManagerModal';
@@ -59,6 +61,7 @@ const EventsManager = ({ events, updateEvents }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterPromotion, setFilterPromotion] = useState('all'); // 'all', 'promoted', 'regular'
   const [viewMode, setViewMode] = useState('table'); // 'table' o 'grid'
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [guestModalEvent, setGuestModalEvent] = useState(null);
@@ -89,6 +92,7 @@ const EventsManager = ({ events, updateEvents }) => {
     video_url: '',
     ticket_url: '',
     is_private: false,
+    is_promotion: false,
     allowed_users: [],
     facebook_url: '',
     instagram_url: '',
@@ -217,8 +221,13 @@ const EventsManager = ({ events, updateEvents }) => {
                          event.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = filterCategory === 'all' || event.category === filterCategory;
     const matchesStatus = filterStatus === 'all' || event.status === filterStatus;
+    const isEventPromoted = Boolean(event.is_promotion || event.isPromotion || event.is_promoted || event.isPromoted);
+    const matchesPromotion =
+      filterPromotion === 'all' ||
+      (filterPromotion === 'promoted' && isEventPromoted) ||
+      (filterPromotion === 'regular' && !isEventPromoted);
     
-    return matchesSearch && matchesCategory && matchesStatus;
+    return matchesSearch && matchesCategory && matchesStatus && matchesPromotion;
   });
 
   const handleInputChange = (e) => {
@@ -323,6 +332,7 @@ const EventsManager = ({ events, updateEvents }) => {
       video_url: '',
       ticket_url: '',
       is_private: false,
+      is_promotion: false,
       allowed_users: [],
       facebook_url: '',
       instagram_url: '',
@@ -651,6 +661,8 @@ const EventsManager = ({ events, updateEvents }) => {
         video_url: formData.online ? formData.video_url : (formData.video_url || ''),
         ticket_url: formData.ticket_url || '',
         is_private: Boolean(formData.is_private),
+        is_promotion: Boolean(formData.is_promotion),
+        isPromotion: Boolean(formData.is_promotion),
         allowed_user_ids: formData.is_private && Array.isArray(formData.allowed_users)
           ? formData.allowed_users.map(u => String(u.id || u.user_id))
           : [],
@@ -804,6 +816,9 @@ const EventsManager = ({ events, updateEvents }) => {
       video_url: event.video_url || event.videoUrl || '',
       ticket_url: event.ticket_url || '',
       is_private: event.is_private !== undefined ? Boolean(event.is_private) : false,
+      is_promotion: event.is_promotion !== undefined
+        ? Boolean(event.is_promotion)
+        : Boolean(event.isPromotion || event.is_promoted || event.isPromoted),
       allowed_users: Array.isArray(event.allowed_users) && event.allowed_users.length > 0
         ? event.allowed_users
         : Array.isArray(event.allowed_user_ids) && event.allowed_user_ids.length > 0
@@ -914,6 +929,8 @@ const EventsManager = ({ events, updateEvents }) => {
         video_url: formData.video_url || '',
         ticket_url: formData.ticket_url || '',
         is_private: Boolean(formData.is_private),
+        is_promotion: Boolean(formData.is_promotion),
+        isPromotion: Boolean(formData.is_promotion),
         allowed_user_ids: formData.is_private && Array.isArray(formData.allowed_users)
           ? formData.allowed_users.map(u => String(u.id || u.user_id))
           : [],
@@ -1620,8 +1637,8 @@ const EventsManager = ({ events, updateEvents }) => {
                   </div>
                 )}
 
-                {/* Visibilidad y Boletos */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-purple-500/20">
+                {/* Visibilidad, Boletos y Promoción */}
+                <div className="space-y-3 pt-2 border-t border-purple-500/20">
                   <div className="space-y-2">
                     <Label htmlFor="create_ticket_url" className="text-purple-200 text-xs">
                       URL de Boletería / Entradas
@@ -1635,7 +1652,7 @@ const EventsManager = ({ events, updateEvents }) => {
                       className="bg-black/50 border-purple-500/30 text-white text-xs"
                     />
                   </div>
-                  <div className="flex flex-col justify-end space-y-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="flex items-center justify-between p-2.5 bg-purple-950/30 border border-purple-500/30 rounded-xl">
                       <div>
                         <Label htmlFor="create_is_private" className="text-purple-200 text-xs font-semibold cursor-pointer block">
@@ -1649,6 +1666,22 @@ const EventsManager = ({ events, updateEvents }) => {
                         id="create_is_private"
                         checked={Boolean(formData.is_private)}
                         onCheckedChange={(checked) => setFormData({ ...formData, is_private: checked })}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 bg-amber-950/20 border border-amber-500/30 rounded-xl">
+                      <div>
+                        <Label htmlFor="create_is_promotion" className="text-amber-200 text-xs font-semibold cursor-pointer block flex items-center gap-1.5">
+                          ⭐ Evento Promocionado
+                        </Label>
+                        <span className="text-[10px] text-amber-400/80">
+                          Destacar evento en la app
+                        </span>
+                      </div>
+                      <Switch
+                        id="create_is_promotion"
+                        checked={Boolean(formData.is_promotion)}
+                        onCheckedChange={(checked) => setFormData({ ...formData, is_promotion: checked })}
                       />
                     </div>
                   </div>
@@ -1966,6 +1999,19 @@ const EventsManager = ({ events, updateEvents }) => {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label className="text-purple-200">Promoción</Label>
+              <Select value={filterPromotion} onValueChange={setFilterPromotion}>
+                <SelectTrigger className="bg-black/50 border-purple-500/30 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-black border-purple-500/30">
+                  <SelectItem value="all" className="text-white hover:bg-purple-900/50">Todos</SelectItem>
+                  <SelectItem value="promoted" className="text-white hover:bg-purple-900/50">⭐ Solo Promocionados</SelectItem>
+                  <SelectItem value="regular" className="text-white hover:bg-purple-900/50">No Promocionados</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -2135,15 +2181,23 @@ const EventsManager = ({ events, updateEvents }) => {
 
                         {/* 1.1 Columna 1: Tipo de Visibilidad */}
                         <td className="py-3 px-4">
-                          {!isPrivate ? (
-                            <span className="px-2 py-1 rounded-md text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold inline-flex items-center gap-1">
-                              Público
-                            </span>
-                          ) : (
-                            <span className="px-2 py-1 rounded-md text-xs bg-purple-500/10 text-purple-400 border border-purple-500/20 font-semibold inline-flex items-center gap-1">
-                              🔒 Privado
-                            </span>
-                          )}
+                          <div className="flex flex-col gap-1.5 items-start">
+                            {!isPrivate ? (
+                              <span className="px-2 py-1 rounded-md text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold inline-flex items-center gap-1">
+                                Público
+                              </span>
+                            ) : (
+                              <span className="px-2 py-1 rounded-md text-xs bg-purple-500/10 text-purple-400 border border-purple-500/20 font-semibold inline-flex items-center gap-1">
+                                🔒 Privado
+                              </span>
+                            )}
+                            {Boolean(event.is_promotion || event.isPromotion || event.is_promoted || event.isPromoted) && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold inline-flex items-center gap-1 shadow-sm">
+                                <Sparkles className="w-3 h-3 text-amber-400" />
+                                Promocionado
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         {/* 1.1 Columna 2: Boletos / Entradas */}
@@ -2278,6 +2332,12 @@ const EventsManager = ({ events, updateEvents }) => {
                       ) : (
                         <span className="px-2 py-1 rounded-md text-xs bg-purple-500/10 text-purple-400 border border-purple-500/20 font-semibold">
                           🔒 Privado
+                        </span>
+                      )}
+                      {Boolean(event.is_promotion || event.isPromotion || event.is_promoted || event.isPromoted) && (
+                        <span className="px-2 py-1 rounded-md text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold inline-flex items-center gap-1 shadow-sm backdrop-blur-sm">
+                          <Sparkles className="w-3 h-3 text-amber-400" />
+                          Promocionado
                         </span>
                       )}
                       {event.isRecurring && (
@@ -2844,8 +2904,8 @@ const EventsManager = ({ events, updateEvents }) => {
               </div>
             </div>
 
-            {/* Visibilidad y Boletos */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-purple-500/20">
+                        {/* Visibilidad, Boletos y Promoción */}
+            <div className="space-y-3 pt-2 border-t border-purple-500/20">
               <div className="space-y-2">
                 <Label htmlFor="edit_ticket_url" className="text-purple-200 text-xs">
                   URL de Boletería / Entradas
@@ -2859,7 +2919,7 @@ const EventsManager = ({ events, updateEvents }) => {
                   className="bg-black/50 border-purple-500/30 text-white text-xs"
                 />
               </div>
-              <div className="flex flex-col justify-end space-y-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex items-center justify-between p-2.5 bg-purple-950/30 border border-purple-500/30 rounded-xl">
                   <div>
                     <Label htmlFor="edit_is_private" className="text-purple-200 text-xs font-semibold cursor-pointer block">
@@ -2873,6 +2933,22 @@ const EventsManager = ({ events, updateEvents }) => {
                     id="edit_is_private"
                     checked={Boolean(formData.is_private)}
                     onCheckedChange={(checked) => setFormData({ ...formData, is_private: checked })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 bg-amber-950/20 border border-amber-500/30 rounded-xl">
+                  <div>
+                    <Label htmlFor="edit_is_promotion" className="text-amber-200 text-xs font-semibold cursor-pointer block flex items-center gap-1.5">
+                      ⭐ Evento Promocionado
+                    </Label>
+                    <span className="text-[10px] text-amber-400/80">
+                      Destacar evento en la app
+                    </span>
+                  </div>
+                  <Switch
+                    id="edit_is_promotion"
+                    checked={Boolean(formData.is_promotion)}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_promotion: checked })}
                   />
                 </div>
               </div>
