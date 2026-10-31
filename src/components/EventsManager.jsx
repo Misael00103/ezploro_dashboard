@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -38,7 +38,13 @@ import {
   UserCheck,
   Loader2,
   Sparkles,
-  Star
+  Star,
+  ArrowUpDown,
+  RotateCcw,
+  SlidersHorizontal,
+  Clock,
+  Radio,
+  Tag
 } from 'lucide-react';
 import { Switch } from './ui/switch';
 import EventGuestManagerModal from './EventGuestManagerModal';
@@ -57,11 +63,28 @@ import { getAuthToken } from '../services/authService';
 import { getCurrentUserId, getAllUsers } from '../services/userService';
 import { searchPlaces as searchPlacesAPI, getPlaceDetails, reverseGeocode } from '../services/placesService';
 
+const formatDateTimeLocal = (dateInput) => {
+  if (!dateInput) return '';
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
 const EventsManager = ({ events, updateEvents }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [filterPromotion, setFilterPromotion] = useState('all'); // 'all', 'promoted', 'regular'
+  const [filterPromotion, setFilterPromotion] = useState('all'); // 'all', 'promoted', 'active_promo', 'expired_promo', 'regular'
+  const [filterOnline, setFilterOnline] = useState('all'); // 'all', 'online', 'in_person'
+  const [filterPrivacy, setFilterPrivacy] = useState('all'); // 'all', 'public', 'private'
+  const [filterDateRange, setFilterDateRange] = useState('all'); // 'all', 'today', 'this_week', 'this_month', 'future', 'past'
+  const [sortBy, setSortBy] = useState('recent'); // 'recent' (más recientes de primero), 'event_date_asc', 'event_date_desc', 'promoted_first', 'popularity', 'title_asc', 'title_desc'
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [viewMode, setViewMode] = useState('table'); // 'table' o 'grid'
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [guestModalEvent, setGuestModalEvent] = useState(null);
@@ -218,19 +241,256 @@ const EventsManager = ({ events, updateEvents }) => {
     ]
   };
 
-  const filteredEvents = events.filter(event => {
-    const matchesSearch = event.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         event.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = filterCategory === 'all' || event.category === filterCategory;
-    const matchesStatus = filterStatus === 'all' || event.status === filterStatus;
-    const isEventPromoted = Boolean(event.is_promotion || event.isPromotion || event.is_promoted || event.isPromoted);
-    const matchesPromotion =
-      filterPromotion === 'all' ||
-      (filterPromotion === 'promoted' && isEventPromoted) ||
-      (filterPromotion === 'regular' && !isEventPromoted);
-    
-    return matchesSearch && matchesCategory && matchesStatus && matchesPromotion;
-  });
+  // Helper para calcular el estado real y dinámico del evento según fecha/hora
+  const getEffectiveStatus = (event) => {
+    if (!event) return 'upcoming';
+    if (event.status === 'cancelled') return 'cancelled';
+    const dateStr = event.date_time || event.date;
+    if (!dateStr) return event.status || 'upcoming';
+    const start = new Date(dateStr);
+    if (isNaN(start.getTime())) return event.status || 'upcoming';
+    const endStr = event.end_date_time || event.endDate;
+    const end = endStr ? new Date(endStr) : new Date(start.getTime() + 4 * 60 * 60 * 1000);
+    const now = new Date();
+    if (now < start) return 'upcoming';
+    if (now >= start && now <= end) return 'ongoing';
+    return 'past';
+  };
+
+  // Helper para calcular el estado de la promoción (activa, vencida, programada o regular)
+  const getPromotionInfo = (event) => {
+    const isPromo = Boolean(event.is_promotion || event.isPromotion || event.is_promoted || event.isPromoted);
+    if (!isPromo) return { isPromo: false, status: 'none', label: 'Regular' };
+
+    const now = new Date();
+    const pStartStr = event.promotion_start_date || event.promotionStartDate;
+    const pEndStr = event.promotion_end_date || event.promotionEndDate;
+    const pStart = pStartStr ? new Date(pStartStr) : null;
+    const pEnd = pEndStr ? new Date(pEndStr) : null;
+
+    if (pStart && !isNaN(pStart.getTime()) && now < pStart) {
+      return { isPromo: true, status: 'scheduled', label: 'Programada' };
+    }
+    if (pEnd && !isNaN(pEnd.getTime()) && now > pEnd) {
+      return { isPromo: true, status: 'expired', label: 'Vencida' };
+    }
+    return { isPromo: true, status: 'active', label: 'Activa' };
+  };
+
+  // Conteo de eventos por categoría para visualizarlos en el selector
+  const categoryCounts = useMemo(() => {
+    const counts = {};
+    if (Array.isArray(events)) {
+      events.forEach((ev) => {
+        if (ev && ev.category) {
+          counts[ev.category] = (counts[ev.category] || 0) + 1;
+        }
+      });
+    }
+    return counts;
+  }, [events]);
+
+  // Conteo de eventos por estado dinámico
+  const statusCounts = useMemo(() => {
+    const counts = { upcoming: 0, ongoing: 0, past: 0, cancelled: 0 };
+    if (Array.isArray(events)) {
+      events.forEach((ev) => {
+        const st = getEffectiveStatus(ev);
+        counts[st] = (counts[st] || 0) + 1;
+      });
+    }
+    return counts;
+  }, [events]);
+
+  // Eventos filtrados y ordenados (más recientes de primero por defecto)
+  const filteredEvents = useMemo(() => {
+    if (!Array.isArray(events)) return [];
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // Lunes
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    // 1. Filtrado exhaustivo
+    const filtered = events.filter((event) => {
+      // Búsqueda inteligente multi-campo (título, descripción, resumen, categoría, ciudad, dirección, organizador, id)
+      if (searchTerm.trim()) {
+        const query = searchTerm.toLowerCase().trim();
+        const title = (event.title || '').toLowerCase();
+        const desc = (event.description || '').toLowerCase();
+        const resume = (event.resume || '').toLowerCase();
+        const cat = (event.category || '').toLowerCase();
+        const subcat = (event.subcategory || '').toLowerCase();
+        const city = (event.city || '').toLowerCase();
+        const addr = (event.address || (typeof event.location === 'string' ? event.location : '')).toLowerCase();
+        const orgName = (
+          (event.organizer && (event.organizer.display_name || event.organizer.name || event.organizer.username)) || ''
+        ).toLowerCase();
+        const idStr = String(event.event_id || event.id || '');
+
+        const matchesQuery =
+          title.includes(query) ||
+          desc.includes(query) ||
+          resume.includes(query) ||
+          cat.includes(query) ||
+          subcat.includes(query) ||
+          city.includes(query) ||
+          addr.includes(query) ||
+          orgName.includes(query) ||
+          idStr === query;
+
+        if (!matchesQuery) return false;
+      }
+
+      // Categoría
+      if (filterCategory !== 'all' && event.category !== filterCategory) {
+        return false;
+      }
+
+      // Estado dinámico
+      const effectiveStatus = getEffectiveStatus(event);
+      if (filterStatus !== 'all' && effectiveStatus !== filterStatus) {
+        return false;
+      }
+
+      // Promoción
+      const promoInfo = getPromotionInfo(event);
+      if (filterPromotion === 'promoted' && !promoInfo.isPromo) return false;
+      if (filterPromotion === 'active_promo' && promoInfo.status !== 'active') return false;
+      if (filterPromotion === 'expired_promo' && promoInfo.status !== 'expired') return false;
+      if (filterPromotion === 'regular' && promoInfo.isPromo) return false;
+
+      // Modalidad (Online vs Presencial)
+      if (filterOnline === 'online' && !event.online) return false;
+      if (filterOnline === 'in_person' && event.online) return false;
+
+      // Visibilidad (Público vs Privado)
+      if (filterPrivacy === 'public' && event.is_private) return false;
+      if (filterPrivacy === 'private' && !event.is_private) return false;
+
+      // Rango de fechas del evento
+      if (filterDateRange !== 'all') {
+        const eventDate = event.date_time ? new Date(event.date_time) : null;
+        if (!eventDate || isNaN(eventDate.getTime())) return false;
+
+        if (filterDateRange === 'today') {
+          if (eventDate < todayStart || eventDate > todayEnd) return false;
+        } else if (filterDateRange === 'this_week') {
+          if (eventDate < weekStart || eventDate > weekEnd) return false;
+        } else if (filterDateRange === 'this_month') {
+          if (eventDate < monthStart || eventDate > monthEnd) return false;
+        } else if (filterDateRange === 'future') {
+          if (eventDate < now) return false;
+        } else if (filterDateRange === 'past') {
+          if (eventDate >= now) return false;
+        }
+      }
+
+      return true;
+    });
+
+    // 2. Ordenamiento: Salen los más recientes de primero por defecto ('recent')
+    return filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'recent': {
+          // Más recientes creados primero (created_at DESC, ID numérico DESC)
+          const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          if (timeB !== timeA) return timeB - timeA;
+          const idA = Number(a.event_id || a.id || 0);
+          const idB = Number(b.event_id || b.id || 0);
+          return idB - idA;
+        }
+        case 'event_date_asc': {
+          // Fecha del evento: Próximos primero
+          const dateA = a.date_time ? new Date(a.date_time).getTime() : Infinity;
+          const dateB = b.date_time ? new Date(b.date_time).getTime() : Infinity;
+          return dateA - dateB;
+        }
+        case 'event_date_desc': {
+          // Fecha del evento: Más lejanos primero
+          const dateA = a.date_time ? new Date(a.date_time).getTime() : 0;
+          const dateB = b.date_time ? new Date(b.date_time).getTime() : 0;
+          return dateB - dateA;
+        }
+        case 'promoted_first': {
+          // Promocionados primero
+          const promoA = Boolean(a.is_promotion || a.isPromotion || a.is_promoted || a.isPromoted);
+          const promoB = Boolean(b.is_promotion || b.isPromotion || b.is_promoted || b.isPromoted);
+          if (promoA !== promoB) return promoB ? 1 : -1;
+          const idA = Number(a.event_id || a.id || 0);
+          const idB = Number(b.event_id || b.id || 0);
+          return idB - idA;
+        }
+        case 'popularity': {
+          // Más populares (asistentes + interesados + likes)
+          const popA = Number(a.attendees_count || 0) + Number(a.interested_count || 0) + Number(a.likes_count || a.likes || 0);
+          const popB = Number(b.attendees_count || 0) + Number(b.interested_count || 0) + Number(b.likes_count || b.likes || 0);
+          return popB - popA;
+        }
+        case 'title_asc': {
+          return (a.title || '').localeCompare(b.title || '');
+        }
+        case 'title_desc': {
+          return (b.title || '').localeCompare(a.title || '');
+        }
+        default:
+          return 0;
+      }
+    });
+  }, [
+    events,
+    searchTerm,
+    filterCategory,
+    filterStatus,
+    filterPromotion,
+    filterOnline,
+    filterPrivacy,
+    filterDateRange,
+    sortBy
+  ]);
+
+  // Contador de filtros activos
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (searchTerm.trim()) count++;
+    if (filterCategory !== 'all') count++;
+    if (filterStatus !== 'all') count++;
+    if (filterPromotion !== 'all') count++;
+    if (filterOnline !== 'all') count++;
+    if (filterPrivacy !== 'all') count++;
+    if (filterDateRange !== 'all') count++;
+    if (sortBy !== 'recent') count++;
+    return count;
+  }, [
+    searchTerm,
+    filterCategory,
+    filterStatus,
+    filterPromotion,
+    filterOnline,
+    filterPrivacy,
+    filterDateRange,
+    sortBy
+  ]);
+
+  // Función para restablecer todos los filtros a los valores por defecto
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setFilterCategory('all');
+    setFilterStatus('all');
+    setFilterPromotion('all');
+    setFilterOnline('all');
+    setFilterPrivacy('all');
+    setFilterDateRange('all');
+    setSortBy('recent');
+  };
 
   const handleInputChange = (e) => {
     setFormData({
@@ -733,14 +993,37 @@ const EventsManager = ({ events, updateEvents }) => {
         const { getEvents } = await import('../services/eventService');
         const updatedEventsList = await getEvents();
         console.log('✅ Lista de eventos recargada, total:', updatedEventsList.length);
-        updateEvents(updatedEventsList);
+        const mergedList = Array.isArray(updatedEventsList)
+          ? updatedEventsList.map(ev => {
+              const evId = String(ev.event_id || ev.id || ev.eventId);
+              if (newEventId && evId === String(newEventId)) {
+                return {
+                  ...ev,
+                  ...eventData,
+                  ...(newEvent || {}),
+                  is_promotion: Boolean(formData.is_promotion),
+                  isPromotion: Boolean(formData.is_promotion),
+                  promotion_start_date: formData.is_promotion ? formData.promotion_start_date : null,
+                  promotionStartDate: formData.is_promotion ? formData.promotion_start_date : null,
+                  promotion_end_date: formData.is_promotion ? formData.promotion_end_date : null,
+                  promotionEndDate: formData.is_promotion ? formData.promotion_end_date : null,
+                };
+              }
+              return ev;
+            })
+          : updatedEventsList;
+        updateEvents(mergedList);
       } catch (fetchError) {
         console.error('❌ Error al recargar eventos:', fetchError);
-        // Si falla la recarga, recargar desde el componente padre
-        toast({
-          title: "Advertencia",
-          description: "Evento creado pero necesitas recargar la página para verlo",
-          variant: "default"
+        updateEvents({
+          ...newEvent,
+          ...eventData,
+          is_promotion: Boolean(formData.is_promotion),
+          isPromotion: Boolean(formData.is_promotion),
+          promotion_start_date: formData.is_promotion ? formData.promotion_start_date : null,
+          promotionStartDate: formData.is_promotion ? formData.promotion_start_date : null,
+          promotion_end_date: formData.is_promotion ? formData.promotion_end_date : null,
+          promotionEndDate: formData.is_promotion ? formData.promotion_end_date : null,
         });
       }
     
@@ -825,12 +1108,12 @@ const EventsManager = ({ events, updateEvents }) => {
       is_promotion: event.is_promotion !== undefined
         ? Boolean(event.is_promotion)
         : Boolean(event.isPromotion || event.is_promoted || event.isPromoted),
-      promotion_start_date: event.promotion_start_date
-        ? String(event.promotion_start_date).slice(0, 16)
-        : (event.promotionStartDate ? String(event.promotionStartDate).slice(0, 16) : (event.promotion?.startDate ? String(event.promotion.startDate).slice(0, 16) : '')),
-      promotion_end_date: event.promotion_end_date
-        ? String(event.promotion_end_date).slice(0, 16)
-        : (event.promotionEndDate ? String(event.promotionEndDate).slice(0, 16) : (event.promotion?.endDate ? String(event.promotion.endDate).slice(0, 16) : '')),
+      promotion_start_date: formatDateTimeLocal(
+        event.promotion_start_date || event.promotionStartDate || event.promotion?.startDate
+      ) || (Boolean(event.is_promotion || event.isPromotion || event.is_promoted || event.isPromoted) ? formatDateTimeLocal(new Date()) : ''),
+      promotion_end_date: formatDateTimeLocal(
+        event.promotion_end_date || event.promotionEndDate || event.promotion?.endDate
+      ) || (Boolean(event.is_promotion || event.isPromotion || event.is_promoted || event.isPromoted) ? formatDateTimeLocal(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)) : ''),
       allowed_users: Array.isArray(event.allowed_users) && event.allowed_users.length > 0
         ? event.allowed_users
         : Array.isArray(event.allowed_user_ids) && event.allowed_user_ids.length > 0
@@ -1002,11 +1285,39 @@ const EventsManager = ({ events, updateEvents }) => {
       try {
         const { getEvents } = await import('../services/eventService');
         const updatedEventsList = await getEvents();
-        updateEvents(updatedEventsList);
+        const mergedList = Array.isArray(updatedEventsList)
+          ? updatedEventsList.map(ev => {
+              const evId = String(ev.event_id || ev.id || ev.eventId);
+              if (evId === String(eventId)) {
+                return {
+                  ...ev,
+                  ...eventData,
+                  ...(updatedEvent || {}),
+                  is_promotion: Boolean(formData.is_promotion),
+                  isPromotion: Boolean(formData.is_promotion),
+                  promotion_start_date: formData.is_promotion ? formData.promotion_start_date : null,
+                  promotionStartDate: formData.is_promotion ? formData.promotion_start_date : null,
+                  promotion_end_date: formData.is_promotion ? formData.promotion_end_date : null,
+                  promotionEndDate: formData.is_promotion ? formData.promotion_end_date : null,
+                };
+              }
+              return ev;
+            })
+          : updatedEventsList;
+        updateEvents(mergedList);
       } catch (fetchError) {
         console.error('Error al recargar eventos:', fetchError);
-        // Si falla la recarga, actualizar solo el evento modificado
-        updateEvents(updatedEvent);
+        updateEvents({
+          ...selectedEvent,
+          ...eventData,
+          ...(updatedEvent || {}),
+          is_promotion: Boolean(formData.is_promotion),
+          isPromotion: Boolean(formData.is_promotion),
+          promotion_start_date: formData.is_promotion ? formData.promotion_start_date : null,
+          promotionStartDate: formData.is_promotion ? formData.promotion_start_date : null,
+          promotion_end_date: formData.is_promotion ? formData.promotion_end_date : null,
+          promotionEndDate: formData.is_promotion ? formData.promotion_end_date : null,
+        });
       }
     
     toast({
@@ -1170,11 +1481,13 @@ const EventsManager = ({ events, updateEvents }) => {
   const getStatusColor = (status) => {
     switch (status) {
       case 'upcoming':
-        return 'bg-green-900/50 text-green-200 border-green-600/30';
+        return 'bg-emerald-950/70 text-emerald-300 border-emerald-500/40 shadow-sm';
       case 'ongoing':
-        return 'bg-blue-900/50 text-blue-200 border-blue-600/30';
+        return 'bg-blue-950/70 text-blue-300 border-blue-500/40 shadow-sm';
       case 'past':
-        return 'bg-gray-900/50 text-gray-200 border-gray-600/30';
+        return 'bg-zinc-900/80 text-zinc-300 border-zinc-700/50';
+      case 'cancelled':
+        return 'bg-rose-950/70 text-rose-300 border-rose-500/40 shadow-sm';
       default:
         return 'bg-purple-900/50 text-purple-200 border-purple-600/30';
     }
@@ -1698,13 +2011,11 @@ const EventsManager = ({ events, updateEvents }) => {
                         onCheckedChange={(checked) => {
                           const now = new Date();
                           const inWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-                          const pad = (n) => String(n).padStart(2, '0');
-                          const formatDT = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
                           setFormData({
                             ...formData,
                             is_promotion: checked,
-                            promotion_start_date: checked ? (formData.promotion_start_date || formatDT(now)) : '',
-                            promotion_end_date: checked ? (formData.promotion_end_date || formatDT(inWeek)) : '',
+                            promotion_start_date: checked ? (formData.promotion_start_date || formatDateTimeLocal(now)) : '',
+                            promotion_end_date: checked ? (formData.promotion_end_date || formatDateTimeLocal(inWeek)) : '',
                           });
                         }}
                       />
@@ -2022,80 +2333,362 @@ const EventsManager = ({ events, updateEvents }) => {
         </div>
       </div>
 
-      {/* Filters */}
-      <Card className="bg-black/40 border-purple-500/30">
-        <CardContent className="pt-4 sm:pt-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label className="text-purple-200">Buscar</Label>
+      {/* Filters and Search Dashboard Section */}
+      <Card className="bg-gradient-to-b from-black/60 to-purple-950/20 border border-purple-500/30 backdrop-blur-md shadow-2xl overflow-hidden">
+        <CardContent className="pt-4 sm:pt-6 space-y-4">
+          {/* Fila Principal de Filtros */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5">
+            {/* 1. Búsqueda inteligente multi-campo */}
+            <div className="space-y-1.5 sm:col-span-2 lg:col-span-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-purple-200 text-xs font-semibold flex items-center gap-1.5">
+                  <Search className="w-3.5 h-3.5 text-purple-400" />
+                  Buscar
+                </Label>
+                {searchTerm && (
+                  <span className="text-[10px] text-purple-400 font-mono">
+                    Filtrando en tiempo real
+                  </span>
+                )}
+              </div>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-400 h-4 w-4" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-400 h-4 w-4 pointer-events-none" />
                 <Input
-                  placeholder="Buscar eventos..."
+                  placeholder="Buscar por título, lugar, ID, organizador..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-black/50 border-purple-500/30 text-white"
+                  className="pl-9 pr-9 bg-black/60 border-purple-500/30 text-white placeholder:text-purple-400/50 h-9.5 text-xs rounded-xl focus:border-purple-400 focus:ring-1 focus:ring-purple-400"
                 />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-purple-400 hover:text-white p-1 rounded-full hover:bg-purple-900/50 transition-colors"
+                    title="Limpiar búsqueda"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-purple-200">Categoría</Label>
+            {/* 2. Categoría */}
+            <div className="space-y-1.5 sm:col-span-1 lg:col-span-2">
+              <Label className="text-purple-200 text-xs font-semibold flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-purple-400" />
+                Categoría
+              </Label>
               <Select value={filterCategory} onValueChange={setFilterCategory}>
-                <SelectTrigger className="bg-black/50 border-purple-500/30 text-white">
-                  <SelectValue />
+                <SelectTrigger className="bg-black/60 border-purple-500/30 text-white h-9.5 text-xs rounded-xl">
+                  <SelectValue placeholder="Todas" />
                 </SelectTrigger>
-                <SelectContent className="bg-black border-purple-500/30">
-                  <SelectItem value="all" className="text-white hover:bg-purple-900/50">Todas</SelectItem>
-                  {categories.map(category => (
-                    <SelectItem key={category} value={category} className="text-white hover:bg-purple-900/50">
-                      {category}
+                <SelectContent className="bg-zinc-950 border-purple-500/30 text-white max-h-64">
+                  <SelectItem value="all" className="text-white hover:bg-purple-900/50 text-xs font-semibold">
+                    Todas ({Array.isArray(events) ? events.length : 0})
+                  </SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem key={category} value={category} className="text-white hover:bg-purple-900/50 text-xs">
+                      {category} {categoryCounts[category] ? `(${categoryCounts[category]})` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-purple-200">Estado</Label>
+            {/* 3. Estado (Dinámico según fecha/hora) */}
+            <div className="space-y-1.5 sm:col-span-1 lg:col-span-2">
+              <Label className="text-purple-200 text-xs font-semibold flex items-center gap-1.5">
+                <Radio className="w-3.5 h-3.5 text-emerald-400" />
+                Estado
+              </Label>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="bg-black/50 border-purple-500/30 text-white">
-                  <SelectValue />
+                <SelectTrigger className="bg-black/60 border-purple-500/30 text-white h-9.5 text-xs rounded-xl">
+                  <SelectValue placeholder="Todos" />
                 </SelectTrigger>
-                <SelectContent className="bg-black border-purple-500/30">
-                  <SelectItem value="all" className="text-white hover:bg-purple-900/50">Todos</SelectItem>
-                  <SelectItem value="upcoming" className="text-white hover:bg-purple-900/50">Próximos</SelectItem>
-                  <SelectItem value="ongoing" className="text-white hover:bg-purple-900/50">En curso</SelectItem>
-                  <SelectItem value="past" className="text-white hover:bg-purple-900/50">Pasados</SelectItem>
+                <SelectContent className="bg-zinc-950 border-purple-500/30 text-white">
+                  <SelectItem value="all" className="text-white hover:bg-purple-900/50 text-xs">
+                    Todos los estados
+                  </SelectItem>
+                  <SelectItem value="upcoming" className="text-emerald-300 hover:bg-purple-900/50 text-xs">
+                    🟢 Próximos {statusCounts.upcoming ? `(${statusCounts.upcoming})` : ''}
+                  </SelectItem>
+                  <SelectItem value="ongoing" className="text-blue-300 hover:bg-purple-900/50 text-xs">
+                    🔵 En curso {statusCounts.ongoing ? `(${statusCounts.ongoing})` : ''}
+                  </SelectItem>
+                  <SelectItem value="past" className="text-zinc-400 hover:bg-purple-900/50 text-xs">
+                    ⚪ Pasados {statusCounts.past ? `(${statusCounts.past})` : ''}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label className="text-purple-200">Promoción</Label>
+
+            {/* 4. Promoción */}
+            <div className="space-y-1.5 sm:col-span-1 lg:col-span-2">
+              <Label className="text-purple-200 text-xs font-semibold flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                Promoción
+              </Label>
               <Select value={filterPromotion} onValueChange={setFilterPromotion}>
-                <SelectTrigger className="bg-black/50 border-purple-500/30 text-white">
+                <SelectTrigger className="bg-black/60 border-purple-500/30 text-white h-9.5 text-xs rounded-xl">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-950 border-purple-500/30 text-white">
+                  <SelectItem value="all" className="text-white hover:bg-purple-900/50 text-xs">
+                    Todos
+                  </SelectItem>
+                  <SelectItem value="promoted" className="text-amber-300 hover:bg-purple-900/50 text-xs font-semibold">
+                    ⭐ Solo Promocionados
+                  </SelectItem>
+                  <SelectItem value="active_promo" className="text-emerald-300 hover:bg-purple-900/50 text-xs">
+                    🟢 Promoción Activa (Hoy)
+                  </SelectItem>
+                  <SelectItem value="expired_promo" className="text-zinc-400 hover:bg-purple-900/50 text-xs">
+                    ⏳ Promoción Vencida
+                  </SelectItem>
+                  <SelectItem value="regular" className="text-white hover:bg-purple-900/50 text-xs">
+                    No Promocionados
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* 5. Ordenar por (Más recientes de primero por defecto) */}
+            <div className="space-y-1.5 sm:col-span-1 lg:col-span-2">
+              <Label className="text-purple-200 text-xs font-semibold flex items-center gap-1.5">
+                <ArrowUpDown className="w-3.5 h-3.5 text-purple-400" />
+                Ordenar por
+              </Label>
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="bg-purple-950/40 border-purple-500/50 text-purple-200 h-9.5 text-xs rounded-xl font-semibold">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-black border-purple-500/30">
-                  <SelectItem value="all" className="text-white hover:bg-purple-900/50">Todos</SelectItem>
-                  <SelectItem value="promoted" className="text-white hover:bg-purple-900/50">⭐ Solo Promocionados</SelectItem>
-                  <SelectItem value="regular" className="text-white hover:bg-purple-900/50">No Promocionados</SelectItem>
+                <SelectContent className="bg-zinc-950 border-purple-500/30 text-white">
+                  <SelectItem value="recent" className="text-purple-300 hover:bg-purple-900/50 text-xs font-bold">
+                    🕒 Más recientes primero
+                  </SelectItem>
+                  <SelectItem value="event_date_asc" className="text-white hover:bg-purple-900/50 text-xs">
+                    📅 Fecha evento: Próximos
+                  </SelectItem>
+                  <SelectItem value="event_date_desc" className="text-white hover:bg-purple-900/50 text-xs">
+                    📅 Fecha evento: Más lejanos
+                  </SelectItem>
+                  <SelectItem value="promoted_first" className="text-amber-300 hover:bg-purple-900/50 text-xs">
+                    ⭐ Promocionados primero
+                  </SelectItem>
+                  <SelectItem value="popularity" className="text-sky-300 hover:bg-purple-900/50 text-xs">
+                    👥 Más populares (Asistentes)
+                  </SelectItem>
+                  <SelectItem value="title_asc" className="text-white hover:bg-purple-900/50 text-xs">
+                    🔤 Nombre: A - Z
+                  </SelectItem>
+                  <SelectItem value="title_desc" className="text-white hover:bg-purple-900/50 text-xs">
+                    🔤 Nombre: Z - A
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
+
+          {/* Fila de Filtros Secundarios / Avanzados */}
+          <div className="pt-2 border-t border-purple-500/20 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className={`text-xs h-8 px-2.5 rounded-lg border transition-all ${
+                  showAdvancedFilters || filterOnline !== 'all' || filterPrivacy !== 'all' || filterDateRange !== 'all'
+                    ? 'border-purple-500 bg-purple-900/40 text-purple-200'
+                    : 'border-purple-500/30 text-purple-300 hover:bg-purple-900/30'
+                }`}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5 text-purple-400" />
+                Filtros adicionales
+                {(filterOnline !== 'all' || filterPrivacy !== 'all' || filterDateRange !== 'all') && (
+                  <span className="ml-1.5 w-2 h-2 rounded-full bg-purple-400" />
+                )}
+              </Button>
+
+              {activeFiltersCount > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResetFilters}
+                  className="text-xs h-8 px-2.5 rounded-lg border border-red-500/30 bg-red-950/20 text-red-300 hover:bg-red-900/40 hover:text-white transition-all flex items-center gap-1.5"
+                >
+                  <RotateCcw className="w-3 h-3 text-red-400" />
+                  Restablecer filtros ({activeFiltersCount})
+                </Button>
+              )}
+            </div>
+
+            <div className="text-[11px] text-purple-400 flex items-center gap-2">
+              <span>Orden actual:</span>
+              <Badge className="bg-purple-950/80 text-purple-200 border-purple-500/40 text-[10px] font-semibold">
+                {sortBy === 'recent' ? '🕒 Más recientes primero' :
+                 sortBy === 'event_date_asc' ? '📅 Próximos primero' :
+                 sortBy === 'event_date_desc' ? '📅 Más lejanos primero' :
+                 sortBy === 'promoted_first' ? '⭐ Promocionados primero' :
+                 sortBy === 'popularity' ? '👥 Más populares' :
+                 sortBy === 'title_asc' ? '🔤 Nombre A-Z' : '🔤 Nombre Z-A'}
+              </Badge>
+            </div>
+          </div>
+
+          {/* Panel desplegable de Filtros Adicionales */}
+          {showAdvancedFilters && (
+            <div className="p-3.5 rounded-xl bg-purple-950/30 border border-purple-500/20 grid grid-cols-1 sm:grid-cols-3 gap-3 animate-in fade-in duration-200">
+              {/* Modalidad */}
+              <div className="space-y-1">
+                <Label className="text-purple-300 text-[11px] font-medium">Modalidad</Label>
+                <Select value={filterOnline} onValueChange={setFilterOnline}>
+                  <SelectTrigger className="bg-black/60 border-purple-500/30 text-white h-8 text-xs rounded-lg">
+                    <SelectValue placeholder="Todas" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-950 border-purple-500/30 text-white">
+                    <SelectItem value="all" className="text-white text-xs">Todas las modalidades</SelectItem>
+                    <SelectItem value="in_person" className="text-purple-300 text-xs">📍 Presenciales</SelectItem>
+                    <SelectItem value="online" className="text-sky-300 text-xs">🌐 Solo Online</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Visibilidad */}
+              <div className="space-y-1">
+                <Label className="text-purple-300 text-[11px] font-medium">Visibilidad</Label>
+                <Select value={filterPrivacy} onValueChange={setFilterPrivacy}>
+                  <SelectTrigger className="bg-black/60 border-purple-500/30 text-white h-8 text-xs rounded-lg">
+                    <SelectValue placeholder="Todas" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-950 border-purple-500/30 text-white">
+                    <SelectItem value="all" className="text-white text-xs">Cualquier visibilidad</SelectItem>
+                    <SelectItem value="public" className="text-blue-300 text-xs">🔓 Públicos</SelectItem>
+                    <SelectItem value="private" className="text-purple-300 text-xs">🔒 Privados</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Rango de Fechas del Evento */}
+              <div className="space-y-1">
+                <Label className="text-purple-300 text-[11px] font-medium">Fecha del Evento</Label>
+                <Select value={filterDateRange} onValueChange={setFilterDateRange}>
+                  <SelectTrigger className="bg-black/60 border-purple-500/30 text-white h-8 text-xs rounded-lg">
+                    <SelectValue placeholder="Cualquier fecha" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-950 border-purple-500/30 text-white">
+                    <SelectItem value="all" className="text-white text-xs">Cualquier fecha</SelectItem>
+                    <SelectItem value="today" className="text-emerald-300 text-xs">📅 Eventos de Hoy</SelectItem>
+                    <SelectItem value="this_week" className="text-blue-300 text-xs">📅 Esta semana</SelectItem>
+                    <SelectItem value="this_month" className="text-purple-300 text-xs">📅 Este mes</SelectItem>
+                    <SelectItem value="future" className="text-emerald-300 text-xs">📅 Fechas Futuras</SelectItem>
+                    <SelectItem value="past" className="text-zinc-400 text-xs">📅 Fechas Pasadas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          {/* Chips de Filtros Activos para fácil eliminación */}
+          {activeFiltersCount > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[11px] text-purple-400 mr-1 font-semibold">Filtros aplicados:</span>
+              
+              {searchTerm && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] bg-purple-900/50 text-purple-200 border border-purple-500/40">
+                  Buscar: "{searchTerm}"
+                  <button onClick={() => setSearchTerm('')} className="hover:text-white">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {filterCategory !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] bg-purple-900/50 text-purple-200 border border-purple-500/40">
+                  Categoría: {filterCategory}
+                  <button onClick={() => setFilterCategory('all')} className="hover:text-white">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {filterStatus !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] bg-purple-900/50 text-purple-200 border border-purple-500/40">
+                  Estado: {filterStatus === 'upcoming' ? 'Próximos' : filterStatus === 'ongoing' ? 'En curso' : 'Pasados'}
+                  <button onClick={() => setFilterStatus('all')} className="hover:text-white">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {filterPromotion !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] bg-amber-500/15 text-amber-300 border border-amber-500/40">
+                  Promoción: {filterPromotion === 'promoted' ? 'Solo Promocionados' : filterPromotion === 'active_promo' ? 'Activa hoy' : filterPromotion === 'expired_promo' ? 'Vencida' : 'Regulares'}
+                  <button onClick={() => setFilterPromotion('all')} className="hover:text-white">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {filterOnline !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] bg-sky-500/15 text-sky-300 border border-sky-500/40">
+                  Modalidad: {filterOnline === 'online' ? 'Online' : 'Presencial'}
+                  <button onClick={() => setFilterOnline('all')} className="hover:text-white">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {filterPrivacy !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] bg-purple-500/15 text-purple-300 border border-purple-500/40">
+                  Visibilidad: {filterPrivacy === 'public' ? 'Público' : 'Privado'}
+                  <button onClick={() => setFilterPrivacy('all')} className="hover:text-white">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {filterDateRange !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/40">
+                  Fecha: {filterDateRange === 'today' ? 'Hoy' : filterDateRange === 'this_week' ? 'Esta semana' : filterDateRange === 'this_month' ? 'Este mes' : filterDateRange === 'future' ? 'Futuros' : 'Pasados'}
+                  <button onClick={() => setFilterDateRange('all')} className="hover:text-white">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {sortBy !== 'recent' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] bg-purple-900/40 text-purple-200 border border-purple-500/30">
+                  Orden personalizado
+                  <button onClick={() => setSortBy('recent')} className="hover:text-white" title="Volver a Más recientes">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* View Switcher and Events Count Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-2">
-        <div className="flex items-center gap-2.5">
-          <h3 className="text-base sm:text-lg font-bold text-white">Eventos Registrados</h3>
-          <Badge className="bg-purple-900/50 text-purple-200 border-purple-500/30 text-xs font-semibold">
-            {filteredEvents.length} {filteredEvents.length === 1 ? 'evento' : 'eventos'}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-1">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-purple-400" />
+            Eventos Registrados
+          </h3>
+          <Badge className="bg-purple-900/60 text-purple-200 border border-purple-500/40 text-xs font-semibold px-2.5 py-0.5 shadow-sm">
+            Mostrando {filteredEvents.length} de {Array.isArray(events) ? events.length : 0} {filteredEvents.length === 1 ? 'evento' : 'eventos'}
           </Badge>
+          {sortBy === 'recent' && (
+            <span className="text-[11px] text-purple-400/90 font-mono hidden md:inline-flex items-center gap-1 bg-purple-950/40 px-2 py-0.5 rounded-md border border-purple-500/20">
+              <Clock className="w-3 h-3 text-purple-400" />
+              Más recientes primero
+            </span>
+          )}
         </div>
-        <div className="flex items-center bg-black/60 border border-purple-500/30 rounded-xl p-1 gap-1">
+        <div className="flex items-center bg-black/60 border border-purple-500/30 rounded-xl p-1 gap-1 shadow-md">
           <button
             onClick={() => setViewMode('table')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -2229,16 +2822,22 @@ const EventsManager = ({ events, updateEvents }) => {
                           </div>
                         </td>
 
-                        {/* Categoría */}
+                        {/* Categoría y Estado Dinámico */}
                         <td className="py-3 px-4">
-                          <div className="flex flex-col gap-1 items-start">
-                            <Badge variant="secondary" className="bg-purple-900/50 text-purple-200 text-xs">
+                          <div className="flex flex-col gap-1.5 items-start">
+                            <Badge variant="secondary" className="bg-purple-900/50 text-purple-200 text-xs font-medium">
                               {event.category}
                             </Badge>
-                            <Badge className={`${getStatusColor(event.status)} text-[10px] px-1.5 py-0`}>
-                              {event.status === 'upcoming' ? 'Próximo' : 
-                               event.status === 'ongoing' ? 'En curso' : 'Pasado'}
-                            </Badge>
+                            {(() => {
+                              const effStatus = getEffectiveStatus(event);
+                              return (
+                                <Badge className={`${getStatusColor(effStatus)} text-[10px] px-2 py-0.5 font-semibold capitalize border`}>
+                                  {effStatus === 'upcoming' ? '🟢 Próximo' : 
+                                   effStatus === 'ongoing' ? '🔵 En curso' : 
+                                   effStatus === 'cancelled' ? '🔴 Cancelado' : '⚪ Pasado'}
+                                </Badge>
+                              );
+                            })()}
                           </div>
                         </td>
 
@@ -2262,12 +2861,22 @@ const EventsManager = ({ events, updateEvents }) => {
                                 🔒 Privado
                               </span>
                             )}
-                            {Boolean(event.is_promotion || event.isPromotion || event.is_promoted || event.isPromoted) && (
-                              <span className="px-2 py-0.5 rounded-md text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold inline-flex items-center gap-1 shadow-sm">
-                                <Sparkles className="w-3 h-3 text-amber-400" />
-                                Promocionado
-                              </span>
-                            )}
+                            {(() => {
+                              const pInfo = getPromotionInfo(event);
+                              if (!pInfo.isPromo) return null;
+                              return (
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold inline-flex items-center gap-1 shadow-sm border ${
+                                  pInfo.status === 'active'
+                                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                    : pInfo.status === 'scheduled'
+                                    ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                                    : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                                }`}>
+                                  <Sparkles className="w-3 h-3 text-amber-400" />
+                                  {pInfo.status === 'active' ? 'Promocionado (Activo)' : pInfo.status === 'scheduled' ? 'Promo Programada' : 'Promo Vencida'}
+                                </span>
+                              );
+                            })()}
                           </div>
                         </td>
 
@@ -2388,10 +2997,16 @@ const EventsManager = ({ events, updateEvents }) => {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                     <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex flex-col gap-1.5 sm:gap-2">
-                      <Badge className={`${getStatusColor(event.status)} text-xs sm:text-sm px-2 py-0.5`}>
-                        {event.status === 'upcoming' ? 'Próximo' : 
-                         event.status === 'ongoing' ? 'En curso' : 'Pasado'}
-                      </Badge>
+                      {(() => {
+                        const effStatus = getEffectiveStatus(event);
+                        return (
+                          <Badge className={`${getStatusColor(effStatus)} text-xs sm:text-sm px-2.5 py-0.5 font-semibold capitalize border`}>
+                            {effStatus === 'upcoming' ? '🟢 Próximo' : 
+                             effStatus === 'ongoing' ? '🔵 En curso' : 
+                             effStatus === 'cancelled' ? '🔴 Cancelado' : '⚪ Pasado'}
+                          </Badge>
+                        );
+                      })()}
                       <Badge variant="secondary" className="bg-purple-900/50 text-purple-200 text-xs sm:text-sm px-2 py-0.5">
                         {event.category}
                       </Badge>
@@ -2405,12 +3020,22 @@ const EventsManager = ({ events, updateEvents }) => {
                           🔒 Privado
                         </span>
                       )}
-                      {Boolean(event.is_promotion || event.isPromotion || event.is_promoted || event.isPromoted) && (
-                        <span className="px-2 py-1 rounded-md text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold inline-flex items-center gap-1 shadow-sm backdrop-blur-sm">
-                          <Sparkles className="w-3 h-3 text-amber-400" />
-                          Promocionado
-                        </span>
-                      )}
+                      {(() => {
+                        const pInfo = getPromotionInfo(event);
+                        if (!pInfo.isPromo) return null;
+                        return (
+                          <span className={`px-2 py-1 rounded-md text-xs font-semibold inline-flex items-center gap-1 shadow-sm backdrop-blur-sm border ${
+                            pInfo.status === 'active'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                              : pInfo.status === 'scheduled'
+                              ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                              : 'bg-zinc-800/90 text-zinc-400 border-zinc-700'
+                          }`}>
+                            <Sparkles className="w-3 h-3 text-amber-400" />
+                            {pInfo.status === 'active' ? 'Promocionado (Activo)' : pInfo.status === 'scheduled' ? 'Promo Programada' : 'Promo Vencida'}
+                          </span>
+                        );
+                      })()}
                       {event.isRecurring && (
                         <Badge variant="secondary" className="bg-blue-900/50 text-blue-200 text-xs sm:text-sm px-2 py-0.5">
                           🔄 Recurrente
@@ -3022,13 +3647,11 @@ const EventsManager = ({ events, updateEvents }) => {
                     onCheckedChange={(checked) => {
                       const now = new Date();
                       const inWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-                      const pad = (n) => String(n).padStart(2, '0');
-                      const formatDT = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
                       setFormData({
                         ...formData,
                         is_promotion: checked,
-                        promotion_start_date: checked ? (formData.promotion_start_date || formatDT(now)) : '',
-                        promotion_end_date: checked ? (formData.promotion_end_date || formatDT(inWeek)) : '',
+                        promotion_start_date: checked ? (formData.promotion_start_date || formatDateTimeLocal(now)) : '',
+                        promotion_end_date: checked ? (formData.promotion_end_date || formatDateTimeLocal(inWeek)) : '',
                       });
                     }}
                   />

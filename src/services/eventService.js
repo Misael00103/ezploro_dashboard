@@ -206,12 +206,18 @@ export const createEvent = async (eventData) => {
       formData.append('isPromotion', isPromo ? 'true' : 'false');
     }
     if (eventData.promotion_start_date) {
-      formData.append('promotion_start_date', eventData.promotion_start_date);
-      formData.append('promotionStartDate', eventData.promotion_start_date);
+      const formattedPromoStart = formatDateTime(eventData.promotion_start_date);
+      if (formattedPromoStart) {
+        formData.append('promotion_start_date', formattedPromoStart);
+        formData.append('promotionStartDate', formattedPromoStart);
+      }
     }
     if (eventData.promotion_end_date) {
-      formData.append('promotion_end_date', eventData.promotion_end_date);
-      formData.append('promotionEndDate', eventData.promotion_end_date);
+      const formattedPromoEnd = formatDateTime(eventData.promotion_end_date);
+      if (formattedPromoEnd) {
+        formData.append('promotion_end_date', formattedPromoEnd);
+        formData.append('promotionEndDate', formattedPromoEnd);
+      }
     }
     if (eventData.social_links) {
       formData.append('social_links', typeof eventData.social_links === 'object' ? JSON.stringify(eventData.social_links) : eventData.social_links);
@@ -372,19 +378,17 @@ export const updateEvent = async (eventData) => {
       formData.append('is_promotion', isPromo ? 'true' : 'false');
       formData.append('isPromotion', isPromo ? 'true' : 'false');
     }
-    if (eventData.promotion_start_date !== undefined) {
-      formData.append('promotion_start_date', eventData.promotion_start_date || '');
-      formData.append('promotionStartDate', eventData.promotion_start_date || '');
-    } else if (eventData.promotionStartDate !== undefined) {
-      formData.append('promotion_start_date', eventData.promotionStartDate || '');
-      formData.append('promotionStartDate', eventData.promotionStartDate || '');
+    const promoStartVal = eventData.promotion_start_date !== undefined ? eventData.promotion_start_date : eventData.promotionStartDate;
+    if (promoStartVal !== undefined) {
+      const formattedStart = promoStartVal ? formatDateTime(promoStartVal) : '';
+      formData.append('promotion_start_date', formattedStart);
+      formData.append('promotionStartDate', formattedStart);
     }
-    if (eventData.promotion_end_date !== undefined) {
-      formData.append('promotion_end_date', eventData.promotion_end_date || '');
-      formData.append('promotionEndDate', eventData.promotion_end_date || '');
-    } else if (eventData.promotionEndDate !== undefined) {
-      formData.append('promotion_end_date', eventData.promotionEndDate || '');
-      formData.append('promotionEndDate', eventData.promotionEndDate || '');
+    const promoEndVal = eventData.promotion_end_date !== undefined ? eventData.promotion_end_date : eventData.promotionEndDate;
+    if (promoEndVal !== undefined) {
+      const formattedEnd = promoEndVal ? formatDateTime(promoEndVal) : '';
+      formData.append('promotion_end_date', formattedEnd);
+      formData.append('promotionEndDate', formattedEnd);
     }
       if (eventData.social_links !== undefined) {
         formData.append('social_links', typeof eventData.social_links === 'object' ? JSON.stringify(eventData.social_links) : eventData.social_links);
@@ -455,15 +459,17 @@ export const updateEvent = async (eventData) => {
         updateData.is_promotion = Boolean(updateData.isPromotion);
         updateData.isPromotion = updateData.is_promotion;
       }
-      if (updateData.promotion_start_date !== undefined) {
-        updateData.promotionStartDate = updateData.promotion_start_date;
-      } else if (updateData.promotionStartDate !== undefined) {
-        updateData.promotion_start_date = updateData.promotionStartDate;
+      const updatePromoStart = updateData.promotion_start_date !== undefined ? updateData.promotion_start_date : updateData.promotionStartDate;
+      if (updatePromoStart !== undefined) {
+        const formattedStart = updatePromoStart ? formatDateTime(updatePromoStart) : null;
+        updateData.promotion_start_date = formattedStart;
+        updateData.promotionStartDate = formattedStart;
       }
-      if (updateData.promotion_end_date !== undefined) {
-        updateData.promotionEndDate = updateData.promotion_end_date;
-      } else if (updateData.promotionEndDate !== undefined) {
-        updateData.promotion_end_date = updateData.promotionEndDate;
+      const updatePromoEnd = updateData.promotion_end_date !== undefined ? updateData.promotion_end_date : updateData.promotionEndDate;
+      if (updatePromoEnd !== undefined) {
+        const formattedEnd = updatePromoEnd ? formatDateTime(updatePromoEnd) : null;
+        updateData.promotion_end_date = formattedEnd;
+        updateData.promotionEndDate = formattedEnd;
       }
       
       const response = await fetch(url, {
